@@ -16,23 +16,23 @@ export async function loadCommunityStats() {
     const results = resultsSnap.exists() ? resultsSnap.data() : {};
     const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
 
-    // Load all users' tips
+    // Load all users' tips via parent user docs
     const usersSnap = await getDocs(collection(db, "users"));
-    const users = []; // { userId, name, groupPicks, knockoutPicks, matchTips: {matchId: {homeScore, awayScore}} }
+    const users = [];
 
     for (const userDoc of usersSnap.docs) {
         const userId = userDoc.id;
         const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
-        const user = { userId, name: userId, groupPicks: null, knockoutPicks: null, matchTips: {} };
+        const u = { userId, name: userId, groupPicks: null, knockoutPicks: null, matchTips: {} };
 
         tipsSnap.forEach(tipDoc => {
-            if (tipDoc.id === '_groupPicks') user.groupPicks = tipDoc.data();
-            else if (tipDoc.id === '_knockout') user.knockoutPicks = tipDoc.data();
-            else if (tipDoc.id === '_profile') user.name = tipDoc.data().name || userId;
-            else user.matchTips[tipDoc.id] = tipDoc.data();
+            if (tipDoc.id === '_groupPicks') u.groupPicks = tipDoc.data();
+            else if (tipDoc.id === '_knockout') u.knockoutPicks = tipDoc.data();
+            else if (tipDoc.id === '_profile') u.name = tipDoc.data().name || userId;
+            else u.matchTips[tipDoc.id] = tipDoc.data();
         });
 
-        if (user.groupPicks || Object.keys(user.matchTips).length > 0) users.push(user);
+        if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
     }
 
     if (users.length === 0) {

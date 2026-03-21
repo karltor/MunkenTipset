@@ -8,9 +8,10 @@ service cloud.firestore {
       allow write: if request.auth != null && (request.auth.token.email == 'karl.tornered@nyamunken.se' || request.auth.token.email == 'jonas.waltelius@nyamunken.se');
     }
 
-    // Tillåt listning av användare (krävs för statistik-sidan)
+    // Tillåt listning av användare (krävs för statistik-sidan) + skapa eget dokument vid inloggning
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.token.email.matches('.*@nyamunken[.]se') && !request.auth.token.email.matches('qq.*');
+      allow write: if request.auth != null && request.auth.uid == userId && !request.auth.token.email.matches('qq.*');
     }
 
     // Regler för användarnas tipsrader
