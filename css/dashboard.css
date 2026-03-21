@@ -88,14 +88,25 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .champion-reveal { text-align: center; padding: 60px 20px; }
 .champion-reveal h2 { font-family: 'Playfair Display', serif; font-size: 2.5rem; color: #ffc107; }
 
-/* Official bracket view */
-.bracket-visual { display: flex; justify-content: center; gap: 0; overflow-x: auto; padding: 20px 0; }
-.bracket-round { display: flex; flex-direction: column; justify-content: space-around; min-width: 140px; padding: 0 6px; }
-.bracket-round-header { text-align: center; font-size: 11px; color: #888; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; }
-.bracket-slot { background: white; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; font-size: 12px; font-weight: 600; margin: 2px 0; min-height: 22px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.bracket-slot.empty { color: #ccc; border-style: dashed; }
-.bracket-match { margin-bottom: 8px; }
-.bracket-connector { border-right: 2px solid #ddd; margin: 0 -1px; }
+/* Bracket tree layout */
+.bracket-tree { display: flex; align-items: center; min-width: 1100px; gap: 0; }
+.bracket-round-col { display: flex; flex-direction: column; justify-content: space-around; flex: 1; min-width: 130px; padding: 0 2px; position: relative; }
+.bracket-round-label { text-align: center; font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.bracket-final-col { min-width: 150px; flex: 0 0 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.bracket-matchup { margin: 4px 0; border-left: 3px solid #3d3d6b; }
+.bracket-matchup-final { border-left: 3px solid #ffc107; }
+.bracket-slot { background: rgba(255,255,255,0.07); border: 1px solid #3d3d6b; border-radius: 3px; padding: 3px 8px; font-size: 11px; font-weight: 600; color: #ccc; display: flex; justify-content: space-between; align-items: center; gap: 4px; white-space: nowrap; min-height: 20px; }
+.bracket-slot.empty { color: #555; border-style: dashed; border-color: #333; }
+.bracket-slot.winner { background: rgba(40,167,69,0.15); color: #fff; border-color: #28a745; }
+.bracket-slot + .bracket-slot { border-top: none; }
+.bracket-score { font-weight: 700; color: #ffc107; min-width: 14px; text-align: right; }
+
+/* Results sub-tabs */
+.results-sub-tabs { display: flex; gap: 0; margin-bottom: 20px; background: #e9ecef; border-radius: 8px; padding: 3px; }
+.results-sub-btn { flex: 1; padding: 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; border-radius: 6px; font-size: 14px; color: #666; transition: all 0.2s; }
+.results-sub-btn.active { background: #1a1a1a; color: white; }
+.results-sub-content { display: none; }
+.results-sub-content.active { display: block; }
 
 /* Stats */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }

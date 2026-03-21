@@ -167,6 +167,16 @@ function loadGroup(index) {
 
     window.updateWizTable = updateWizardTable;
     updateWizardTable();
+
+    // When switching to casual with existing scores, derive selFirst/selSecond from actual standings
+    if (hasScores && currentMode === 'casual') {
+        const standings = calcFullStandings(groupMatches);
+        if (standings[0]?.pts > 0) {
+            selFirst = standings[0].name;
+            selSecond = standings[1].name;
+            renderTeamSelectors();
+        }
+    }
 }
 
 function restoreSavedScores(groupMatches) {

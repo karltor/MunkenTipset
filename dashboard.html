@@ -103,7 +103,12 @@
 
         <!-- MATCHRESULTAT TAB -->
         <div id="results-tab" class="tab-content">
-            <div id="results-container"></div>
+            <div class="results-sub-tabs">
+                <button class="results-sub-btn active" data-sub="groups">Gruppspel</button>
+                <button class="results-sub-btn" data-sub="knockout">Slutspel</button>
+            </div>
+            <div id="results-groups" class="results-sub-content active"></div>
+            <div id="results-knockout" class="results-sub-content"></div>
         </div>
 
         <!-- ADMIN TAB -->
