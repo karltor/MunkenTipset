@@ -2,14 +2,15 @@ import { db, auth } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
 
-const ROUNDS = ['r16', 'qf', 'sf', 'final'];
+const ROUNDS = ['r32', 'r16', 'qf', 'sf', 'final'];
 const ROUND_LABELS = {
-    r16: 'Välj 16 lag som du tror går vidare till kvartsfinal',
-    qf: 'Välj 8 lag som du tror går vidare till semifinal',
-    sf: 'Välj 4 lag som du tror går vidare till final',
-    final: 'Välj ditt VM-guld!'
+    r32: 'Välj 16 lag som går vidare till åttondelsfinal',
+    r16: 'Välj 8 lag som går vidare till kvartsfinal',
+    qf: 'Välj 4 lag som går vidare till semifinal',
+    sf: 'Välj 2 lag som går vidare till final',
+    final: 'Vilket lag vinner VM 2026?'
 };
-const ROUND_PICK_COUNT = { r16: 16, qf: 8, sf: 4, final: 1 };
+const ROUND_PICK_COUNT = { r32: 16, r16: 8, qf: 4, sf: 2, final: 1 };
 
 let currentRound = 0;
 let knockoutData = {};
@@ -18,30 +19,22 @@ let selectedTeams = new Set();
 let listenersAttached = false;
 
 export async function initBracket(groupPicks) {
-    if (!groupPicks || !groupPicks.completedAt) {
-        showLocked();
-        return;
-    }
+    if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
 
-    // Load existing knockout picks
     const userId = auth.currentUser.uid;
     const koRef = doc(db, "users", userId, "tips", "_knockout");
     const koSnap = await getDoc(koRef);
-    if (koSnap.exists()) knockoutData = koSnap.data();
-    else knockoutData = {};
+    knockoutData = koSnap.exists() ? koSnap.data() : {};
 
-    // Build the 32 qualified teams
     allTeamsInRound = buildQualifiedTeams(groupPicks);
 
-    // Determine which round to show
-    if (knockoutData.final) {
-        showChampion(knockoutData.final);
-        return;
-    }
+    if (knockoutData.final) { showChampion(knockoutData.final); return; }
+
     currentRound = 0;
-    if (knockoutData.r16?.length === 16) currentRound = 1;
-    if (knockoutData.qf?.length === 8) currentRound = 2;
-    if (knockoutData.sf?.length === 4) currentRound = 3;
+    if (knockoutData.r32?.length === 16) currentRound = 1;
+    if (knockoutData.r16?.length === 8) currentRound = 2;
+    if (knockoutData.qf?.length === 4) currentRound = 3;
+    if (knockoutData.sf?.length === 2) currentRound = 4;
 
     showBracketContent();
     loadRound(currentRound);
@@ -59,8 +52,8 @@ function showLocked() {
     document.getElementById('bracket-locked').style.display = 'block';
     document.getElementById('bracket-content').style.display = 'none';
     document.getElementById('bracket-champion').style.display = 'none';
-    const btn = document.getElementById('btn-go-to-groups');
-    btn.onclick = () => document.querySelector('.tab-btn[data-target="wizard-tab"]').click();
+    document.getElementById('btn-go-to-groups').onclick = () =>
+        document.querySelector('.tab-btn[data-target="wizard-tab"]').click();
 }
 
 function showBracketContent() {
@@ -72,45 +65,32 @@ function showBracketContent() {
 function buildQualifiedTeams(picks) {
     const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
     const firsts = [], seconds = [], thirds = [];
-
     letters.forEach(letter => {
         if (!picks[letter]) return;
         firsts.push({ name: picks[letter].first, group: letter, seed: '1' });
         seconds.push({ name: picks[letter].second, group: letter, seed: '2' });
         if (picks[letter].third) {
-            thirds.push({
-                name: picks[letter].third,
-                group: letter,
-                seed: '3',
-                pts: picks[letter].thirdPts || 0,
-                gd: picks[letter].thirdGd || 0,
-                gf: picks[letter].thirdGf || 0
-            });
+            thirds.push({ name: picks[letter].third, group: letter, seed: '3',
+                pts: picks[letter].thirdPts || 0, gd: picks[letter].thirdGd || 0, gf: picks[letter].thirdGf || 0 });
         }
     });
-
-    // Pick best 8 third-place teams
     thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-    const bestThirds = thirds.slice(0, 8);
-
-    return [...firsts, ...seconds, ...bestThirds];
+    return [...firsts, ...seconds, ...thirds.slice(0, 8)];
 }
 
 function loadRound(roundIndex) {
     const roundKey = ROUNDS[roundIndex];
     selectedTeams = new Set();
 
-    // Determine teams available this round
     let teamsForRound;
     if (roundIndex === 0) {
         teamsForRound = allTeamsInRound;
     } else {
         const prevKey = ROUNDS[roundIndex - 1];
-        const prevPicks = knockoutData[prevKey] || [];
-        teamsForRound = prevPicks.map(name => ({ name, seed: '', group: '' }));
+        const prev = knockoutData[prevKey] || [];
+        teamsForRound = prev.map(name => ({ name, seed: '', group: '' }));
     }
 
-    // Restore existing selections
     if (knockoutData[roundKey]) {
         const picks = roundKey === 'final' ? [knockoutData[roundKey]] : knockoutData[roundKey];
         picks.forEach(t => selectedTeams.add(t));
@@ -128,32 +108,29 @@ function renderTeams(teams, roundKey) {
     const container = document.getElementById('bracket-container');
 
     if (roundKey === 'final') {
-        // Grand final styling
-        let html = `<div style="display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 0;">`;
-        html += `<h3 style="font-family: 'Playfair Display', serif; color: #ffc107; font-size: 1.8rem;">VM-FINALEN</h3>`;
+        let html = `<div style="text-align: center; padding: 40px 0;">`;
+        html += `<h3 style="font-family: 'Playfair Display', serif; color: #ffc107; font-size: 1.8rem; margin-bottom: 24px;">VM-FINALEN</h3>`;
+        html += `<div class="bracket-team-grid" style="justify-content: center; gap: 20px;">`;
         teams.forEach(t => {
             const sel = selectedTeams.has(t.name) ? 'selected' : '';
-            html += `<div class="bracket-team ${sel}" style="width: 300px; font-size: 1.3rem; padding: 18px 24px;" onclick="window.toggleBracketTeam('${t.name}')">${fLarge(t.name)}${t.name}</div>`;
+            html += `<div class="bracket-team ${sel}" style="font-size: 1.2rem; padding: 16px 24px;" onclick="window.toggleBracketTeam('${t.name}')">${fLarge(t.name)}${t.name}</div>`;
         });
-        html += `</div>`;
+        html += `</div></div>`;
         container.innerHTML = html;
         return;
     }
 
-    // Group teams by seed for R16, otherwise just list them
-    if (roundKey === 'r16') {
+    if (roundKey === 'r32') {
+        let html = '';
         const firsts = teams.filter(t => t.seed === '1');
         const seconds = teams.filter(t => t.seed === '2');
         const thirds = teams.filter(t => t.seed === '3');
-
-        let html = '';
-        html += renderSection('Gruppettor', firsts);
-        html += renderSection('Grupptvåor', seconds);
-        if (thirds.length > 0) html += renderSection('Bästa treor', thirds);
+        html += renderSection('Gruppettor', firsts, true);
+        html += renderSection('Grupptvåor', seconds, true);
+        if (thirds.length > 0) html += renderSection('Bästa treor', thirds, true);
         container.innerHTML = html;
     } else {
-        // QF / SF: just a flat grid
-        let html = `<div class="bracket-grid">`;
+        let html = `<div class="bracket-team-grid">`;
         teams.forEach(t => {
             const sel = selectedTeams.has(t.name) ? 'selected' : '';
             html += `<div class="bracket-team ${sel}" onclick="window.toggleBracketTeam('${t.name}')">${f(t.name)}${t.name}</div>`;
@@ -163,18 +140,19 @@ function renderTeams(teams, roundKey) {
     }
 }
 
-function renderSection(title, teams) {
-    let html = `<div class="bracket-section"><div class="bracket-section-title">${title}</div><div class="bracket-grid">`;
+function renderSection(title, teams, showGroup) {
+    let html = `<div class="bracket-section"><div class="bracket-section-title">${title}</div><div class="bracket-team-grid">`;
     teams.forEach(t => {
         const sel = selectedTeams.has(t.name) ? 'selected' : '';
-        html += `<div class="bracket-team ${sel}" onclick="window.toggleBracketTeam('${t.name}')">${f(t.name)}${t.name} <span style="font-size:11px;color:#888;">(${t.group})</span></div>`;
+        const groupLabel = showGroup && t.group ? ` <span style="font-size:10px;color:#888;">${t.group}</span>` : '';
+        html += `<div class="bracket-team ${sel}" onclick="window.toggleBracketTeam('${t.name}')">${f(t.name)}${t.name}${groupLabel}</div>`;
     });
     html += `</div></div>`;
     return html;
 }
 
 function fLarge(t) {
-    return flags[t] ? `<img src="https://flagcdn.com/32x24/${flags[t]}.png" style="vertical-align:middle; margin-right:10px; border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);" width="32" height="24" alt="">` : '🌍 ';
+    return flags[t] ? `<img src="https://flagcdn.com/32x24/${flags[t]}.png" style="vertical-align:middle; margin-right:10px; border-radius:2px;" width="32" height="24" alt="">` : '🌍 ';
 }
 
 window.toggleBracketTeam = function (team) {
@@ -185,15 +163,12 @@ window.toggleBracketTeam = function (team) {
         selectedTeams.delete(team);
     } else {
         if (roundKey === 'final') selectedTeams.clear();
-        else if (selectedTeams.size >= required) return; // Max reached
+        else if (selectedTeams.size >= required) return;
         selectedTeams.add(team);
     }
 
-    // Re-render to update selection state
     const prevKey = currentRound === 0 ? null : ROUNDS[currentRound - 1];
-    const teams = currentRound === 0
-        ? allTeamsInRound
-        : (knockoutData[prevKey] || []).map(name => ({ name, seed: '', group: '' }));
+    const teams = currentRound === 0 ? allTeamsInRound : (knockoutData[prevKey] || []).map(n => ({ name: n, seed: '', group: '' }));
     renderTeams(teams, roundKey);
     updateSaveBtn(roundKey);
 };
@@ -202,11 +177,7 @@ function updateSaveBtn(roundKey) {
     const btn = document.getElementById('btn-bracket-save');
     const required = ROUND_PICK_COUNT[roundKey];
     const count = selectedTeams.size;
-    if (roundKey === 'final') {
-        btn.textContent = '🏆 Kröna mästaren!';
-    } else {
-        btn.textContent = `Spara & Nästa (${count}/${required}) ➡`;
-    }
+    btn.textContent = roundKey === 'final' ? '🏆 Kröna mästaren!' : `Spara & Nästa (${count}/${required}) ➡`;
     btn.disabled = count !== required;
 }
 
@@ -214,22 +185,13 @@ async function saveBracketRound() {
     const roundKey = ROUNDS[currentRound];
     const userId = auth.currentUser.uid;
 
-    if (roundKey === 'final') {
-        knockoutData.final = Array.from(selectedTeams)[0];
-    } else {
-        knockoutData[roundKey] = Array.from(selectedTeams);
-    }
+    if (roundKey === 'final') knockoutData.final = Array.from(selectedTeams)[0];
+    else knockoutData[roundKey] = Array.from(selectedTeams);
 
-    const koRef = doc(db, "users", userId, "tips", "_knockout");
-    await setDoc(koRef, knockoutData, { merge: true });
+    await setDoc(doc(db, "users", userId, "tips", "_knockout"), knockoutData, { merge: true });
 
-    if (roundKey === 'final') {
-        showChampion(knockoutData.final);
-    } else {
-        currentRound++;
-        loadRound(currentRound);
-        window.scrollTo(0, 0);
-    }
+    if (roundKey === 'final') { showChampion(knockoutData.final); }
+    else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }
 }
 
 function showChampion(team) {
@@ -255,7 +217,7 @@ function showChampion(team) {
     document.getElementById('btn-edit-bracket').addEventListener('click', () => {
         champ.style.display = 'none';
         showBracketContent();
-        currentRound = 3; // Go back to final round
+        currentRound = 4;
         loadRound(currentRound);
     });
 }

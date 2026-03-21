@@ -22,68 +22,60 @@
             <button class="tab-btn active" data-target="start-tab">Start</button>
             <button class="tab-btn" data-target="wizard-tab" style="border-color: #28a745; color: #1a1a1a;">🎯 Tippa Gruppspel</button>
             <button class="tab-btn" data-target="bracket-tab" id="bracket-tab-btn" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
-            <button class="tab-btn" data-target="tables-tab">Officiella Tabeller</button>
+            <button class="tab-btn" data-target="results-tab">Matchresultat</button>
         </div>
 
         <!-- START TAB -->
         <div id="start-tab" class="tab-content active">
-            <div id="start-content">
-                <div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
-                    <h2>Välkommen till MunkenBollen 2026!</h2>
-                    <p>Börja med att tippa gruppspelet för att låsa upp ditt slutspelsträd.</p>
-                </div>
-                <div id="community-stats" style="margin-top: 20px;"></div>
+            <div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
+                <h2>Välkommen till MunkenBollen 2026!</h2>
+                <p>Börja med att tippa gruppspelet för att låsa upp ditt slutspelsträd.</p>
             </div>
+            <div id="community-stats" style="margin-top: 20px;"></div>
         </div>
 
         <!-- WIZARD TAB -->
         <div id="wizard-tab" class="tab-content">
-            <!-- Mode selector -->
             <div id="wizard-mode-select" style="display: none;">
                 <div class="mode-card-grid">
                     <div class="mode-card" id="mode-casual">
                         <h3>🎯 Snabbtips</h3>
-                        <p>Välj gruppetta och grupptvåa i varje grupp. Matchresultat genereras automatiskt!</p>
+                        <p>Välj gruppetta och grupptvåa. Matchresultat genereras automatiskt!</p>
                     </div>
                     <div class="mode-card" id="mode-detailed">
                         <h3>📊 Detaljerat</h3>
-                        <p>Tippa resultatet i varje match. För dig som vill gå på djupet!</p>
+                        <p>Tippa resultatet i varje match.</p>
                     </div>
                 </div>
             </div>
-
-            <!-- Already-done banner -->
             <div id="wizard-already-done" class="already-done-banner" style="display: none;">
                 <span>Du har redan tippat gruppspelet! Vill du ändra din tipsrad?</span>
                 <button class="btn" id="btn-edit-tips" style="margin-left: 10px;">Ändra tips</button>
             </div>
-
-            <!-- Wizard content (unified for both modes) -->
             <div id="wizard-content" style="display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <!-- Compact header: mode switch + CTA on same row -->
+                <div class="wizard-header">
                     <button class="btn" id="btn-switch-mode" style="background: #6c757d; font-size: 13px;">Byt läge</button>
-                    <div id="wizard-mode-label" style="font-size: 13px; color: #999;"></div>
+                    <span id="wizard-mode-label" class="wizard-mode-label"></span>
                 </div>
-                <div id="wizard-cta" style="border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div class="progress-bar-container"><div class="progress-bar" id="wizard-progress" style="width: 8%;"></div></div>
                 <div class="wizard-layout">
                     <div class="wizard-left">
                         <div class="wizard-sticky-sidebar">
-                            <h2 id="wizard-title">Grupp A</h2>
+                            <h2 id="wizard-title" style="margin-top:0;">Grupp A</h2>
                             <div id="wizard-team-selectors"></div>
-                            <button class="btn" style="width:100%; background:#1a1a1a; margin: 15px 0;" id="btn-smart-random">🎲 Smart Slump</button>
-                            <div class="wizard-mini-table">
-                                <div id="wizard-live-table"></div>
-                            </div>
+                            <button class="btn" style="width:100%; background:#1a1a1a; margin: 10px 0;" id="btn-smart-random">🎲 Smart Slump</button>
+                            <div id="wizard-live-table"></div>
                         </div>
                     </div>
                     <div class="wizard-right">
                         <div id="wizard-matches"></div>
-                        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                            <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
-                            <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
-                        </div>
                     </div>
+                </div>
+                <!-- Sticky bottom nav -->
+                <div class="wizard-nav-sticky">
+                    <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
+                    <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
                 </div>
             </div>
         </div>
@@ -101,7 +93,7 @@
                 <h2 style="text-align: center; font-family: 'Playfair Display', serif;">SLUTSPEL</h2>
                 <div id="bracket-round-info" style="text-align: center; color: #aaa; margin-bottom: 20px;"></div>
                 <div id="bracket-container"></div>
-                <div id="bracket-nav" style="display: flex; justify-content: space-between; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; margin-top: 20px;">
                     <button class="btn" id="btn-bracket-prev" style="background: rgba(255,255,255,0.1); color: white;">⬅ Föregående</button>
                     <button class="btn" id="btn-bracket-save" style="background: #ffc107; color: #000;">Spara & Nästa ➡</button>
                 </div>
@@ -109,12 +101,12 @@
             <div id="bracket-champion" style="display: none;"></div>
         </div>
 
-        <!-- TABLES TAB -->
-        <div id="tables-tab" class="tab-content">
-            <div id="tables-container" class="tables-grid"></div>
+        <!-- MATCHRESULTAT TAB -->
+        <div id="results-tab" class="tab-content">
+            <div id="results-container"></div>
         </div>
 
-        <!-- ADMIN TAB (hidden by default) -->
+        <!-- ADMIN TAB -->
         <div id="admin-tab" class="tab-content">
             <div style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                 <h2>Admin-panel</h2>
@@ -123,10 +115,14 @@
                     <button class="btn" id="admin-unlock-tips">🔓 Lås upp tipsrader</button>
                 </div>
                 <div id="admin-lock-status" style="margin-bottom: 20px; padding: 10px; border-radius: 6px; font-size: 14px;"></div>
-                <h3>Registrera matchresultat</h3>
+                <h3>Gruppspel — Registrera resultat</h3>
                 <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;"></div>
                 <div id="admin-matches"></div>
                 <button class="btn" id="admin-save-results" style="margin-top: 15px; width: 100%;">Spara resultat</button>
+                <hr style="margin: 30px 0;">
+                <h3>Slutspel — Bracket</h3>
+                <p style="color:#666; font-size: 14px;">Fyll i de 32 lag som kvalificerat sig, sedan fyller bracketen i sig automatiskt. Registrera resultat match för match.</p>
+                <div id="admin-bracket"></div>
             </div>
         </div>
     </div>

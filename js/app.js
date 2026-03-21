@@ -5,6 +5,7 @@ import { initWizard, getGroupPicks } from './wizard.js';
 import { initBracket } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
+import { loadResults } from './results.js';
 
 const ADMINS = ['karl.tornered@nyamunken.se', 'jonas.waltelius@nyamunken.se'];
 let allMatchesData = [];
@@ -24,6 +25,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.getElementById(target).classList.add('active');
 
         if (target === 'bracket-tab') initBracket(getGroupPicks());
+        if (target === 'results-tab') loadResults(allMatchesData);
         if (target === 'start-tab') loadCommunityStats();
     });
 });
