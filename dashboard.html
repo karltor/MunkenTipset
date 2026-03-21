@@ -38,12 +38,12 @@
 
         <!-- WIZARD TAB -->
         <div id="wizard-tab" class="tab-content">
-            <!-- Mode selector (shown before starting / when changing) -->
+            <!-- Mode selector -->
             <div id="wizard-mode-select" style="display: none;">
                 <div class="mode-card-grid">
                     <div class="mode-card" id="mode-casual">
                         <h3>🎯 Snabbtips</h3>
-                        <p>Välj gruppetta och grupptvåa i varje grupp. Snabbt och enkelt!</p>
+                        <p>Välj gruppetta och grupptvåa i varje grupp. Matchresultat genereras automatiskt!</p>
                     </div>
                     <div class="mode-card" id="mode-detailed">
                         <h3>📊 Detaljerat</h3>
@@ -58,48 +58,30 @@
                 <button class="btn" id="btn-edit-tips" style="margin-left: 10px;">Ändra tips</button>
             </div>
 
-            <!-- Wizard content -->
+            <!-- Wizard content (unified for both modes) -->
             <div id="wizard-content" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <button class="btn" id="btn-switch-mode" style="background: #6c757d; font-size: 13px;">Byt läge</button>
+                    <div id="wizard-mode-label" style="font-size: 13px; color: #999;"></div>
                 </div>
+                <div id="wizard-cta" style="border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px;"></div>
                 <div class="progress-bar-container"><div class="progress-bar" id="wizard-progress" style="width: 8%;"></div></div>
-
-                <!-- CASUAL MODE -->
-                <div id="casual-mode" style="display: none;">
-                    <div style="background: #e8f5e9; border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px; color: #2e7d32;">
-                        Klicka på det lag du tror kommer <strong>etta</strong> 🏆 och sedan det lag du tror kommer <strong>tvåa</strong> 🥈 i gruppen.
-                    </div>
-                    <h2 id="casual-title">Grupp A</h2>
-                    <div id="casual-team-selectors" class="casual-grid"></div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                        <button class="btn" id="btn-casual-prev" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
-                        <button class="btn" id="btn-casual-save">Spara & Nästa ➡</button>
-                    </div>
-                </div>
-
-                <!-- DETAILED MODE -->
-                <div id="detailed-mode" style="display: none;">
-                    <div style="background: #e3f2fd; border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px; color: #1565c0;">
-                        Tippa resultatet i varje match. Tabellen uppdateras live!
-                    </div>
-                    <div class="wizard-layout">
-                        <div class="wizard-left">
-                            <div class="wizard-sticky-sidebar">
-                                <h2 id="wizard-title">Grupp A</h2>
-                                <div id="wizard-team-selectors"></div>
-                                <button class="btn" style="width:100%; background:#1a1a1a; margin: 15px 0;" id="btn-smart-random">🎲 Smart Slump</button>
-                                <div class="wizard-mini-table">
-                                    <div id="wizard-live-table"></div>
-                                </div>
+                <div class="wizard-layout">
+                    <div class="wizard-left">
+                        <div class="wizard-sticky-sidebar">
+                            <h2 id="wizard-title">Grupp A</h2>
+                            <div id="wizard-team-selectors"></div>
+                            <button class="btn" style="width:100%; background:#1a1a1a; margin: 15px 0;" id="btn-smart-random">🎲 Smart Slump</button>
+                            <div class="wizard-mini-table">
+                                <div id="wizard-live-table"></div>
                             </div>
                         </div>
-                        <div class="wizard-right">
-                            <div id="wizard-matches"></div>
-                            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                                <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
-                                <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
-                            </div>
+                    </div>
+                    <div class="wizard-right">
+                        <div id="wizard-matches"></div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                            <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
+                            <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
                         </div>
                     </div>
                 </div>
@@ -116,7 +98,7 @@
                 </div>
             </div>
             <div id="bracket-content" class="bracket-bg" style="display: none;">
-                <h2 style="text-align: center; font-family: 'Playfair Display', serif;">ROAD TO FINAL</h2>
+                <h2 style="text-align: center; font-family: 'Playfair Display', serif;">SLUTSPEL</h2>
                 <div id="bracket-round-info" style="text-align: center; color: #aaa; margin-bottom: 20px;"></div>
                 <div id="bracket-container"></div>
                 <div id="bracket-nav" style="display: flex; justify-content: space-between; margin-top: 20px;">
@@ -130,6 +112,22 @@
         <!-- TABLES TAB -->
         <div id="tables-tab" class="tab-content">
             <div id="tables-container" class="tables-grid"></div>
+        </div>
+
+        <!-- ADMIN TAB (hidden by default) -->
+        <div id="admin-tab" class="tab-content">
+            <div style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                <h2>Admin-panel</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <button class="btn" id="admin-lock-tips" style="background: #dc3545;">🔒 Lås alla tipsrader</button>
+                    <button class="btn" id="admin-unlock-tips">🔓 Lås upp tipsrader</button>
+                </div>
+                <div id="admin-lock-status" style="margin-bottom: 20px; padding: 10px; border-radius: 6px; font-size: 14px;"></div>
+                <h3>Registrera matchresultat</h3>
+                <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;"></div>
+                <div id="admin-matches"></div>
+                <button class="btn" id="admin-save-results" style="margin-top: 15px; width: 100%;">Spara resultat</button>
+            </div>
         </div>
     </div>
 

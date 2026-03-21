@@ -28,18 +28,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* Already done banner */
 .already-done-banner { background: #fff3cd; border: 1px solid #ffc107; border-radius: 10px; padding: 14px 20px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 
-/* Casual mode */
-.casual-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-
 /* Wizard & Match Cards */
 .wizard-layout { display: grid; gap: 20px; }
 @media (min-width: 850px) { .wizard-layout { grid-template-columns: 320px 1fr; } .wizard-sticky-sidebar { position: sticky; top: 20px; } }
 .match-card { background: white; padding: 0.8rem 1.2rem; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-bottom: 0.5rem; border: 1px solid #eaeaea; }
+.match-card.locked { opacity: 0.7; }
 .match-teams { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 600; }
 .team-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .team-name.home { text-align: left; }
 .team-name.away { text-align: right; }
 .score-input { width: 35px; height: 35px; text-align: center; border: 2px solid #ddd; font-weight: bold; font-size: 1.1rem; border-radius: 6px; }
+.score-input:disabled { background: #f0f0f0; color: #999; cursor: not-allowed; border-color: #e0e0e0; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .team-chip { padding: 10px 14px; background: white; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; }
 .team-chip:hover { border-color: #aaa; }
@@ -47,6 +46,10 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .team-chip.rank-1::after { content: '🏆 1:a'; }
 .team-chip.rank-2 { border-color: #17a2b8; background: #f4fbff; }
 .team-chip.rank-2::after { content: '🥈 2:a'; }
+
+/* Blink animation for table rank change */
+@keyframes rankChange { 0% { background: #ffc107; } 50% { background: transparent; } 100% { background: #ffc107; } }
+.rank-changed { animation: rankChange 0.4s ease 3; }
 
 /* Progress bar */
 .progress-bar-container { background: #e9ecef; border-radius: 10px; height: 8px; margin-bottom: 15px; overflow: hidden; }
@@ -65,15 +68,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .bracket-team { background: #262646; border: 2px solid #3d3d6b; padding: 12px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.15s; user-select: none; }
 .bracket-team:hover { border-color: #ffc107; }
 .bracket-team.selected { border-color: #28a745; background: #1e3a28; }
-.bracket-matchup { background: rgba(255,255,255,0.03); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-.bracket-matchup-label { font-size: 11px; color: #888; text-align: center; margin-bottom: 4px; }
-.bracket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 15px; margin-top: 10px; }
+.bracket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.bracket-section { margin-bottom: 15px; }
+.bracket-section-title { font-size: 12px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
 
 /* Champion reveal */
 .champion-reveal { text-align: center; padding: 60px 20px; }
 .champion-reveal h2 { font-family: 'Playfair Display', serif; font-size: 2.5rem; color: #ffc107; margin-bottom: 10px; }
-.champion-reveal .champion-name { font-size: 3rem; font-weight: 800; margin: 20px 0; }
-.champion-reveal .champion-flag { font-size: 80px; }
 
 /* Stats cards */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
@@ -87,3 +88,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .user-tip-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
 .user-tip-card h4 { margin: 0 0 8px; }
 .user-tip-card .tip-summary { font-size: 13px; color: #666; }
+
+/* Admin */
+.admin-match-card { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-match-card .score-input { width: 40px; height: 36px; }
+.admin-group-btn { padding: 6px 14px; border: 2px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-weight: 600; }
+.admin-group-btn.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
