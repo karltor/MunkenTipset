@@ -56,7 +56,7 @@ onAuthStateChanged(auth, async (user) => {
     }
     document.getElementById('user-name').textContent = user.displayName || user.email;
 
-    // Save profile name for stats + ensure parent user doc exists
+    // Ensure parent user doc exists (needed for stats to discover users)
     await setDoc(doc(db, "users", user.uid), { email: user.email }, { merge: true });
     const profileRef = doc(db, "users", user.uid, "tips", "_profile");
     await setDoc(profileRef, { name: user.displayName || user.email }, { merge: true });
