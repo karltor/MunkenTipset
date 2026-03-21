@@ -35,7 +35,8 @@
             const errorMsg = document.getElementById('error-message');
             errorMsg.style.display = 'none';
             signInWithPopup(auth, provider).then((result) => {
-                if (result.user.email && result.user.email.toLowerCase().endsWith('@nyamunken.se')) {
+                const email = result.user.email ? result.user.email.toLowerCase() : '';
+                if (email.endsWith('@nyamunken.se') && !email.startsWith('qq')) {
                     window.location.href = 'dashboard.html';
                 } else {
                     signOut(auth).then(() => {

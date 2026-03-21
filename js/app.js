@@ -23,8 +23,16 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // Auth & Start
 onAuthStateChanged(auth, async (user) => {
-    if (!user || !user.email.endsWith('@nyamunken.se')) { window.location.href = 'index.html'; return; }
+    const email = user ? user.email.toLowerCase() : '';
+    if (!user || !email.endsWith('@nyamunken.se') || email.startsWith('qq')) { window.location.href = 'index.html'; return; }
     document.getElementById('user-name').textContent = user.displayName || user.email;
+
+    // Visa admin-knapp för admins
+    const admins = ['karl.tornered@nyamunken.se', 'jonas.waltelius@nyamunken.se'];
+    if (admins.includes(email)) {
+        const adminBtn = document.getElementById('admin-btn');
+        if (adminBtn) adminBtn.style.display = 'inline-block';
+    }
     
     // Hämta officiella matcher EN gång
     const matchesRef = collection(db, "matches");
