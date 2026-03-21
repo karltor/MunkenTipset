@@ -8,9 +8,14 @@ service cloud.firestore {
       allow write: if request.auth != null && (request.auth.token.email == 'karl.tornered@nyamunken.se' || request.auth.token.email == 'jonas.waltelius@nyamunken.se');
     }
     
-    // NYTT: Regler för användarnas tipsrader
+    // Tillåt listning av användare (krävs för statistik-sidan)
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.token.email.matches('.*@nyamunken[.]se') && !request.auth.token.email.matches('qq.*');
+    }
+
+    // Regler för användarnas tipsrader
     match /users/{userId}/tips/{tipId} {
-      // Alla inloggade kollegor får läsa varandras tips (krävs för leaderboards senare)
+      // Alla inloggade kollegor får läsa varandras tips (krävs för leaderboards/statistik)
       allow read: if request.auth != null && request.auth.token.email.matches('.*@nyamunken[.]se') && !request.auth.token.email.matches('qq.*');
 
       // Du får BARA skriva/spara tips på ditt EGET ID (request.auth.uid == userId)

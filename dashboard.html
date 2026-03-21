@@ -5,51 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MunkenBollen 2026</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background-color: #f4f7f6; color: #2c3e50; }
-        .navbar { background-color: #1a1a1a; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .logo-text { font-family: 'Playfair Display', serif; font-size: 2.5rem; margin: 0; color: #fff; }
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
-        .btn { background-color: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        .btn-logout { background-color: #dc3545; }
-        .btn-admin-toggle { background-color: #ffc107; color: #000; margin-left: 10px; display: none; }
-        .tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
-        .tab-btn { background: transparent; border: 2px solid transparent; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; color: #666; }
-        .tab-btn.active { background: #1a1a1a; color: white; }
-        .tab-content { display: none; animation: fadeIn 0.3s; }
-        .tab-content.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Wizard & Match Cards */
-        .wizard-layout { display: grid; gap: 20px; }
-        @media (min-width: 850px) { .wizard-layout { grid-template-columns: 320px 1fr; } .wizard-sticky-sidebar { position: sticky; top: 20px; } }
-        .match-card { background: white; padding: 0.8rem 1.2rem; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-bottom: 0.5rem; border: 1px solid #eaeaea; }
-        .match-teams { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 600; }
-        .team-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-        .team-name.home { text-align: left; } .team-name.away { text-align: right; }
-        .score-input { width: 35px; height: 35px; text-align: center; border: 2px solid #ddd; font-weight: bold; font-size: 1.1rem; border-radius: 6px; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .team-chip { padding: 8px 12px; background: white; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;}
-        .team-chip.rank-1 { border-color: #ffc107; background: #fffdf5; } .team-chip.rank-1::after { content: '🏆 1:a'; }
-        .team-chip.rank-2 { border-color: #17a2b8; background: #f4fbff; } .team-chip.rank-2::after { content: '🥈 2:a'; }
-        
-        /* Tables */
-        .tables-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-        .group-table-card { background: white; border-radius: 12px; border: 1px solid #eee; overflow: hidden;}
-        .group-table-header { background: #1a1a1a; color: white; padding: 10px; text-align: center; font-weight: bold; font-family: 'Playfair Display', serif;}
-        .group-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        .group-table td, .group-table th { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
-        .group-table td:first-child { text-align: left; }
-        
-        /* Bracket */
-        .bracket-bg { background: linear-gradient(135deg, #1f1f3a, #2b2b52); padding: 40px 20px; border-radius: 16px; color: white; overflow-x: auto;}
-        .bracket-slot { background: #262646; border: 2px solid #3d3d6b; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; display: flex; align-items: center; gap: 10px;}
-        .bracket-slot:hover { border-color: #ffc107; }
-        .bracket-slot.winner { border-color: #28a745; background: #1e3a28; }
-        .bracket-slot.empty { opacity: 0.5; border-style: dashed; }
-        .progress-bar-container { background: #e9ecef; border-radius: 10px; height: 8px; margin-bottom: 15px; overflow: hidden; }
-        .progress-bar { background: linear-gradient(90deg, #17a2b8, #28a745); height: 100%; transition: width 0.4s; }
-    </style>
+    <link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
     <nav class="navbar">
@@ -60,54 +16,118 @@
             <button id="logout-btn" class="btn btn-logout">Logga ut</button>
         </div>
     </nav>
-    
+
     <div class="container">
         <div class="tabs" id="main-tabs">
             <button class="tab-btn active" data-target="start-tab">Start</button>
             <button class="tab-btn" data-target="wizard-tab" style="border-color: #28a745; color: #1a1a1a;">🎯 Tippa Gruppspel</button>
-            <button class="tab-btn" data-target="bracket-tab" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
+            <button class="tab-btn" data-target="bracket-tab" id="bracket-tab-btn" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
             <button class="tab-btn" data-target="tables-tab">Officiella Tabeller</button>
         </div>
 
+        <!-- START TAB -->
         <div id="start-tab" class="tab-content active">
-            <div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
-                <h2>Välkommen till MunkenBollen 2026!</h2>
-                <p>Börja med att tippa gruppspelet för att låsa upp ditt slutspelsträd.</p>
+            <div id="start-content">
+                <div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
+                    <h2>Välkommen till MunkenBollen 2026!</h2>
+                    <p>Börja med att tippa gruppspelet för att låsa upp ditt slutspelsträd.</p>
+                </div>
+                <div id="community-stats" style="margin-top: 20px;"></div>
             </div>
         </div>
 
+        <!-- WIZARD TAB -->
         <div id="wizard-tab" class="tab-content">
-            <div class="progress-bar-container"><div class="progress-bar" id="wizard-progress" style="width: 8%;"></div></div>
-            <div class="wizard-layout">
-                <div class="wizard-left">
-                    <div class="wizard-sticky-sidebar">
-                        <h2 id="wizard-title">Grupp A</h2>
-                        <div id="wizard-team-selectors"></div>
-                        <button class="btn" style="width:100%; background:#1a1a1a; margin: 15px 0;" id="btn-smart-random">🎲 Smart Slump</button>
-                        <div class="wizard-mini-table">
-                            <div id="wizard-live-table"></div>
+            <!-- Mode selector (shown before starting / when changing) -->
+            <div id="wizard-mode-select" style="display: none;">
+                <div class="mode-card-grid">
+                    <div class="mode-card" id="mode-casual">
+                        <h3>🎯 Snabbtips</h3>
+                        <p>Välj gruppetta och grupptvåa i varje grupp. Snabbt och enkelt!</p>
+                    </div>
+                    <div class="mode-card" id="mode-detailed">
+                        <h3>📊 Detaljerat</h3>
+                        <p>Tippa resultatet i varje match. För dig som vill gå på djupet!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Already-done banner -->
+            <div id="wizard-already-done" class="already-done-banner" style="display: none;">
+                <span>Du har redan tippat gruppspelet! Vill du ändra din tipsrad?</span>
+                <button class="btn" id="btn-edit-tips" style="margin-left: 10px;">Ändra tips</button>
+            </div>
+
+            <!-- Wizard content -->
+            <div id="wizard-content" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <button class="btn" id="btn-switch-mode" style="background: #6c757d; font-size: 13px;">Byt läge</button>
+                </div>
+                <div class="progress-bar-container"><div class="progress-bar" id="wizard-progress" style="width: 8%;"></div></div>
+
+                <!-- CASUAL MODE -->
+                <div id="casual-mode" style="display: none;">
+                    <div style="background: #e8f5e9; border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px; color: #2e7d32;">
+                        Klicka på det lag du tror kommer <strong>etta</strong> 🏆 och sedan det lag du tror kommer <strong>tvåa</strong> 🥈 i gruppen.
+                    </div>
+                    <h2 id="casual-title">Grupp A</h2>
+                    <div id="casual-team-selectors" class="casual-grid"></div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                        <button class="btn" id="btn-casual-prev" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
+                        <button class="btn" id="btn-casual-save">Spara & Nästa ➡</button>
+                    </div>
+                </div>
+
+                <!-- DETAILED MODE -->
+                <div id="detailed-mode" style="display: none;">
+                    <div style="background: #e3f2fd; border-radius: 10px; padding: 12px 16px; margin-bottom: 15px; font-size: 14px; color: #1565c0;">
+                        Tippa resultatet i varje match. Tabellen uppdateras live!
+                    </div>
+                    <div class="wizard-layout">
+                        <div class="wizard-left">
+                            <div class="wizard-sticky-sidebar">
+                                <h2 id="wizard-title">Grupp A</h2>
+                                <div id="wizard-team-selectors"></div>
+                                <button class="btn" style="width:100%; background:#1a1a1a; margin: 15px 0;" id="btn-smart-random">🎲 Smart Slump</button>
+                                <div class="wizard-mini-table">
+                                    <div id="wizard-live-table"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-right">
+                            <div id="wizard-matches"></div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                                <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
+                                <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="wizard-right">
-                    <div id="wizard-matches"></div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 20px;">
-                        <button class="btn" id="btn-prev-group" style="background: #e9ecef; color: #333;">⬅ Föregående</button>
-                        <button class="btn" id="btn-save-group">Spara & Nästa ➡</button>
-                    </div>
+            </div>
+        </div>
+
+        <!-- BRACKET TAB -->
+        <div id="bracket-tab" class="tab-content">
+            <div id="bracket-locked" style="display: none;">
+                <div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
+                    <h2 style="color: #999;">🔒 Slutspel låst</h2>
+                    <p>Du måste tippa klart hela gruppspelet innan du kan tippa slutspelet.</p>
+                    <button class="btn" id="btn-go-to-groups" style="margin-top: 10px;">🎯 Tippa Gruppspel</button>
                 </div>
             </div>
-        </div>
-
-        <div id="bracket-tab" class="tab-content">
-            <div class="bracket-bg">
+            <div id="bracket-content" class="bracket-bg" style="display: none;">
                 <h2 style="text-align: center; font-family: 'Playfair Display', serif;">ROAD TO FINAL</h2>
-                <p style="text-align: center; color: #aaa;">Dina tippade ettor och tvåor har placerats ut automatiskt enligt FIFAs regelverk. Klicka dig fram till finalen!</p>
-                <div id="bracket-container" style="display: flex; justify-content: space-around; margin-top: 30px;">
-                    </div>
+                <div id="bracket-round-info" style="text-align: center; color: #aaa; margin-bottom: 20px;"></div>
+                <div id="bracket-container"></div>
+                <div id="bracket-nav" style="display: flex; justify-content: space-between; margin-top: 20px;">
+                    <button class="btn" id="btn-bracket-prev" style="background: rgba(255,255,255,0.1); color: white;">⬅ Föregående</button>
+                    <button class="btn" id="btn-bracket-save" style="background: #ffc107; color: #000;">Spara & Nästa ➡</button>
+                </div>
             </div>
+            <div id="bracket-champion" style="display: none;"></div>
         </div>
 
+        <!-- TABLES TAB -->
         <div id="tables-tab" class="tab-content">
             <div id="tables-container" class="tables-grid"></div>
         </div>
