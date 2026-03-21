@@ -56,7 +56,8 @@ onAuthStateChanged(auth, async (user) => {
     }
     document.getElementById('user-name').textContent = user.displayName || user.email;
 
-    // Save profile name for stats
+    // Save profile name for stats + ensure parent user doc exists
+    await setDoc(doc(db, "users", user.uid), { email: user.email }, { merge: true });
     const profileRef = doc(db, "users", user.uid, "tips", "_profile");
     await setDoc(profileRef, { name: user.displayName || user.email }, { merge: true });
 
@@ -72,8 +73,10 @@ onAuthStateChanged(auth, async (user) => {
     // Check if user has completed group tips
     const picksRef = doc(db, "users", user.uid, "tips", "_groupPicks");
     const picksSnap = await getDoc(picksRef);
+    const welcomeMsg = document.getElementById('welcome-msg');
     if (picksSnap.exists() && picksSnap.data().completedAt) {
         unlockBracket();
+        if (welcomeMsg) welcomeMsg.textContent = 'Din tipsrad är inskickad! Kolla leaderboarden nedan.';
     } else {
         lockBracket();
     }
