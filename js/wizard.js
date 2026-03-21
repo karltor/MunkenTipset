@@ -8,37 +8,30 @@ export const f = (t) => flags[t] ? `<img src="https://flagcdn.com/20x15/${flags[
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 let currentIndex = 0;
 let currentTeams = [];
-let selFirst = null;
-let selSecond = null;
-let prevFirst = null; // Track previous for blink detection
-let prevSecond = null;
+let selFirst = null, selSecond = null;
+let prevFirst = null, prevSecond = null;
 let allMatches = [];
-let currentMode = null; // 'casual' or 'detailed'
+let currentMode = null;
 let existingGroupPicks = null;
 let onGroupsComplete = null;
 let tipsLocked = false;
+let savedScores = {}; // Preserve scores across mode switches: { matchId: { h, a } }
 
 export async function initWizard(matchesData, onComplete, locked) {
     allMatches = matchesData;
     onGroupsComplete = onComplete;
     tipsLocked = locked;
-
     const userId = auth.currentUser.uid;
 
-    // Check for existing tips in new format (_groupPicks)
     const metaRef = doc(db, "users", userId, "tips", "_groupPicks");
     const metaSnap = await getDoc(metaRef);
     if (metaSnap.exists()) {
         existingGroupPicks = metaSnap.data();
     } else {
-        // Fallback: check old format (individual match tips)
         const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
         const matchTips = [];
-        tipsSnap.forEach(d => {
-            if (!d.id.startsWith('_')) matchTips.push(d.data());
-        });
+        tipsSnap.forEach(d => { if (!d.id.startsWith('_')) matchTips.push(d.data()); });
         if (matchTips.length > 0) {
-            // Migrate old tips to new format
             existingGroupPicks = migrateOldTips(matchTips);
             await setDoc(metaRef, existingGroupPicks, { merge: true });
         }
@@ -49,12 +42,11 @@ export async function initWizard(matchesData, onComplete, locked) {
         document.getElementById('wizard-mode-select').style.display = 'none';
         document.getElementById('wizard-content').style.display = 'none';
         document.getElementById('btn-edit-tips').onclick = () => {
-            if (tipsLocked) return alert('Tipsraderna är låsta av admin.');
+            if (tipsLocked) return showToast('Tipsraderna är låsta av admin.');
             document.getElementById('wizard-already-done').style.display = 'none';
             startMode(existingGroupPicks.mode || 'casual');
         };
     } else if (existingGroupPicks) {
-        // Partially completed — resume
         startMode(existingGroupPicks.mode || 'casual');
     } else {
         document.getElementById('wizard-mode-select').style.display = 'block';
@@ -66,7 +58,7 @@ export async function initWizard(matchesData, onComplete, locked) {
     document.getElementById('btn-smart-random').addEventListener('click', smartAutoFill);
     document.getElementById('btn-save-group').addEventListener('click', saveAndNext);
     document.getElementById('btn-prev-group').addEventListener('click', () => {
-        if (currentIndex > 0) { currentIndex--; loadGroup(currentIndex); }
+        if (currentIndex > 0) { storeCurrentScores(); currentIndex--; loadGroup(currentIndex); }
     });
 }
 
@@ -79,7 +71,6 @@ function migrateOldTips(matchTips) {
         if (!groups[letter]) groups[letter] = [];
         groups[letter].push(m);
     });
-
     Object.keys(groups).forEach(letter => {
         const tData = {};
         groups[letter].forEach(m => {
@@ -91,44 +82,59 @@ function migrateOldTips(matchTips) {
             else { tData[m.homeTeam].pts++; tData[m.awayTeam].pts++; }
         });
         const sorted = Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-        if (sorted.length >= 2) {
-            picks[letter] = { first: sorted[0].name, second: sorted[1].name };
-        }
+        if (sorted.length >= 2) picks[letter] = { first: sorted[0].name, second: sorted[1].name };
     });
-
-    const completedGroups = Object.keys(picks).filter(k => GROUP_LETTERS.includes(k));
-    if (completedGroups.length === 12) picks.completedAt = new Date().toISOString();
+    if (Object.keys(picks).filter(k => GROUP_LETTERS.includes(k)).length === 12) picks.completedAt = new Date().toISOString();
     return picks;
 }
 
+// ─── TOAST ───────────────────────────────────────────
+function showToast(msg) {
+    let toast = document.getElementById('wiz-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'wiz-toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.remove('show');
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ─── MODE MANAGEMENT ─────────────────────────────────
 function startMode(mode) {
     currentMode = mode;
-    currentIndex = 0;
     document.getElementById('wizard-mode-select').style.display = 'none';
     document.getElementById('wizard-already-done').style.display = 'none';
     document.getElementById('wizard-content').style.display = 'block';
 
     const isCasual = mode === 'casual';
     document.getElementById('btn-switch-mode').textContent = isCasual ? '📊 Byt till Detaljerat' : '🎯 Byt till Snabbtips';
-    document.getElementById('wizard-mode-label').textContent = isCasual ? 'Snabbtips-läge' : 'Detaljerat läge';
-    document.getElementById('btn-smart-random').style.display = isCasual ? 'block' : 'block';
-
-    const cta = document.getElementById('wizard-cta');
-    if (isCasual) {
-        cta.style.background = '#e8f5e9';
-        cta.style.color = '#2e7d32';
-        cta.innerHTML = 'Klicka på det lag du tror kommer <strong>etta</strong> 🏆 och sedan <strong>tvåa</strong> 🥈. Matchresultat genereras automatiskt.';
-    } else {
-        cta.style.background = '#e3f2fd';
-        cta.style.color = '#1565c0';
-        cta.innerHTML = 'Tippa resultatet i varje match. Tabellen uppdateras live!';
-    }
-
-    loadGroup(0);
+    document.getElementById('wizard-mode-label').textContent = isCasual
+        ? 'Klicka på etta 🏆 och tvåa 🥈 — resultat genereras automatiskt'
+        : 'Tippa resultatet i varje match — tabellen uppdateras live';
+    loadGroup(currentIndex);
 }
 
 function switchMode() {
-    startMode(currentMode === 'casual' ? 'detailed' : 'casual');
+    storeCurrentScores();
+    currentMode = currentMode === 'casual' ? 'detailed' : 'casual';
+    startMode(currentMode);
+}
+
+function storeCurrentScores() {
+    const letter = GROUP_LETTERS[currentIndex];
+    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+    groupMatches.forEach(m => {
+        const hEl = document.getElementById(`wizHome-${m.id}`);
+        const aEl = document.getElementById(`wizAway-${m.id}`);
+        if (hEl && aEl && hEl.value !== '' && aEl.value !== '') {
+            savedScores[m.id] = { h: hEl.value, a: aEl.value };
+        }
+    });
 }
 
 // ─── UNIFIED GROUP LOADER ────────────────────────────
@@ -138,17 +144,13 @@ function loadGroup(index) {
     document.getElementById('wizard-title').textContent = `Grupp ${letter}`;
     document.getElementById('wizard-progress').style.width = `${((index + 1) / 12) * 100}%`;
 
-    selFirst = null;
-    selSecond = null;
-    prevFirst = null;
-    prevSecond = null;
+    selFirst = null; selSecond = null;
+    prevFirst = null; prevSecond = null;
 
-    // Restore existing picks
     if (existingGroupPicks && existingGroupPicks[letter]) {
         selFirst = existingGroupPicks[letter].first;
         selSecond = existingGroupPicks[letter].second;
-        prevFirst = selFirst;
-        prevSecond = selSecond;
+        prevFirst = selFirst; prevSecond = selSecond;
     }
 
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
@@ -157,12 +159,26 @@ function loadGroup(index) {
     renderTeamSelectors();
     renderMatchCards(groupMatches);
 
-    if (currentMode === 'casual' && selFirst && selSecond) {
+    // Restore saved scores first, then auto-fill only if no scores exist
+    let hasScores = restoreSavedScores(groupMatches);
+    if (!hasScores && currentMode === 'casual' && selFirst && selSecond) {
         autoFillScores();
     }
 
     window.updateWizTable = updateWizardTable;
     updateWizardTable();
+}
+
+function restoreSavedScores(groupMatches) {
+    let restored = false;
+    groupMatches.forEach(m => {
+        if (savedScores[m.id]) {
+            const hEl = document.getElementById(`wizHome-${m.id}`);
+            const aEl = document.getElementById(`wizAway-${m.id}`);
+            if (hEl && aEl) { hEl.value = savedScores[m.id].h; aEl.value = savedScores[m.id].a; restored = true; }
+        }
+    });
+    return restored;
 }
 
 function renderTeamSelectors() {
@@ -178,7 +194,6 @@ function renderMatchCards(groupMatches) {
     const container = document.getElementById('wizard-matches');
     const isCasual = currentMode === 'casual';
     container.innerHTML = '';
-
     groupMatches.forEach(m => {
         container.innerHTML += `
             <div class="match-card ${isCasual ? 'locked' : ''}">
@@ -187,22 +202,30 @@ function renderMatchCards(groupMatches) {
                     <span class="team-name home" id="wizNameHome-${m.id}">${f(m.homeTeam)}${m.homeTeam}</span>
                     <div class="score-input-group">
                         <input type="number" min="0" id="wizHome-${m.id}" class="score-input" placeholder="-"
-                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()" onfocus="window.onScoreFocus(this)">
+                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()">
                         <span style="color:#aaa; font-weight:bold; margin: 0 4px;">:</span>
                         <input type="number" min="0" id="wizAway-${m.id}" class="score-input" placeholder="-"
-                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()" onfocus="window.onScoreFocus(this)">
+                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()">
                     </div>
                     <span class="team-name away" id="wizNameAway-${m.id}">${f(m.awayTeam)}${m.awayTeam}</span>
                 </div>
             </div>`;
     });
+
+    // Attach click listeners on locked cards for toast
+    if (isCasual) {
+        container.querySelectorAll('.match-card.locked').forEach(card => {
+            card.addEventListener('click', onLockedCardClick);
+        });
+    }
 }
 
-window.onScoreFocus = function (el) {
-    if (currentMode === 'casual' && el.disabled) {
-        alert('Byt till Detaljerat läge för att ändra enskilda matchresultat.');
-    }
-};
+function onLockedCardClick() {
+    showToast('Byt till Detaljerat läge för att ändra matchresultat');
+    const btn = document.getElementById('btn-switch-mode');
+    btn.classList.add('highlight-pulse');
+    setTimeout(() => btn.classList.remove('highlight-pulse'), 1500);
+}
 
 window.toggleWizTeam = function (team) {
     if (selFirst === team) selFirst = null;
@@ -219,31 +242,24 @@ window.toggleWizTeam = function (team) {
 };
 
 function checkForRankChange() {
-    if ((prevFirst && prevFirst !== selFirst) || (prevSecond && prevSecond !== selSecond)) {
-        const table = document.getElementById('wizard-live-table');
-        if (table) {
-            table.classList.remove('rank-changed');
-            void table.offsetWidth; // Force reflow
-            table.classList.add('rank-changed');
-            setTimeout(() => table.classList.remove('rank-changed'), 1500);
-        }
-    }
-    prevFirst = selFirst;
-    prevSecond = selSecond;
+    const changed = (prevFirst && prevFirst !== selFirst) || (prevSecond && prevSecond !== selSecond);
+    prevFirst = selFirst; prevSecond = selSecond;
+    if (!changed) return;
+    // Trigger smooth re-render of table rows (handled by CSS transition)
+    const rows = document.querySelectorAll('#wizard-live-table tr[data-team]');
+    rows.forEach(r => { r.classList.add('row-shift'); setTimeout(() => r.classList.remove('row-shift'), 500); });
 }
 
-// ─── AUTO-FILL SCORES (for casual mode) ──────────────
+// ─── SCORE GENERATION ────────────────────────────────
 function autoFillScores() {
     if (!selFirst || !selSecond) return;
     const unselected = currentTeams.filter(t => t !== selFirst && t !== selSecond);
-    const target = [selFirst, selSecond, unselected[0], unselected[1]];
-    generateAndFillScores(target);
+    generateAndFillScores([selFirst, selSecond, unselected[0], unselected[1]]);
 }
 
 function smartAutoFill() {
-    if (!selFirst || !selSecond) return alert("Välj gruppetta och grupptvåa först!");
-    const unselected = currentTeams.filter(t => t !== selFirst && t !== selSecond);
-    generateAndFillScores([selFirst, selSecond, unselected[0], unselected[1]]);
+    if (!selFirst || !selSecond) return showToast("Välj gruppetta och grupptvåa först!");
+    autoFillScores();
     updateWizardTable();
 }
 
@@ -251,7 +267,6 @@ function generateAndFillScores(targetStandings) {
     let slots = [{ id: 0, pts: 0, gd: 0, gf: 0 }, { id: 1, pts: 0, gd: 0, gf: 0 }, { id: 2, pts: 0, gd: 0, gf: 0 }, { id: 3, pts: 0, gd: 0, gf: 0 }];
     const simMatches = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
     const scores = [];
-
     simMatches.forEach(match => {
         const hs = Math.floor(Math.random() * 4), as = Math.floor(Math.random() * 4);
         scores.push({ hId: match[0], aId: match[1], h: hs, a: as });
@@ -259,15 +274,12 @@ function generateAndFillScores(targetStandings) {
         h.gf += hs; a.gf += as; h.gd += (hs - as); a.gd += (as - hs);
         if (hs > as) h.pts += 3; else if (as > hs) a.pts += 3; else { h.pts++; a.pts++; }
     });
-
     slots.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
     const map = {};
     slots.forEach((s, i) => map[s.id] = targetStandings[i]);
 
     const letter = GROUP_LETTERS[currentIndex];
-    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
-
-    groupMatches.forEach(m => {
+    allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
         const sim = scores.find(s =>
             (map[s.hId] === m.homeTeam && map[s.aId] === m.awayTeam) ||
             (map[s.aId] === m.homeTeam && map[s.hId] === m.awayTeam)
@@ -277,6 +289,7 @@ function generateAndFillScores(targetStandings) {
             const aEl = document.getElementById(`wizAway-${m.id}`);
             if (map[sim.hId] === m.homeTeam) { hEl.value = sim.h; aEl.value = sim.a; }
             else { hEl.value = sim.a; aEl.value = sim.h; }
+            savedScores[m.id] = { h: hEl.value, a: aEl.value };
         }
     });
 }
@@ -313,64 +326,49 @@ function updateWizardTable() {
     const sorted = Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd);
     let html = `<table class="group-table" style="background:transparent;"><thead><tr><th>Lag</th><th>S</th><th>+/-</th><th>P</th></tr></thead><tbody>`;
     sorted.forEach((t, i) => {
-        const bg = i === 0 ? 'background-color: rgba(40, 167, 69, 0.1);' : (i === 1 ? 'background-color: rgba(23, 162, 184, 0.05);' : '');
-        html += `<tr style="${bg}"><td style="padding-left: 5px;">${f(t.name)}${t.name}</td><td>${t.pld}</td><td>${t.gd > 0 ? '+' + t.gd : t.gd}</td><td><strong>${t.pts}</strong></td></tr>`;
+        const bg = i === 0 ? 'background-color: rgba(40,167,69,0.1);' : (i === 1 ? 'background-color: rgba(23,162,184,0.05);' : '');
+        html += `<tr data-team="${t.name}" class="table-row-anim" style="${bg}"><td style="padding-left:5px;">${f(t.name)}${t.name}</td><td>${t.pld}</td><td>${t.gd > 0 ? '+' + t.gd : t.gd}</td><td><strong>${t.pts}</strong></td></tr>`;
     });
     const liveTable = document.getElementById('wizard-live-table');
     if (liveTable) liveTable.innerHTML = html + `</tbody></table>`;
 
-    // In detailed mode, update selFirst/selSecond from table and check for rank changes
     if (currentMode === 'detailed' && sorted[0].pld > 0) {
-        const newFirst = sorted[0].name;
-        const newSecond = sorted[1].name;
+        const newFirst = sorted[0].name, newSecond = sorted[1].name;
         if (selFirst !== newFirst || selSecond !== newSecond) {
-            selFirst = newFirst;
-            selSecond = newSecond;
+            selFirst = newFirst; selSecond = newSecond;
             renderTeamSelectors();
             checkForRankChange();
         }
     }
 }
 
-// ─── SAVE TO FIREBASE ────────────────────────────────
+// ─── SAVE ────────────────────────────────────────────
 async function saveAndNext() {
-    if (tipsLocked) return alert('Tipsraderna är låsta av admin.');
-
+    if (tipsLocked) return showToast('Tipsraderna är låsta av admin.');
     const letter = GROUP_LETTERS[currentIndex];
     const userId = auth.currentUser.uid;
-
-    if (!selFirst || !selSecond) return alert("Välj gruppetta och grupptvåa först!");
+    if (!selFirst || !selSecond) return showToast("Välj gruppetta och grupptvåa först!");
 
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
     const batch = writeBatch(db);
-
-    // Save match scores (both modes — casual has auto-generated scores)
     let allFilled = true;
     groupMatches.forEach(m => {
         const h = document.getElementById(`wizHome-${m.id}`)?.value;
         const a = document.getElementById(`wizAway-${m.id}`)?.value;
         if (h === '' || a === '' || h === undefined) { allFilled = false; return; }
-        const tipRef = doc(db, "users", userId, "tips", m.id.toString());
-        batch.set(tipRef, { homeScore: parseInt(h), awayScore: parseInt(a), homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage });
+        batch.set(doc(db, "users", userId, "tips", m.id.toString()), { homeScore: parseInt(h), awayScore: parseInt(a), homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage });
     });
 
-    if (!allFilled && currentMode === 'detailed') return alert("Fyll i alla matchresultat först!");
-    if (!allFilled && currentMode === 'casual') autoFillScores(); // Shouldn't happen but safety
+    if (!allFilled && currentMode === 'detailed') return showToast("Fyll i alla matchresultat först!");
+    if (!allFilled && currentMode === 'casual') autoFillScores();
 
-    // Calculate full standings (all 4 positions)
     const standings = calcFullStandings(groupMatches);
-
-    // Save group pick summary
     const picksRef = doc(db, "users", userId, "tips", "_groupPicks");
     const existing = existingGroupPicks || {};
     existing[letter] = {
-        first: standings[0]?.name,
-        second: standings[1]?.name,
-        third: standings[2]?.name,
-        fourth: standings[3]?.name,
-        thirdPts: standings[2]?.pts || 0,
-        thirdGd: standings[2]?.gd || 0,
-        thirdGf: standings[2]?.gf || 0
+        first: standings[0]?.name, second: standings[1]?.name,
+        third: standings[2]?.name, fourth: standings[3]?.name,
+        thirdPts: standings[2]?.pts || 0, thirdGd: standings[2]?.gd || 0, thirdGf: standings[2]?.gf || 0
     };
     existing.mode = currentMode;
     if (currentIndex === 11) existing.completedAt = new Date().toISOString();
@@ -381,15 +379,16 @@ async function saveAndNext() {
         existingGroupPicks = existing;
     } catch (e) {
         console.error("Fel vid sparning", e);
-        return alert("Kunde inte spara. Försök igen.");
+        return showToast("Kunde inte spara. Försök igen.");
     }
 
     if (currentIndex < 11) {
+        storeCurrentScores();
         currentIndex++;
         loadGroup(currentIndex);
         window.scrollTo(0, 0);
     } else {
-        alert("Snyggt jobbat! Gruppspelet är färdigtippat. Slutspelet låses upp!");
+        showToast("Snyggt! Gruppspelet klart — slutspelet låses upp!");
         if (onGroupsComplete) onGroupsComplete();
     }
 }
@@ -398,18 +397,16 @@ function calcFullStandings(groupMatches) {
     const tData = {};
     const teams = Array.from(new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam])));
     teams.forEach(t => tData[t] = { name: t, pts: 0, gd: 0, gf: 0 });
-
     groupMatches.forEach(m => {
         const hVal = document.getElementById(`wizHome-${m.id}`)?.value;
         const aVal = document.getElementById(`wizAway-${m.id}`)?.value;
-        if (hVal === '' || aVal === '' || !hVal) return;
+        if (!hVal || hVal === '' || aVal === '') return;
         const h = parseInt(hVal), a = parseInt(aVal);
         tData[m.homeTeam].gf += h; tData[m.awayTeam].gf += a;
         tData[m.homeTeam].gd += (h - a); tData[m.awayTeam].gd += (a - h);
         if (h > a) tData[m.homeTeam].pts += 3; else if (h < a) tData[m.awayTeam].pts += 3;
         else { tData[m.homeTeam].pts++; tData[m.awayTeam].pts++; }
     });
-
     return Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
 }
 
