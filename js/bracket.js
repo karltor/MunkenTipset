@@ -210,14 +210,22 @@ function showChampion(team) {
                 <div style="margin: 30px 0;">${bigFlag}</div>
                 <div style="font-size: 2.5rem; font-weight: 800; color: #ffc107;">${team}</div>
                 <p style="color: #aaa; margin-top: 20px;">Du har tippat att ${team} vinner VM 2026!</p>
-                <button class="btn" style="margin-top: 20px; background: rgba(255,255,255,0.1); color: white;" id="btn-edit-bracket">Ändra tips</button>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 20px;">
+                    <button class="btn" style="background: rgba(255,255,255,0.1); color: white;" id="btn-back-to-start">Tillbaka till Start</button>
+                    <button class="btn" style="background: rgba(255,255,255,0.1); color: white;" id="btn-edit-bracket">Ändra tips</button>
+                </div>
             </div>
         </div>`;
+
+    document.getElementById('btn-back-to-start').addEventListener('click', () => {
+        document.querySelector('.tab-btn[data-target="start-tab"]').click();
+    });
 
     document.getElementById('btn-edit-bracket').addEventListener('click', () => {
         champ.style.display = 'none';
         showBracketContent();
-        currentRound = 4;
+        // Start from R32 with all picks pre-filled
+        currentRound = 0;
         loadRound(currentRound);
     });
 }
