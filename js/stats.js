@@ -22,6 +22,12 @@ const DEFAULT_SCORING = {
 
 export { DEFAULT_SCORING };
 
+// Cached data for full leaderboard view
+let _cachedScores = null;
+let _cachedUsers = null;
+let _cachedScoring = null;
+let _cachedSettings = null;
+
 export async function loadCommunityStats() {
     const container = document.getElementById('community-stats');
     container.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
@@ -36,6 +42,10 @@ export async function loadCommunityStats() {
     const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
     const settings = settingsSnap.exists() ? settingsSnap.data() : {};
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
+    const tipsVisible = settings.tipsVisible !== false; // default true
+
+    _cachedSettings = settings;
+    _cachedScoring = scoring;
 
     // Load all users' tips via parent user docs
     const usersSnap = await getDocs(collection(db, "users"));
@@ -56,6 +66,8 @@ export async function loadCommunityStats() {
         if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
     }
 
+    _cachedUsers = users;
+
     if (users.length === 0) {
         container.innerHTML = `<div class="stat-card" style="text-align:center;"><p style="color:#999;">Ingen har tippat ännu. Bli den första!</p></div>`;
         return;
@@ -67,6 +79,10 @@ export async function loadCommunityStats() {
     // Build official group standings from results for group winner/runner-up scoring
     const officialGroupStandings = buildOfficialGroupStandings(results);
 
+    const scores = calcLeaderboard(users, results, bracket, scoring, officialGroupStandings);
+    scores.sort((a, b) => b.total - a.total);
+    _cachedScores = scores;
+
     let html = '';
 
     // ── DESKTOP LAYOUT: 2-column on wide screens ──────────
@@ -75,32 +91,52 @@ export async function loadCommunityStats() {
     // ── LEFT COLUMN: Leaderboard + My Tips ──────────
     html += `<div class="dashboard-left">`;
 
-    // ── LEADERBOARD ──────────────────────────────────
-    const scores = calcLeaderboard(users, results, bracket, scoring, officialGroupStandings);
+    // ── LEADERBOARD (top 10 + show more) ──────────
     html += `<div class="stat-card leaderboard-card"><h3>Leaderboard</h3>`;
     html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th><th>Grupp</th><th>Slutspel</th><th>Totalt</th></tr></thead><tbody>`;
-    scores.sort((a, b) => b.total - a.total);
-    scores.forEach((s, i) => {
+
+    const myRank = scores.findIndex(s => s.userId === currentUserId);
+    const showTop = Math.min(scores.length, 10);
+
+    for (let i = 0; i < showTop; i++) {
+        const s = scores[i];
         const isMe = s.userId === currentUserId;
         const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : ''));
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
         html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td><td>${s.groupPts}</td><td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
-    });
-    html += `</tbody></table></div>`;
+    }
 
-    // ── MY TIPS ──────────────────────────────────────
+    // If user is outside top 10, show separator + their row
+    if (myRank >= 10) {
+        const s = scores[myRank];
+        html += `<tr style="border-top:2px dashed #ddd;"><td colspan="4" style="text-align:center; color:#999; font-size:11px; padding:4px;">···</td></tr>`;
+        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${s.name}</td><td>${s.groupPts}</td><td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
+    }
+
+    html += `</tbody></table>`;
+    if (scores.length > 10) {
+        html += `<button class="btn" id="btn-full-leaderboard" style="width:100%; margin-top:8px; background:#6c757d; font-size:13px;">Visa hela listan (${scores.length} st)</button>`;
+    }
+    html += `</div>`;
+
+    // ── MY TIPS (table-aligned) ──────────────────────
     const me = users.find(u => u.userId === currentUserId);
     if (me && me.groupPicks) {
         html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
-        html += `<div class="stat-card"><div class="my-tips-grid">`;
+        html += `<div class="stat-card"><table class="my-tips-table">`;
         GROUP_LETTERS.forEach(letter => {
             const pick = me.groupPicks[letter];
             if (!pick) return;
-            html += `<div class="my-tips-group"><strong>Grupp ${letter}:</strong> ${f(pick.first)}<span class="team-inline">${pick.first}</span> · ${f(pick.second)}<span class="team-inline">${pick.second}</span></div>`;
+            html += `<tr>
+                <td class="mtt-label">Grupp ${letter}</td>
+                <td class="mtt-team">${f(pick.first)}${pick.first}</td>
+                <td class="mtt-sep">·</td>
+                <td class="mtt-team">${f(pick.second)}${pick.second}</td>
+            </tr>`;
         });
-        html += `</div>`;
+        html += `</table>`;
         if (me.knockoutPicks?.final) {
-            html += `<div style="margin-top:10px; font-size:14px; font-weight:700;">🏆 VM-mästare: ${f(me.knockoutPicks.final)}${me.knockoutPicks.final}</div>`;
+            html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid #eee; font-size:14px; font-weight:700;">🏆 VM-mästare: ${f(me.knockoutPicks.final)}${me.knockoutPicks.final}</div>`;
         }
         html += `</div>`;
     }
@@ -168,11 +204,90 @@ export async function loadCommunityStats() {
         html += `</div>`;
     }
 
+    // Alla tipsare link (only if tips visible)
+    if (tipsVisible) {
+        html += `<button class="btn" id="btn-show-all-tips" style="width:100%; margin-top:12px; background:#6c757d; font-size:13px;">Visa alla tipsare (${users.length} st)</button>`;
+    }
+
     html += `</div>`; // end dashboard-right
     html += `</div>`; // end dashboard-grid
 
-    // ── COMMUNITY STATS (full width below) ──────────────
-    html += `<h3 style="margin-top:20px;">Alla tipsare (${users.length} st)</h3>`;
+    container.innerHTML = html;
+    window._allPicks = users.map(u => ({ userId: u.userId, name: u.name, picks: u.groupPicks || {} }));
+
+    // Wire buttons
+    const fullLbBtn = document.getElementById('btn-full-leaderboard');
+    if (fullLbBtn) fullLbBtn.addEventListener('click', showFullLeaderboard);
+
+    const allTipsBtn = document.getElementById('btn-show-all-tips');
+    if (allTipsBtn) allTipsBtn.addEventListener('click', showAllTips);
+}
+
+// ── FULL LEADERBOARD VIEW ──────────────────────────
+function showFullLeaderboard() {
+    const container = document.getElementById('community-stats');
+    const scores = _cachedScores;
+    const scoring = _cachedScoring;
+    if (!scores) return;
+
+    let html = `<button class="btn" id="btn-back-from-lb" style="background:#6c757d; font-size:13px; margin-bottom:12px;">← Tillbaka</button>`;
+    html += `<div class="stat-card"><h3>Leaderboard — Detaljerad</h3>`;
+    html += `<div style="overflow-x:auto;">`;
+    html += `<table class="group-table full-leaderboard" style="font-size:13px;">`;
+    html += `<thead><tr>
+        <th style="text-align:left;">#</th>
+        <th style="text-align:left;">Namn</th>
+        <th title="Rätt 1X2">1X2</th>
+        <th title="Rätt mål">Mål</th>
+        <th title="Exakt resultat">Exakt</th>
+        <th title="Rätt gruppetta/tvåa">Grupp</th>
+        <th title="Slutspelspoäng">Slutspel</th>
+        <th>Totalt</th>
+    </tr></thead><tbody>`;
+
+    const currentUserId = auth.currentUser?.uid;
+    scores.forEach((s, i) => {
+        const isMe = s.userId === currentUserId;
+        const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : `${i + 1}`));
+        const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
+        html += `<tr style="${style}">
+            <td style="text-align:left;">${medal}</td>
+            <td style="text-align:left;">${s.name}</td>
+            <td>${s.detail.matchResult || 0}</td>
+            <td>${s.detail.matchGoals || 0}</td>
+            <td>${s.detail.exactScore || 0}</td>
+            <td>${s.detail.groupPlace || 0}</td>
+            <td>${s.koPts}</td>
+            <td><strong>${s.total}</strong></td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+
+    // Show scoring legend
+    html += `<div style="margin-top:12px; font-size:11px; color:#888;">`;
+    html += `<strong>Poängregler:</strong> `;
+    html += `1X2 = ${scoring.matchResult}p/match · `;
+    html += `Rätt mål = ${scoring.matchHomeGoals}p + ${scoring.matchAwayGoals}p · `;
+    if (scoring.exactScore > 0) html += `Exakt = +${scoring.exactScore}p bonus · `;
+    html += `Gruppetta = ${scoring.groupWinner}p · Grupptvåa = ${scoring.groupRunnerUp}p · `;
+    html += `R32 = ${scoring.koR32}p · R16 = ${scoring.koR16}p · KF = ${scoring.koQF}p · SF = ${scoring.koSF}p · Final = ${scoring.koFinal}p`;
+    html += `</div>`;
+
+    html += `</div>`;
+    container.innerHTML = html;
+
+    document.getElementById('btn-back-from-lb').addEventListener('click', () => loadCommunityStats());
+}
+
+// ── ALL TIPPERS VIEW ──────────────────────────────
+function showAllTips() {
+    const container = document.getElementById('community-stats');
+    const users = _cachedUsers;
+    if (!users) return;
+
+    let html = `<button class="btn" id="btn-back-from-tips" style="background:#6c757d; font-size:13px; margin-bottom:12px;">← Tillbaka</button>`;
+    html += `<h3>Alla tipsare (${users.length} st)</h3>`;
     html += `<div class="stats-grid" style="margin-bottom: 20px;">`;
     users.forEach(u => {
         const completed = u.groupPicks?.completedAt ? '✅ Klar' : '⏳ Pågår';
@@ -184,15 +299,15 @@ export async function loadCommunityStats() {
         </div>`;
     });
     html += `</div>`;
-
     container.innerHTML = html;
     window._allPicks = users.map(u => ({ userId: u.userId, name: u.name, picks: u.groupPicks || {} }));
+
+    document.getElementById('btn-back-from-tips').addEventListener('click', () => loadCommunityStats());
 }
 
 // ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
 function buildOfficialGroupStandings(results) {
     const standings = {};
-    // Collect all results by group
     const groupResults = {};
     Object.entries(results).forEach(([, r]) => {
         if (!r.stage || !r.stage.startsWith('Grupp ')) return;
@@ -220,9 +335,8 @@ function buildOfficialGroupStandings(results) {
     return standings;
 }
 
-// ── SCORING ──────────────────────────────────────────
+// ── SCORING (returns detailed breakdown) ──────────────
 function calcLeaderboard(users, results, bracket, scoring, officialGroupStandings) {
-    // Get official bracket winners per round
     const officialWinners = {};
     if (bracket?.rounds) {
         ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
@@ -236,21 +350,20 @@ function calcLeaderboard(users, results, bracket, scoring, officialGroupStanding
 
     return users.map(u => {
         let groupPts = 0;
-        // Score individual match tips against official results
+        const detail = { matchResult: 0, matchGoals: 0, exactScore: 0, groupPlace: 0 };
+
+        // Score individual match tips
         Object.entries(u.matchTips).forEach(([matchId, tip]) => {
             const r = results[matchId];
             if (!r || r.homeScore === undefined) return;
             const tipSign = sign(tip.homeScore - tip.awayScore);
             const realSign = sign(r.homeScore - r.awayScore);
-            let matchPts = 0;
-            if (tipSign === realSign) matchPts += scoring.matchResult;
-            if (tip.homeScore === r.homeScore) matchPts += scoring.matchHomeGoals;
-            if (tip.awayScore === r.awayScore) matchPts += scoring.matchAwayGoals;
-            // Exact score bonus
+            if (tipSign === realSign) { groupPts += scoring.matchResult; detail.matchResult += scoring.matchResult; }
+            if (tip.homeScore === r.homeScore) { groupPts += scoring.matchHomeGoals; detail.matchGoals += scoring.matchHomeGoals; }
+            if (tip.awayScore === r.awayScore) { groupPts += scoring.matchAwayGoals; detail.matchGoals += scoring.matchAwayGoals; }
             if (scoring.exactScore > 0 && tip.homeScore === r.homeScore && tip.awayScore === r.awayScore) {
-                matchPts += scoring.exactScore;
+                groupPts += scoring.exactScore; detail.exactScore += scoring.exactScore;
             }
-            groupPts += matchPts;
         });
 
         // Score group winner/runner-up predictions
@@ -259,9 +372,9 @@ function calcLeaderboard(users, results, bracket, scoring, officialGroupStanding
                 const pick = u.groupPicks[letter];
                 const official = officialGroupStandings[letter];
                 if (!pick || !official) return;
-                if (official.first && pick.first === official.first) groupPts += scoring.groupWinner;
-                if (official.second && pick.second === official.second) groupPts += scoring.groupRunnerUp;
-                if (scoring.groupThird > 0 && official.third && pick.third === official.third) groupPts += scoring.groupThird;
+                if (official.first && pick.first === official.first) { groupPts += scoring.groupWinner; detail.groupPlace += scoring.groupWinner; }
+                if (official.second && pick.second === official.second) { groupPts += scoring.groupRunnerUp; detail.groupPlace += scoring.groupRunnerUp; }
+                if (scoring.groupThird > 0 && official.third && pick.third === official.third) { groupPts += scoring.groupThird; detail.groupPlace += scoring.groupThird; }
             });
         }
 
@@ -281,7 +394,7 @@ function calcLeaderboard(users, results, bracket, scoring, officialGroupStanding
             });
         }
 
-        return { userId: u.userId, name: u.name, groupPts, koPts, total: groupPts + koPts };
+        return { userId: u.userId, name: u.name, groupPts, koPts, total: groupPts + koPts, detail };
     });
 }
 
@@ -300,13 +413,18 @@ window.toggleUserDetail = function (userId) {
     if (el.style.display !== 'none') { el.style.display = 'none'; return; }
     const userPick = window._allPicks?.find(p => p.userId === userId);
     if (!userPick) return;
-    let html = '<div class="my-tips-grid" style="font-size: 13px;">';
+    let html = '<table class="my-tips-table" style="font-size:12px;">';
     GROUP_LETTERS.forEach(letter => {
         if (userPick.picks[letter]) {
-            html += `<div class="my-tips-group"><strong>Grupp ${letter}:</strong> ${f(userPick.picks[letter].first)}<span class="team-inline">${userPick.picks[letter].first}</span> · ${f(userPick.picks[letter].second)}<span class="team-inline">${userPick.picks[letter].second}</span></div>`;
+            html += `<tr>
+                <td class="mtt-label">Grupp ${letter}</td>
+                <td class="mtt-team">${f(userPick.picks[letter].first)}${userPick.picks[letter].first}</td>
+                <td class="mtt-sep">·</td>
+                <td class="mtt-team">${f(userPick.picks[letter].second)}${userPick.picks[letter].second}</td>
+            </tr>`;
         }
     });
-    html += '</div>';
+    html += '</table>';
     el.innerHTML = html;
     el.style.display = 'block';
 };

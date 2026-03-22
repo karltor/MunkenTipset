@@ -122,10 +122,16 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 /* Leaderboard constrained */
 .leaderboard-card { max-width: 500px; }
 
-/* My Tips grid - consistent, no line breaks */
-.my-tips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; font-size: 13px; }
-.my-tips-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.team-inline { white-space: nowrap; }
+/* My Tips table - aligned columns */
+.my-tips-table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.my-tips-table tr + tr td { border-top: 1px solid #f0f0f0; }
+.mtt-label { font-weight: 700; white-space: nowrap; padding: 4px 8px 4px 0; color: #555; width: 70px; }
+.mtt-team { white-space: nowrap; padding: 4px 4px; }
+.mtt-sep { color: #ccc; padding: 4px 6px; text-align: center; }
+
+/* Full leaderboard */
+.full-leaderboard th { font-size: 11px; white-space: nowrap; }
+.full-leaderboard td, .full-leaderboard th { padding: 6px 8px; }
 
 /* Tipper hover tooltip */
 .tipper-hover { position: relative; display: inline-block; }

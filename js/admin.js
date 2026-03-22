@@ -30,6 +30,7 @@ export async function initAdmin(matchesData) {
     if (!initDone) {
         document.getElementById('admin-lock-tips').addEventListener('click', () => toggleLock(true));
         document.getElementById('admin-unlock-tips').addEventListener('click', () => toggleLock(false));
+        document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
         document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
         initDone = true;
     }
@@ -90,6 +91,17 @@ async function refreshLockStatus() {
 async function toggleLock(lock) {
     await setDoc(doc(db, "matches", "_settings"), { tipsLocked: lock }, { merge: true });
     await refreshLockStatus();
+}
+
+async function toggleTipsVisible() {
+    const snap = await getDoc(doc(db, "matches", "_settings"));
+    const current = snap.exists() ? snap.data().tipsVisible : true;
+    const newVal = current === false ? true : false;
+    await setDoc(doc(db, "matches", "_settings"), { tipsVisible: newVal }, { merge: true });
+    const btn = document.getElementById('admin-toggle-tips-visible');
+    btn.textContent = newVal ? '👁 Tips synliga' : '🙈 Tips dolda';
+    btn.style.background = newVal ? '#28a745' : '#dc3545';
+    setTimeout(() => { btn.textContent = 'Dölj/Visa andras tips'; btn.style.background = '#17a2b8'; }, 2000);
 }
 
 function renderAdminMatches(letter) {
