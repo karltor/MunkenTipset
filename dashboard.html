@@ -9,7 +9,7 @@
 </head>
 <body>
     <nav class="navbar">
-        <h1 class="logo-text">MunkenBollen</h1>
+        <h1 class="logo-text">MunkenBollen 2026</h1>
         <div>
             <span id="user-name" style="margin-right: 15px;">Laddar...</span>
             <button id="admin-btn" class="btn btn-admin-toggle" style="display: none;">Admin</button>
@@ -27,11 +27,7 @@
 
         <!-- START TAB -->
         <div id="start-tab" class="tab-content active">
-            <div id="welcome-banner" style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
-                <h2>Välkommen till MunkenBollen 2026!</h2>
-                <p id="welcome-msg">Börja med att tippa gruppspelet för att låsa upp ditt slutspelsträd.</p>
-            </div>
-            <div id="community-stats" style="margin-top: 20px;"></div>
+            <div id="community-stats"></div>
         </div>
 
         <!-- WIZARD TAB -->
@@ -129,8 +125,12 @@
                 <p style="color:#666; font-size: 14px;">Lag med oklar kvalificering (t.ex. DEN/MKD/CZE/IRL) kan döpas om här.</p>
                 <div id="admin-team-rename"></div>
                 <hr style="margin: 30px 0;">
+                <h3>Poänginställningar</h3>
+                <p style="color:#666; font-size: 14px;">Ställ in hur många poäng varje kategori ger. Ändra och spara.</p>
+                <div id="admin-scoring"></div>
+                <hr style="margin: 30px 0;">
                 <h3>Slutspel — Bracket</h3>
-                <p style="color:#666; font-size: 14px;">Fyll i de 32 lag som kvalificerat sig, sedan fyller bracketen i sig automatiskt. Registrera resultat match för match.</p>
+                <p style="color:#666; font-size: 14px;">Fyll i de 32 lag som kvalificerat sig baserat på gruppresultaten. Autocomplete från gruppspelet. Registrera resultat match för match.</p>
                 <div id="admin-bracket"></div>
             </div>
         </div>

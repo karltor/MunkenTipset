@@ -111,8 +111,30 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .results-sub-content { display: none; }
 .results-sub-content.active { display: block; }
 
+/* ── Dashboard grid layout ── */
+.dashboard-grid { display: grid; gap: 20px; }
+@media (min-width: 900px) {
+    .dashboard-grid { grid-template-columns: minmax(300px, 500px) 1fr; }
+}
+.dashboard-left {}
+.dashboard-right {}
+
+/* Leaderboard constrained */
+.leaderboard-card { max-width: 500px; }
+
+/* My Tips grid - consistent, no line breaks */
+.my-tips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; font-size: 13px; }
+.my-tips-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.team-inline { white-space: nowrap; }
+
+/* Tipper hover tooltip */
+.tipper-hover { position: relative; display: inline-block; }
+.tipper-tooltip { display: none; position: absolute; bottom: 120%; left: 0; background: #333; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; white-space: nowrap; z-index: 10; pointer-events: none; }
+.tipper-tooltip::after { content: ''; position: absolute; top: 100%; left: 20px; border: 5px solid transparent; border-top-color: #333; }
+.tipper-hover:hover .tipper-tooltip { display: block; }
+
 /* Stats */
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .stat-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .stat-card h3 { margin-top: 0; font-size: 1.1rem; color: #333; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; }
 .stat-bar { display: flex; align-items: center; margin-bottom: 6px; font-size: 13px; }
@@ -136,3 +158,20 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 @keyframes overdueGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,53,69,0); } 50% { box-shadow: 0 0 0 4px rgba(220,53,69,0.3); } }
 .btn-delete-result { background: none; border: none; color: #dc3545; font-size: 16px; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-weight: bold; line-height: 1; }
 .btn-delete-result:hover { background: #fce8e6; }
+
+/* ── Admin Scoring Config ── */
+.scoring-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.scoring-section { background: #f8f9fa; border-radius: 8px; padding: 12px; }
+.scoring-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+.scoring-row label { flex: 1; }
+
+/* ── Admin Bracket ── */
+.admin-bracket-container { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; }
+.admin-bracket-round { flex: 1; min-width: 180px; }
+.admin-bracket-round-header { text-align: center; font-weight: 700; font-size: 14px; margin-bottom: 10px; padding: 6px; background: #f0f0f0; border-radius: 6px; }
+.admin-bracket-match { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px; margin-bottom: 6px; }
+.admin-bracket-match-label { font-size: 10px; color: #999; text-align: center; margin-bottom: 4px; }
+.admin-bracket-team-row { display: flex; gap: 4px; }
+.admin-bracket-team { flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 600; }
+.admin-bracket-score { width: 36px; text-align: center; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 700; }
+.admin-bracket-vs { text-align: center; font-size: 10px; color: #aaa; padding: 2px 0; }

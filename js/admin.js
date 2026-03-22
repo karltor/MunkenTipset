@@ -1,6 +1,7 @@
 import { db } from './config.js';
 import { doc, getDoc, setDoc, deleteField, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { f } from './wizard.js';
+import { f, flags } from './wizard.js';
+import { DEFAULT_SCORING } from './stats.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 let allMatches = [];
@@ -23,6 +24,7 @@ export async function initAdmin(matchesData) {
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);
     renderTeamRenames();
+    renderScoringConfig();
     renderAdminBracket();
 
     if (!initDone) {
@@ -223,7 +225,102 @@ async function saveTeamRenames() {
     }
 }
 
+// ─── SCORING CONFIG ────────────────────────────────
+const SCORING_LABELS = {
+    matchResult: 'Rätt 1X2 (per match)',
+    matchHomeGoals: 'Rätt hemmalag mål (per match)',
+    matchAwayGoals: 'Rätt bortalag mål (per match)',
+    exactScore: 'Bonus exakt rätt resultat (per match)',
+    groupWinner: 'Rätt gruppetta (per grupp)',
+    groupRunnerUp: 'Rätt grupptvåa (per grupp)',
+    groupThird: 'Rätt grupptrea (per grupp)',
+    koR32: 'Rätt lag vidare R32 (per lag)',
+    koR16: 'Rätt lag vidare R16 (per lag)',
+    koQF: 'Rätt lag vidare KF (per lag)',
+    koSF: 'Rätt lag vidare SF (per lag)',
+    koFinal: 'Rätt VM-mästare',
+};
+
+async function renderScoringConfig() {
+    const container = document.getElementById('admin-scoring');
+    const settingsSnap = await getDoc(doc(db, "matches", "_settings"));
+    const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+    const current = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
+
+    let html = '<div class="scoring-grid">';
+    // Group into sections
+    const sections = [
+        { title: 'Gruppspel — Matcher', keys: ['matchResult', 'matchHomeGoals', 'matchAwayGoals', 'exactScore'] },
+        { title: 'Gruppspel — Placeringar', keys: ['groupWinner', 'groupRunnerUp', 'groupThird'] },
+        { title: 'Slutspel', keys: ['koR32', 'koR16', 'koQF', 'koSF', 'koFinal'] },
+    ];
+
+    sections.forEach(section => {
+        html += `<div class="scoring-section"><h4 style="margin:0 0 8px; font-size:14px; color:#555;">${section.title}</h4>`;
+        section.keys.forEach(key => {
+            html += `<div class="scoring-row">
+                <label>${SCORING_LABELS[key]}</label>
+                <input type="number" min="0" class="scoring-input" data-key="${key}" value="${current[key]}" style="width:50px; text-align:center; padding:4px; border:1px solid #ddd; border-radius:4px; font-size:14px; font-weight:600;">
+                <span style="color:#999; font-size:12px;">p</span>
+            </div>`;
+        });
+        html += `</div>`;
+    });
+    html += '</div>';
+    html += '<button class="btn" id="admin-save-scoring" style="margin-top:12px; width:100%;">Spara poänginställningar</button>';
+    container.innerHTML = html;
+
+    document.getElementById('admin-save-scoring').addEventListener('click', saveScoringConfig);
+}
+
+async function saveScoringConfig() {
+    const scoring = {};
+    document.querySelectorAll('.scoring-input').forEach(input => {
+        scoring[input.dataset.key] = parseInt(input.value) || 0;
+    });
+    await setDoc(doc(db, "matches", "_settings"), { scoring }, { merge: true });
+    // Visual feedback
+    const btn = document.getElementById('admin-save-scoring');
+    btn.textContent = '✓ Sparat!';
+    btn.style.background = '#28a745';
+    setTimeout(() => { btn.textContent = 'Spara poänginställningar'; btn.style.background = ''; }, 2000);
+}
+
 // ─── ADMIN BRACKET BUILDER ──────────────────────────
+function getGroupStandings() {
+    // Build group standings from official results
+    const standings = {};
+    GROUP_LETTERS.forEach(letter => {
+        const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+        if (groupMatches.length === 0) return;
+        const teams = {};
+        groupMatches.forEach(m => {
+            if (!teams[m.homeTeam]) teams[m.homeTeam] = { name: m.homeTeam, pts: 0, gd: 0, gf: 0 };
+            if (!teams[m.awayTeam]) teams[m.awayTeam] = { name: m.awayTeam, pts: 0, gd: 0, gf: 0 };
+            const r = existingResults[m.id];
+            if (!r || r.homeScore === undefined) return;
+            const h = r.homeScore, a = r.awayScore;
+            teams[m.homeTeam].gf += h; teams[m.homeTeam].gd += (h - a);
+            teams[m.awayTeam].gf += a; teams[m.awayTeam].gd += (a - h);
+            if (h > a) teams[m.homeTeam].pts += 3;
+            else if (a > h) teams[m.awayTeam].pts += 3;
+            else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
+        });
+        const sorted = Object.values(teams).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+        standings[letter] = sorted;
+    });
+    return standings;
+}
+
+function getAllTeamsForAutocomplete() {
+    const teams = new Set();
+    allMatches.forEach(m => {
+        if (m.homeTeam) teams.add(m.homeTeam);
+        if (m.awayTeam) teams.add(m.awayTeam);
+    });
+    return Array.from(teams).sort();
+}
+
 async function renderAdminBracket() {
     const container = document.getElementById('admin-bracket');
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
@@ -231,41 +328,109 @@ async function renderAdminBracket() {
 
     const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
     const matchCounts = [16, 8, 4, 2, 1];
+    const roundLabels = { R32: 'Åttondelsfinal', R16: 'Sextondelsfinal', KF: 'Kvartsfinal', SF: 'Semifinal', Final: 'Final' };
 
-    let html = `<div style="overflow-x: auto;">`;
-    html += `<div style="display: flex; gap: 10px; min-width: 900px;">`;
+    // Get group standings for autofill
+    const standings = getGroupStandings();
+    const allTeams = getAllTeamsForAutocomplete();
+
+    // Build qualified teams from group standings for R32 pre-fill
+    let qualifiedHtml = '';
+    const hasStandings = Object.keys(standings).length > 0;
+    if (hasStandings) {
+        qualifiedHtml += `<div class="admin-bracket-qualified">`;
+        qualifiedHtml += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
+        qualifiedHtml += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:15px;">`;
+        GROUP_LETTERS.forEach(letter => {
+            const s = standings[letter];
+            if (!s || s.length < 2) return;
+            qualifiedHtml += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
+        });
+        qualifiedHtml += `</div>`;
+        qualifiedHtml += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:15px;">Autofyll R32 från gruppresultat</button>`;
+        qualifiedHtml += `</div>`;
+    }
+
+    // Datalist for autocomplete
+    let datalistHtml = `<datalist id="team-autocomplete">`;
+    allTeams.forEach(t => { datalistHtml += `<option value="${t}">`; });
+    datalistHtml += `</datalist>`;
+
+    // Bracket layout with clear matchup structure
+    let html = qualifiedHtml + datalistHtml;
+    html += `<div class="admin-bracket-container">`;
 
     rounds.forEach((round, ri) => {
         const count = matchCounts[ri];
         const roundMatches = bracket.rounds?.[round] || [];
 
-        html += `<div style="flex: 1; min-width: 160px;">`;
-        html += `<div style="text-align:center; font-weight:700; font-size:13px; margin-bottom:8px; color: ${ri === 4 ? '#ffc107' : '#333'};">${round}</div>`;
+        html += `<div class="admin-bracket-round">`;
+        html += `<div class="admin-bracket-round-header" style="color: ${ri === 4 ? '#ffc107' : '#333'};">${roundLabels[round]}</div>`;
 
         for (let i = 0; i < count; i++) {
             const match = roundMatches[i] || {};
-            html += `<div style="background:#f0f0f0; border-radius:6px; padding:6px; margin-bottom:6px; font-size:12px;">`;
-            html += `<div style="display:flex; gap:4px; margin-bottom:3px;">
-                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" style="flex:1; padding:4px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
-                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="1" value="${match.score1 ?? ''}" placeholder="-" style="width:30px; text-align:center; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+            const matchLabel = `Match ${i + 1}`;
+            html += `<div class="admin-bracket-match">`;
+            html += `<div class="admin-bracket-match-label">${matchLabel}</div>`;
+            html += `<div class="admin-bracket-team-row">
+                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
+                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
             </div>`;
-            html += `<div style="display:flex; gap:4px;">
-                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" style="flex:1; padding:4px; border:1px solid #ddd; border-radius:4px; font-size:12px;">
-                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="2" value="${match.score2 ?? ''}" placeholder="-" style="width:30px; text-align:center; border:1px solid #ddd; border-radius:4px; font-size:12px;">
+            html += `<div class="admin-bracket-vs">vs</div>`;
+            html += `<div class="admin-bracket-team-row">
+                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
+                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
             </div>`;
             html += `</div>`;
         }
         html += `</div>`;
     });
 
-    html += `</div></div>`;
+    html += `</div>`;
     html += `<button class="btn" id="admin-save-bracket" style="margin-top: 15px; width: 100%; background: #ffc107; color: #000;">Spara bracket</button>`;
     container.innerHTML = html;
+
+    // Wire autofill
+    const autofillBtn = document.getElementById('admin-autofill-r32');
+    if (autofillBtn) {
+        autofillBtn.addEventListener('click', () => autofillR32(standings, bracket));
+    }
 
     document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
     container.querySelectorAll('.admin-bracket-score').forEach(input => {
         input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
     });
+}
+
+function autofillR32(standings, bracket) {
+    // FIFA 2026 R32 bracket seeding:
+    // 12 group winners + 12 group runners-up + 8 best third-place teams = 32
+    const firsts = [], seconds = [], thirds = [];
+    GROUP_LETTERS.forEach(letter => {
+        const s = standings[letter];
+        if (!s || s.length < 2) return;
+        firsts.push({ name: s[0].name, group: letter });
+        seconds.push({ name: s[1].name, group: letter });
+        if (s.length >= 3) thirds.push({ ...s[2], group: letter });
+    });
+    thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+    const qualifiedThirds = thirds.slice(0, 8);
+
+    // Fill R32 matchups: winner vs runner-up from different group pattern
+    // Simple approach: pair 1st from group A with 2nd from group B, etc.
+    const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
+
+    // Fill the 16 R32 matches with 32 teams (2 per match)
+    for (let i = 0; i < 16; i++) {
+        const t1Idx = i;
+        const t2Idx = i + 16;
+        const t1 = allQualified[t1Idx]?.name || '';
+        const t2 = allQualified[t2Idx]?.name || '';
+        const el1 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="1"]`);
+        const el2 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="2"]`);
+        if (el1) el1.value = t1;
+        if (el2) el2.value = t2;
+    }
 }
 
 function autoAdvanceWinners(rounds, matchCounts) {
@@ -306,6 +471,10 @@ async function saveAdminBracket(rounds, matchCounts) {
     });
     bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
     await setDoc(doc(db, "matches", "_bracket"), bracket, { merge: true });
+    // Visual feedback
+    const btn = document.getElementById('admin-save-bracket');
+    btn.textContent = '✓ Sparat!';
+    setTimeout(() => { btn.textContent = 'Spara bracket'; }, 2000);
 }
 
 export async function checkTipsLocked() {

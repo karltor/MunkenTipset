@@ -4,17 +4,38 @@ import { f, flags } from './wizard.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
+// Default scoring config - admin can override via _settings.scoring
+const DEFAULT_SCORING = {
+    matchResult: 1,   // Rätt 1X2
+    matchHomeGoals: 1, // Rätt hemmalag mål
+    matchAwayGoals: 1, // Rätt bortalag mål
+    groupWinner: 1,    // Rätt gruppetta
+    groupRunnerUp: 1,  // Rätt grupptvåa
+    koR32: 2,          // Rätt lag vidare R32
+    koR16: 2,          // Rätt lag vidare R16
+    koQF: 2,           // Rätt lag vidare KF
+    koSF: 5,           // Rätt lag vidare SF
+    koFinal: 10,       // Rätt VM-mästare
+    exactScore: 0,     // Bonus för exakt rätt resultat (alla 3 ovan)
+    groupThird: 0,     // Rätt grupptrea
+};
+
+export { DEFAULT_SCORING };
+
 export async function loadCommunityStats() {
     const container = document.getElementById('community-stats');
     container.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
 
-    // Load official results + bracket
-    const [resultsSnap, bracketSnap] = await Promise.all([
+    // Load official results + bracket + settings
+    const [resultsSnap, bracketSnap, settingsSnap] = await Promise.all([
         getDoc(doc(db, "matches", "_results")),
-        getDoc(doc(db, "matches", "_bracket"))
+        getDoc(doc(db, "matches", "_bracket")),
+        getDoc(doc(db, "matches", "_settings"))
     ]);
     const results = resultsSnap.exists() ? resultsSnap.data() : {};
     const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
+    const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+    const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
 
     // Load all users' tips via parent user docs
     const usersSnap = await getDocs(collection(db, "users"));
@@ -42,11 +63,21 @@ export async function loadCommunityStats() {
 
     const currentUserId = auth.currentUser?.uid;
     const playedMatches = Object.entries(results).filter(([, r]) => r.homeScore !== undefined);
+
+    // Build official group standings from results for group winner/runner-up scoring
+    const officialGroupStandings = buildOfficialGroupStandings(results);
+
     let html = '';
 
+    // ── DESKTOP LAYOUT: 2-column on wide screens ──────────
+    html += `<div class="dashboard-grid">`;
+
+    // ── LEFT COLUMN: Leaderboard + My Tips ──────────
+    html += `<div class="dashboard-left">`;
+
     // ── LEADERBOARD ──────────────────────────────────
-    const scores = calcLeaderboard(users, results, bracket);
-    html += `<div class="stat-card"><h3>Leaderboard</h3>`;
+    const scores = calcLeaderboard(users, results, bracket, scoring, officialGroupStandings);
+    html += `<div class="stat-card leaderboard-card"><h3>Leaderboard</h3>`;
     html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th><th>Grupp</th><th>Slutspel</th><th>Totalt</th></tr></thead><tbody>`;
     scores.sort((a, b) => b.total - a.total);
     scores.forEach((s, i) => {
@@ -57,16 +88,36 @@ export async function loadCommunityStats() {
     });
     html += `</tbody></table></div>`;
 
+    // ── MY TIPS ──────────────────────────────────────
+    const me = users.find(u => u.userId === currentUserId);
+    if (me && me.groupPicks) {
+        html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
+        html += `<div class="stat-card"><div class="my-tips-grid">`;
+        GROUP_LETTERS.forEach(letter => {
+            const pick = me.groupPicks[letter];
+            if (!pick) return;
+            html += `<div class="my-tips-group"><strong>Grupp ${letter}:</strong> ${f(pick.first)}<span class="team-inline">${pick.first}</span> · ${f(pick.second)}<span class="team-inline">${pick.second}</span></div>`;
+        });
+        html += `</div>`;
+        if (me.knockoutPicks?.final) {
+            html += `<div style="margin-top:10px; font-size:14px; font-weight:700;">🏆 VM-mästare: ${f(me.knockoutPicks.final)}${me.knockoutPicks.final}</div>`;
+        }
+        html += `</div>`;
+    }
+
+    html += `</div>`; // end dashboard-left
+
+    // ── RIGHT COLUMN: Recent Results + Champion Chart ──────
+    html += `<div class="dashboard-right">`;
+
     // ── RECENT RESULTS ──────────────────────────────
     if (playedMatches.length > 0) {
-        html += `<h3 style="margin-top:20px;">Senaste resultat</h3>`;
-        // Sort by date descending (latest first), show max 6
+        html += `<h3>Senaste resultat</h3>`;
         const sorted = playedMatches.sort((a, b) => {
             const da = a[1].date || '', db2 = b[1].date || '';
             return db2.localeCompare(da);
         }).slice(0, 6);
 
-        html += `<div class="stats-grid">`;
         sorted.forEach(([matchId, r]) => {
             const h = r.homeScore, a = r.awayScore;
             const exactTippers = [], winnerTippers = [];
@@ -82,8 +133,8 @@ export async function loadCommunityStats() {
             });
 
             const hw = h > a ? 'font-weight:800;' : '', aw = a > h ? 'font-weight:800;' : '';
-            html += `<div class="stat-card" style="padding:14px;">`;
-            html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            html += `<div class="stat-card result-card" style="padding:14px; margin-bottom:10px;">`;
+            html += `<div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="${hw}">${f(r.homeTeam)}${r.homeTeam}</span>
                 <span style="font-size:1.3rem; font-weight:800; letter-spacing:2px;">${h} - ${a}</span>
                 <span style="${aw}">${r.awayTeam}${f(r.awayTeam)}</span>
@@ -92,34 +143,35 @@ export async function loadCommunityStats() {
                 html += `<div style="font-size:12px; color:#28a745; margin-top:4px;">🎯 ${exactTippers.join(' & ')} tipsade exakt rätt!</div>`;
             }
             if (winnerTippers.length > 0) {
-                html += `<div style="font-size:12px; color:#17a2b8; margin-top:2px;">✓ ${winnerTippers.length} ${winnerTippers.length === 1 ? 'person' : 'andra'} tippade rätt vinnare</div>`;
+                const names = winnerTippers.join(', ');
+                html += `<div class="tipper-hover" style="font-size:12px; color:#17a2b8; margin-top:2px; cursor:default; position:relative;">
+                    ✓ ${winnerTippers.length} ${winnerTippers.length === 1 ? 'person' : 'andra'} tippade rätt vinnare
+                    <span class="tipper-tooltip">${names}</span>
+                </div>`;
             }
             if (exactTippers.length === 0 && winnerTippers.length === 0) {
                 html += `<div style="font-size:12px; color:#999; margin-top:4px;">Ingen tippade rätt</div>`;
             }
             html += `</div>`;
         });
-        html += `</div>`;
     }
 
-    // ── MY TIPS ──────────────────────────────────────
-    const me = users.find(u => u.userId === currentUserId);
-    if (me && me.groupPicks) {
-        html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
-        html += `<div class="stat-card"><div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:6px; font-size:13px;">`;
-        GROUP_LETTERS.forEach(letter => {
-            const pick = me.groupPicks[letter];
-            if (!pick) return;
-            html += `<div><strong>Grupp ${letter}:</strong> ${f(pick.first)}${pick.first} · ${f(pick.second)}${pick.second}</div>`;
+    // Champion picks
+    const champCounts = {};
+    users.forEach(u => { if (u.knockoutPicks?.final) champCounts[u.knockoutPicks.final] = (champCounts[u.knockoutPicks.final] || 0) + 1; });
+    if (Object.keys(champCounts).length > 0) {
+        html += `<div class="stat-card" style="margin-top:10px;"><h3>🏆 Tippade VM-mästare</h3>`;
+        const totalC = Object.values(champCounts).reduce((a, b) => a + b, 0);
+        Object.entries(champCounts).sort((a, b) => b[1] - a[1]).forEach(([team, count]) => {
+            html += renderStatBar(team, Math.round((count / totalC) * 100));
         });
         html += `</div>`;
-        if (me.knockoutPicks?.final) {
-            html += `<div style="margin-top:10px; font-size:14px; font-weight:700;">🏆 VM-mästare: ${f(me.knockoutPicks.final)}${me.knockoutPicks.final}</div>`;
-        }
-        html += `</div>`;
     }
 
-    // ── COMMUNITY STATS ──────────────────────────────
+    html += `</div>`; // end dashboard-right
+    html += `</div>`; // end dashboard-grid
+
+    // ── COMMUNITY STATS (full width below) ──────────────
     html += `<h3 style="margin-top:20px;">Alla tipsare (${users.length} st)</h3>`;
     html += `<div class="stats-grid" style="margin-bottom: 20px;">`;
     users.forEach(u => {
@@ -133,25 +185,43 @@ export async function loadCommunityStats() {
     });
     html += `</div>`;
 
-    // Champion picks
-    const champCounts = {};
-    users.forEach(u => { if (u.knockoutPicks?.final) champCounts[u.knockoutPicks.final] = (champCounts[u.knockoutPicks.final] || 0) + 1; });
-    if (Object.keys(champCounts).length > 0) {
-        html += `<div class="stat-card"><h3>🏆 Tippade VM-mästare</h3>`;
-        const totalC = Object.values(champCounts).reduce((a, b) => a + b, 0);
-        Object.entries(champCounts).sort((a, b) => b[1] - a[1]).forEach(([team, count]) => {
-            html += renderStatBar(team, Math.round((count / totalC) * 100));
-        });
-        html += `</div>`;
-    }
-
     container.innerHTML = html;
     window._allPicks = users.map(u => ({ userId: u.userId, name: u.name, picks: u.groupPicks || {} }));
 }
 
+// ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
+function buildOfficialGroupStandings(results) {
+    const standings = {};
+    // Collect all results by group
+    const groupResults = {};
+    Object.entries(results).forEach(([, r]) => {
+        if (!r.stage || !r.stage.startsWith('Grupp ')) return;
+        if (r.homeScore === undefined) return;
+        const letter = r.stage.replace('Grupp ', '');
+        if (!groupResults[letter]) groupResults[letter] = [];
+        groupResults[letter].push(r);
+    });
+
+    Object.entries(groupResults).forEach(([letter, matches]) => {
+        const teams = {};
+        matches.forEach(m => {
+            if (!teams[m.homeTeam]) teams[m.homeTeam] = { pts: 0, gd: 0, gf: 0 };
+            if (!teams[m.awayTeam]) teams[m.awayTeam] = { pts: 0, gd: 0, gf: 0 };
+            const h = m.homeScore, a = m.awayScore;
+            teams[m.homeTeam].gf += h; teams[m.homeTeam].gd += (h - a);
+            teams[m.awayTeam].gf += a; teams[m.awayTeam].gd += (a - h);
+            if (h > a) { teams[m.homeTeam].pts += 3; }
+            else if (a > h) { teams[m.awayTeam].pts += 3; }
+            else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
+        });
+        const sorted = Object.entries(teams).sort((a, b) => b[1].pts - a[1].pts || b[1].gd - a[1].gd || b[1].gf - a[1].gf);
+        standings[letter] = { first: sorted[0]?.[0] || null, second: sorted[1]?.[0] || null, third: sorted[2]?.[0] || null };
+    });
+    return standings;
+}
+
 // ── SCORING ──────────────────────────────────────────
-function calcLeaderboard(users, results, bracket) {
-    const koPointMap = { r32: 2, r16: 2, qf: 2, sf: 5, final: 10 };
+function calcLeaderboard(users, results, bracket, scoring, officialGroupStandings) {
     // Get official bracket winners per round
     const officialWinners = {};
     if (bracket?.rounds) {
@@ -172,16 +242,36 @@ function calcLeaderboard(users, results, bracket) {
             if (!r || r.homeScore === undefined) return;
             const tipSign = sign(tip.homeScore - tip.awayScore);
             const realSign = sign(r.homeScore - r.awayScore);
-            if (tipSign === realSign) groupPts += 1; // correct 1X2
-            if (tip.homeScore === r.homeScore) groupPts += 1; // correct home goals
-            if (tip.awayScore === r.awayScore) groupPts += 1; // correct away goals
+            let matchPts = 0;
+            if (tipSign === realSign) matchPts += scoring.matchResult;
+            if (tip.homeScore === r.homeScore) matchPts += scoring.matchHomeGoals;
+            if (tip.awayScore === r.awayScore) matchPts += scoring.matchAwayGoals;
+            // Exact score bonus
+            if (scoring.exactScore > 0 && tip.homeScore === r.homeScore && tip.awayScore === r.awayScore) {
+                matchPts += scoring.exactScore;
+            }
+            groupPts += matchPts;
         });
 
+        // Score group winner/runner-up predictions
+        if (u.groupPicks) {
+            GROUP_LETTERS.forEach(letter => {
+                const pick = u.groupPicks[letter];
+                const official = officialGroupStandings[letter];
+                if (!pick || !official) return;
+                if (official.first && pick.first === official.first) groupPts += scoring.groupWinner;
+                if (official.second && pick.second === official.second) groupPts += scoring.groupRunnerUp;
+                if (scoring.groupThird > 0 && official.third && pick.third === official.third) groupPts += scoring.groupThird;
+            });
+        }
+
         let koPts = 0;
+        const koKeyMap = { r32: 'koR32', r16: 'koR16', qf: 'koQF', sf: 'koSF', final: 'koFinal' };
         if (u.knockoutPicks) {
-            Object.entries(koPointMap).forEach(([round, pts]) => {
+            Object.entries(koKeyMap).forEach(([round, scoreKey]) => {
                 const winners = officialWinners[round] || [];
                 if (winners.length === 0) return;
+                const pts = scoring[scoreKey] || 0;
                 if (round === 'final') {
                     if (u.knockoutPicks.final && winners.includes(u.knockoutPicks.final)) koPts += pts;
                 } else {
@@ -210,10 +300,10 @@ window.toggleUserDetail = function (userId) {
     if (el.style.display !== 'none') { el.style.display = 'none'; return; }
     const userPick = window._allPicks?.find(p => p.userId === userId);
     if (!userPick) return;
-    let html = '<div style="font-size: 13px;">';
+    let html = '<div class="my-tips-grid" style="font-size: 13px;">';
     GROUP_LETTERS.forEach(letter => {
         if (userPick.picks[letter]) {
-            html += `<div style="margin-bottom:4px;"><strong>Grupp ${letter}:</strong> ${f(userPick.picks[letter].first)}${userPick.picks[letter].first} · ${f(userPick.picks[letter].second)}${userPick.picks[letter].second}</div>`;
+            html += `<div class="my-tips-group"><strong>Grupp ${letter}:</strong> ${f(userPick.picks[letter].first)}<span class="team-inline">${userPick.picks[letter].first}</span> · ${f(userPick.picks[letter].second)}<span class="team-inline">${userPick.picks[letter].second}</span></div>`;
         }
     });
     html += '</div>';

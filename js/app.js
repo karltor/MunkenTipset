@@ -73,10 +73,8 @@ onAuthStateChanged(auth, async (user) => {
     // Check if user has completed group tips
     const picksRef = doc(db, "users", user.uid, "tips", "_groupPicks");
     const picksSnap = await getDoc(picksRef);
-    const welcomeMsg = document.getElementById('welcome-msg');
     if (picksSnap.exists() && picksSnap.data().completedAt) {
         unlockBracket();
-        if (welcomeMsg) welcomeMsg.textContent = 'Din tipsrad är inskickad! Kolla leaderboarden nedan.';
     } else {
         lockBracket();
     }
