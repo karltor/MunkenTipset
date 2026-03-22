@@ -37,6 +37,18 @@ export async function initWizard(matchesData, onComplete, locked) {
         }
     }
 
+    // Load saved match tips into savedScores so they show when editing
+    if (existingGroupPicks) {
+        const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
+        tipsSnap.forEach(d => {
+            if (d.id.startsWith('_')) return;
+            const data = d.data();
+            if (data.homeScore !== undefined && data.awayScore !== undefined) {
+                savedScores[d.id] = { h: data.homeScore.toString(), a: data.awayScore.toString() };
+            }
+        });
+    }
+
     if (existingGroupPicks && existingGroupPicks.completedAt) {
         document.getElementById('wizard-already-done').style.display = 'flex';
         document.getElementById('wizard-mode-select').style.display = 'none';
@@ -144,6 +156,9 @@ function loadGroup(index) {
     document.getElementById('wizard-title').textContent = `Grupp ${letter}`;
     document.getElementById('wizard-progress').style.width = `${((index + 1) / 12) * 100}%`;
 
+    // Render group quick-jump nav
+    renderGroupNav(index);
+
     selFirst = null; selSecond = null;
     prevFirst = null; prevSecond = null;
 
@@ -177,6 +192,28 @@ function loadGroup(index) {
             renderTeamSelectors();
         }
     }
+}
+
+function renderGroupNav(activeIndex) {
+    let nav = document.getElementById('wizard-group-nav');
+    if (!nav) {
+        nav = document.createElement('div');
+        nav.id = 'wizard-group-nav';
+        nav.style.cssText = 'display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px;';
+        const titleEl = document.getElementById('wizard-title');
+        titleEl.parentNode.insertBefore(nav, titleEl);
+    }
+    nav.innerHTML = '';
+    GROUP_LETTERS.forEach((letter, i) => {
+        const btn = document.createElement('button');
+        const hasPick = existingGroupPicks && existingGroupPicks[letter];
+        btn.style.cssText = `padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; border:2px solid ${i === activeIndex ? '#1a1a1a' : (hasPick ? '#28a745' : '#ddd')}; background:${i === activeIndex ? '#1a1a1a' : (hasPick ? 'rgba(40,167,69,0.08)' : '#fff')}; color:${i === activeIndex ? '#fff' : '#333'};`;
+        btn.textContent = letter;
+        btn.addEventListener('click', () => {
+            if (i !== currentIndex) { storeCurrentScores(); loadGroup(i); }
+        });
+        nav.appendChild(btn);
+    });
 }
 
 function restoreSavedScores(groupMatches) {
