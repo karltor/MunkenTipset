@@ -109,28 +109,38 @@
 
         <!-- ADMIN TAB -->
         <div id="admin-tab" class="tab-content">
-            <div style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-                <h2>Admin-panel</h2>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <button class="btn" id="admin-lock-tips" style="background: #dc3545;">🔒 Lås alla tipsrader</button>
-                    <button class="btn" id="admin-unlock-tips">🔓 Lås upp tipsrader</button>
+            <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                <h2 style="margin-top:0;">Admin-panel</h2>
+                <!-- Top row: Lock + Results + Rename side by side -->
+                <div class="admin-top-grid">
+                    <div class="admin-section">
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                            <button class="btn" id="admin-lock-tips" style="background: #dc3545; font-size:13px;">🔒 Lås tipsrader</button>
+                            <button class="btn" id="admin-unlock-tips" style="font-size:13px;">🔓 Lås upp</button>
+                        </div>
+                        <div id="admin-lock-status" style="margin-bottom: 12px; padding: 8px; border-radius: 6px; font-size: 13px;"></div>
+                        <h4 style="margin:0 0 8px; font-size:15px;">Registrera resultat</h4>
+                        <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;"></div>
+                        <div id="admin-matches"></div>
+                        <button class="btn" id="admin-save-results" style="margin-top: 10px; width: 100%;">Spara resultat</button>
+                    </div>
+                    <div>
+                        <div class="admin-section">
+                            <h4 style="margin:0 0 8px; font-size:15px;">Byt lagnamn</h4>
+                            <p style="color:#666; font-size: 12px; margin:0 0 8px;">Lag med oklar kvalificering kan döpas om här.</p>
+                            <div id="admin-team-rename"></div>
+                        </div>
+                        <div class="admin-section" style="margin-top:12px;">
+                            <h4 style="margin:0 0 8px; font-size:15px;">Poänginställningar</h4>
+                            <div id="admin-scoring"></div>
+                        </div>
+                    </div>
                 </div>
-                <div id="admin-lock-status" style="margin-bottom: 20px; padding: 10px; border-radius: 6px; font-size: 14px;"></div>
-                <h3>Gruppspel — Registrera resultat</h3>
-                <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;"></div>
-                <div id="admin-matches"></div>
-                <button class="btn" id="admin-save-results" style="margin-top: 15px; width: 100%;">Spara resultat</button>
-                <hr style="margin: 30px 0;">
-                <h3>Byt lagnamn</h3>
-                <p style="color:#666; font-size: 14px;">Lag med oklar kvalificering (t.ex. DEN/MKD/CZE/IRL) kan döpas om här.</p>
-                <div id="admin-team-rename"></div>
-                <hr style="margin: 30px 0;">
-                <h3>Poänginställningar</h3>
-                <p style="color:#666; font-size: 14px;">Ställ in hur många poäng varje kategori ger. Ändra och spara.</p>
-                <div id="admin-scoring"></div>
-                <hr style="margin: 30px 0;">
-                <h3>Slutspel — Bracket</h3>
-                <p style="color:#666; font-size: 14px;">Fyll i de 32 lag som kvalificerat sig baserat på gruppresultaten. Autocomplete från gruppspelet. Registrera resultat match för match.</p>
+            </div>
+            <!-- Bracket section: full width, outside container -->
+            <div class="admin-bracket-fullwidth">
+                <h3 style="margin:0 0 8px;">Slutspel — Bracket</h3>
+                <p style="color:#666; font-size: 13px; margin:0 0 12px;">Fyll i de 32 kvalificerade lagen. Autocomplete från gruppspelet. Registrera resultat match för match.</p>
                 <div id="admin-bracket"></div>
             </div>
         </div>

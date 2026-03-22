@@ -161,9 +161,10 @@ async function saveAdminResults() {
 // ─── TEAM RENAME ────────────────────────────────────
 function renderTeamRenames() {
     const container = document.getElementById('admin-team-rename');
-    // Find teams with "/" in name (undecided qualifiers)
+    // Find teams with "/" in name from GROUP stage only (not knockout placeholders like "3A/B/C/D/F")
     const undecided = new Set();
     allMatches.forEach(m => {
+        if (!m.stage || !m.stage.startsWith('Grupp ')) return;
         if (m.homeTeam?.includes('/')) undecided.add(m.homeTeam);
         if (m.awayTeam?.includes('/')) undecided.add(m.awayTeam);
     });
@@ -312,8 +313,10 @@ function getGroupStandings() {
 }
 
 function getAllTeamsForAutocomplete() {
+    // Only include real nation names from group stage matches (not knockout placeholders like "1A", "3A/B/C/D/F")
     const teams = new Set();
     allMatches.forEach(m => {
+        if (!m.stage || !m.stage.startsWith('Grupp ')) return;
         if (m.homeTeam) teams.add(m.homeTeam);
         if (m.awayTeam) teams.add(m.awayTeam);
     });
