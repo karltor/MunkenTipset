@@ -288,7 +288,6 @@ async function saveScoringConfig() {
 
 // ─── ADMIN BRACKET BUILDER ──────────────────────────
 function getGroupStandings() {
-    // Build group standings from official results
     const standings = {};
     GROUP_LETTERS.forEach(letter => {
         const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
@@ -321,90 +320,132 @@ function getAllTeamsForAutocomplete() {
     return Array.from(teams).sort();
 }
 
+function renderMatchCard(round, matchIdx, match, side) {
+    // side: 'left' or 'right' (affects connector direction)
+    return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
+        <div class="abt-team-row">
+            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
+            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
+        </div>
+        <div class="abt-team-row">
+            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
+            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
+        </div>
+    </div>`;
+}
+
 async function renderAdminBracket() {
     const container = document.getElementById('admin-bracket');
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
+    const rd = bracket.rounds || {};
 
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const matchCounts = [16, 8, 4, 2, 1];
-    const roundLabels = { R32: 'Åttondelsfinal', R16: 'Sextondelsfinal', KF: 'Kvartsfinal', SF: 'Semifinal', Final: 'Final' };
-
-    // Get group standings for autofill
     const standings = getGroupStandings();
     const allTeams = getAllTeamsForAutocomplete();
 
-    // Build qualified teams from group standings for R32 pre-fill
-    let qualifiedHtml = '';
+    // Qualified teams summary
+    let html = '';
     const hasStandings = Object.keys(standings).length > 0;
     if (hasStandings) {
-        qualifiedHtml += `<div class="admin-bracket-qualified">`;
-        qualifiedHtml += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
-        qualifiedHtml += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:15px;">`;
+        html += `<div style="margin-bottom:15px;">`;
+        html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
+        html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:10px;">`;
         GROUP_LETTERS.forEach(letter => {
             const s = standings[letter];
             if (!s || s.length < 2) return;
-            qualifiedHtml += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
+            html += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
         });
-        qualifiedHtml += `</div>`;
-        qualifiedHtml += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:15px;">Autofyll R32 från gruppresultat</button>`;
-        qualifiedHtml += `</div>`;
+        html += `</div>`;
+        html += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:10px;">Autofyll R32 från gruppresultat</button>`;
+        html += `</div>`;
     }
 
     // Datalist for autocomplete
-    let datalistHtml = `<datalist id="team-autocomplete">`;
-    allTeams.forEach(t => { datalistHtml += `<option value="${t}">`; });
-    datalistHtml += `</datalist>`;
+    html += `<datalist id="team-autocomplete">`;
+    allTeams.forEach(t => { html += `<option value="${t}">`; });
+    html += `</datalist>`;
 
-    // Bracket layout with clear matchup structure
-    let html = qualifiedHtml + datalistHtml;
-    html += `<div class="admin-bracket-container">`;
+    // ── BUILD BRACKET TREE ──────────────────────────
+    // Left half: R32 matches 0-7 → R16 0-3 → KF 0-1 → SF 0
+    // Right half: R32 matches 8-15 → R16 4-7 → KF 2-3 → SF 1
+    // Center: Final
 
-    rounds.forEach((round, ri) => {
-        const count = matchCounts[ri];
-        const roundMatches = bracket.rounds?.[round] || [];
+    const leftRounds = [
+        { key: 'R32', label: 'Åttondelsfinal', start: 0, count: 8 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 0, count: 4 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
+        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
+    ];
+    const rightRounds = [
+        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 4, count: 4 },
+        { key: 'R32', label: 'Åttondelsfinal', start: 8, count: 8 },
+    ];
 
-        html += `<div class="admin-bracket-round">`;
-        html += `<div class="admin-bracket-round-header" style="color: ${ri === 4 ? '#ffc107' : '#333'};">${roundLabels[round]}</div>`;
+    html += `<div class="abt-tree">`;
 
-        for (let i = 0; i < count; i++) {
-            const match = roundMatches[i] || {};
-            const matchLabel = `Match ${i + 1}`;
-            html += `<div class="admin-bracket-match">`;
-            html += `<div class="admin-bracket-match-label">${matchLabel}</div>`;
-            html += `<div class="admin-bracket-team-row">
-                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
-                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
-            </div>`;
-            html += `<div class="admin-bracket-vs">vs</div>`;
-            html += `<div class="admin-bracket-team-row">
-                <input class="admin-bracket-team" data-round="${round}" data-match="${i}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
-                <input type="number" class="admin-bracket-score" data-round="${round}" data-match="${i}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
-            </div>`;
+    // Left half
+    leftRounds.forEach((round, ri) => {
+        html += `<div class="abt-round abt-round-left abt-depth-${ri}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const matchIdx = round.start + i;
+            const match = (rd[round.key] || [])[matchIdx] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${ri}">`;
+            html += renderMatchCard(round.key, matchIdx, match, 'left');
             html += `</div>`;
         }
-        html += `</div>`;
+        html += `</div></div>`;
     });
 
+    // Final (center)
+    const finalMatch = (rd['Final'] || [])[0] || {};
+    html += `<div class="abt-round abt-round-final">`;
+    html += `<div class="abt-round-label abt-final-label">FINAL</div>`;
+    html += `<div class="abt-round-matches">`;
+    html += `<div class="abt-match-wrapper abt-mw-final">`;
+    html += renderMatchCard('Final', 0, finalMatch, 'center');
     html += `</div>`;
+    html += `</div></div>`;
+
+    // Right half (mirrored)
+    rightRounds.forEach((round, ri) => {
+        const depth = 3 - ri; // SF=3, KF=2, R16=1, R32=0
+        html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const matchIdx = round.start + i;
+            const match = (rd[round.key] || [])[matchIdx] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${depth}">`;
+            html += renderMatchCard(round.key, matchIdx, match, 'right');
+            html += `</div>`;
+        }
+        html += `</div></div>`;
+    });
+
+    html += `</div>`; // .abt-tree
+
     html += `<button class="btn" id="admin-save-bracket" style="margin-top: 15px; width: 100%; background: #ffc107; color: #000;">Spara bracket</button>`;
     container.innerHTML = html;
 
     // Wire autofill
     const autofillBtn = document.getElementById('admin-autofill-r32');
     if (autofillBtn) {
-        autofillBtn.addEventListener('click', () => autofillR32(standings, bracket));
+        autofillBtn.addEventListener('click', () => autofillR32(standings));
     }
 
+    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
+    const matchCounts = [16, 8, 4, 2, 1];
     document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
-    container.querySelectorAll('.admin-bracket-score').forEach(input => {
+    container.querySelectorAll('.abt-score').forEach(input => {
         input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
     });
 }
 
-function autofillR32(standings, bracket) {
-    // FIFA 2026 R32 bracket seeding:
-    // 12 group winners + 12 group runners-up + 8 best third-place teams = 32
+function autofillR32(standings) {
     const firsts = [], seconds = [], thirds = [];
     GROUP_LETTERS.forEach(letter => {
         const s = standings[letter];
@@ -415,17 +456,11 @@ function autofillR32(standings, bracket) {
     });
     thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
     const qualifiedThirds = thirds.slice(0, 8);
-
-    // Fill R32 matchups: winner vs runner-up from different group pattern
-    // Simple approach: pair 1st from group A with 2nd from group B, etc.
     const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
 
-    // Fill the 16 R32 matches with 32 teams (2 per match)
     for (let i = 0; i < 16; i++) {
-        const t1Idx = i;
-        const t2Idx = i + 16;
-        const t1 = allQualified[t1Idx]?.name || '';
-        const t2 = allQualified[t2Idx]?.name || '';
+        const t1 = allQualified[i]?.name || '';
+        const t2 = allQualified[i + 16]?.name || '';
         const el1 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="1"]`);
         const el2 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="2"]`);
         if (el1) el1.value = t1;

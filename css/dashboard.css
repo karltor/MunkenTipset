@@ -165,13 +165,170 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .scoring-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .scoring-row label { flex: 1; }
 
-/* ── Admin Bracket ── */
-.admin-bracket-container { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; }
-.admin-bracket-round { flex: 1; min-width: 180px; }
-.admin-bracket-round-header { text-align: center; font-weight: 700; font-size: 14px; margin-bottom: 10px; padding: 6px; background: #f0f0f0; border-radius: 6px; }
-.admin-bracket-match { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px; margin-bottom: 6px; }
-.admin-bracket-match-label { font-size: 10px; color: #999; text-align: center; margin-bottom: 4px; }
-.admin-bracket-team-row { display: flex; gap: 4px; }
-.admin-bracket-team { flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 600; }
-.admin-bracket-score { width: 36px; text-align: center; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 700; }
-.admin-bracket-vs { text-align: center; font-size: 10px; color: #aaa; padding: 2px 0; }
+/* ── Admin Bracket Tree ── */
+.abt-tree {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    padding: 10px 0 20px;
+    min-height: 600px;
+    gap: 0;
+}
+.abt-round {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.abt-round-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    padding: 4px 0 8px;
+    white-space: nowrap;
+}
+.abt-final-label {
+    color: #d4a017 !important;
+    font-size: 13px !important;
+}
+.abt-round-matches {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+/* Match card */
+.abt-match {
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+    padding: 4px;
+    width: 170px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.abt-team-row {
+    display: flex;
+    gap: 3px;
+}
+.abt-team-row + .abt-team-row { border-top: 1px solid #eee; }
+.abt-input {
+    flex: 1;
+    padding: 5px 6px;
+    border: none;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
+    min-width: 0;
+}
+.abt-input:focus { outline: none; background: #f0f7ff; }
+.abt-score {
+    width: 28px;
+    text-align: center;
+    border: none;
+    border-left: 1px solid #eee;
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    padding: 5px 2px;
+}
+.abt-score:focus { outline: none; background: #fff8e1; }
+
+/* Match wrapper with connectors */
+.abt-match-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Left side connectors: line going RIGHT from match to next round */
+.abt-round-left .abt-match-wrapper::after {
+    content: '';
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    width: 16px;
+    height: 0;
+    border-top: 2px solid #ccc;
+}
+/* Vertical connector on left side: pairs of matches connect */
+.abt-round-left .abt-mw-d0:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-right: 2px solid #ccc;
+}
+.abt-round-left .abt-mw-d1:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-right: 2px solid #ccc;
+}
+.abt-round-left .abt-mw-d2:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-right: 2px solid #ccc;
+}
+
+/* Right side connectors: line going LEFT from match */
+.abt-round-right .abt-match-wrapper::after {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    width: 16px;
+    height: 0;
+    border-top: 2px solid #ccc;
+}
+.abt-round-right .abt-mw-d0:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-left: 2px solid #ccc;
+}
+.abt-round-right .abt-mw-d1:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-left: 2px solid #ccc;
+}
+.abt-round-right .abt-mw-d2:nth-child(odd)::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    height: calc(100% + 4px);
+    border-left: 2px solid #ccc;
+}
+
+/* Spacing between rounds */
+.abt-round-left { padding-right: 16px; }
+.abt-round-right { padding-left: 16px; }
+.abt-round-final { padding: 0 16px; }
+
+/* Final match styling */
+.abt-round-final .abt-match {
+    border: 2px solid #d4a017;
+    box-shadow: 0 2px 8px rgba(212,160,23,0.2);
+}
+.abt-mw-final { justify-content: center; }
+
+/* Depth-specific widths (narrower for later rounds) */
+.abt-depth-0 { min-width: 186px; }
+.abt-depth-1 { min-width: 186px; }
+.abt-depth-2 { min-width: 186px; }
+.abt-depth-3 { min-width: 186px; }
