@@ -135,7 +135,26 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* Tipper hover tooltip */
 .tipper-hover { position: relative; display: inline-block; }
-.tipper-tooltip { display: none; position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 8px 14px; border-radius: 6px; font-size: 12px; white-space: normal; max-width: 300px; line-height: 1.5; z-index: 10; pointer-events: none; }
+.tipper-tooltip { 
+    display: none; 
+    position: absolute; 
+    bottom: 120%; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    background: #333; 
+    color: white; 
+    padding: 10px 14px; /* Lite extra padding för luftigare design */
+    border-radius: 6px; 
+    font-size: 12px; 
+    white-space: normal; 
+    width: max-content; /* <-- MAGIN SOM LÖSER PROBLEMET */
+    max-width: 320px;   /* Begränsar rutan så den inte åker utanför mobilskärmen */
+    line-height: 1.6; 
+    z-index: 10; 
+    pointer-events: none; 
+    text-align: center; /* Ser snyggare ut när namnen radbryts */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Frivilligt: Liten skugga för snyggare pop-up */
+}
 .tipper-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #333; }
 .tipper-hover:hover .tipper-tooltip { display: block; }
 
