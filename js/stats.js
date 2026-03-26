@@ -27,6 +27,10 @@ let _cachedScores = null;
 let _cachedUsers = null;
 let _cachedScoring = null;
 let _cachedSettings = null;
+let _comparisonState = {
+    selectedUsers: [],
+    viewMode: 'simple' // 'simple' eller 'advanced'
+};
 
 export async function loadCommunityStats() {
     const container = document.getElementById('community-stats');
@@ -46,6 +50,7 @@ export async function loadCommunityStats() {
     const tipsVisible = settings.tipsVisible !== false; // default true
     const allMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
     const matchDocMap = {};
+    window._cachedMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => ({ id: d.id, ...d.data() }));
     allMatchDocs.forEach(m => matchDocMap[String(m.id)] = m);
 
     _cachedSettings = settings;
@@ -457,23 +462,206 @@ function showAllTips() {
     const users = _cachedUsers;
     if (!users) return;
 
-    let html = `<button class="btn" id="btn-back-from-tips" style="background:#6c757d; font-size:13px; margin-bottom:12px;">← Tillbaka</button>`;
-    html += `<h3>Alla tipsare (${users.length} st)</h3>`;
-    html += `<div class="stats-grid" style="margin-bottom: 20px;">`;
-    users.forEach(u => {
-        const completed = u.groupPicks?.completedAt ? '✅ Klar' : '⏳ Pågår';
-        const mode = u.groupPicks?.mode === 'detailed' ? '📊 Detaljerat' : '🎯 Snabbtips';
-        html += `<div class="user-tip-card" onclick="window.toggleUserDetail('${u.userId}')">
-            <h4>${u.name}</h4>
-            <div class="tip-summary">${completed} · ${mode}</div>
-            <div id="user-detail-${u.userId}" style="display:none; margin-top:10px;"></div>
-        </div>`;
-    });
-    html += `</div>`;
-    container.innerHTML = html;
-    window._allPicks = users.map(u => ({ userId: u.userId, name: u.name, picks: u.groupPicks || {} }));
+    // Sortera användare alfabetiskt
+    const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name));
 
+    let html = `<button class="btn" id="btn-back-from-tips" style="background:#6c757d; font-size:13px; margin-bottom:12px;">← Tillbaka</button>`;
+    html += `<h3>Jämför Tipsare (${users.length} st)</h3>`;
+
+    // ── KONTROLLPANEL ──
+    html += `<div class="stat-card" style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:20px;">`;
+
+    // Val av Vy
+    html += `<div style="flex:1; min-width:200px;">
+        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:#555;">1. Välj vy:</label>
+        <div class="tabs" style="border:none; margin:0; padding:0; gap:5px;">
+            <button class="tab-btn active" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Enkel (Grupper)</button>
+            <button class="tab-btn" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Avancerad (Matcher)</button>
+        </div>
+    </div>`;
+
+    // Val av Användare (Scrollbar Multiselect)
+    html += `<div style="flex:2; min-width:250px;">
+        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:#555;">2. Välj tipsare att jämföra:</label>
+        <div style="max-height:140px; overflow-y:auto; border:1px solid #e0e0e0; border-radius:8px; padding:10px; background:#fbfbfb; display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px;">`;
+
+    sortedUsers.forEach(u => {
+        const isChecked = _comparisonState.selectedUsers.includes(u.userId) ? 'checked' : '';
+        html += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; background:white; padding:4px 8px; border-radius:4px; border:1px solid #eee;">
+            <input type="checkbox" class="user-compare-cb" value="${u.userId}" ${isChecked}>
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${u.name}">${u.name}</span>
+        </label>`;
+    });
+
+    html += `</div></div>`;
+    html += `</div>`; // Slut Kontrollpanel
+
+    // Container för själva tabellen
+    html += `<div id="comparison-table-container" class="stat-card" style="padding:0; overflow-x:auto;">
+        <p style="text-align:center; color:#888; padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>
+    </div>`;
+
+    container.innerHTML = html;
+
+    // ── EVENT LISTENERS ──
     document.getElementById('btn-back-from-tips').addEventListener('click', () => loadCommunityStats());
+
+    const simpleBtn = document.getElementById('btn-view-simple');
+    const advBtn = document.getElementById('btn-view-advanced');
+
+    simpleBtn.addEventListener('click', () => {
+        _comparisonState.viewMode = 'simple';
+        simpleBtn.classList.add('active');
+        advBtn.classList.remove('active');
+        renderComparisonTable();
+    });
+
+    advBtn.addEventListener('click', () => {
+        _comparisonState.viewMode = 'advanced';
+        advBtn.classList.add('active');
+        simpleBtn.classList.remove('active');
+        renderComparisonTable();
+    });
+
+    const checkboxes = document.querySelectorAll('.user-compare-cb');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const id = e.target.value;
+            if (e.target.checked) {
+                if (!_comparisonState.selectedUsers.includes(id)) _comparisonState.selectedUsers.push(id);
+            } else {
+                _comparisonState.selectedUsers = _comparisonState.selectedUsers.filter(uid => uid !== id);
+            }
+            renderComparisonTable();
+        });
+    });
+
+    // Förivälj inloggad användare om listan är tom
+    const currentUserId = auth.currentUser?.uid;
+    if (currentUserId && _comparisonState.selectedUsers.length === 0) {
+        const myCb = document.querySelector(`.user-compare-cb[value="${currentUserId}"]`);
+        if (myCb) {
+            myCb.checked = true;
+            _comparisonState.selectedUsers.push(currentUserId);
+        }
+    }
+
+    // Rita ut direkt om användare finns i statet
+    if (_comparisonState.selectedUsers.length > 0) {
+        renderComparisonTable();
+    }
+}
+
+function renderComparisonTable() {
+    const container = document.getElementById('comparison-table-container');
+    const selectedIds = _comparisonState.selectedUsers;
+
+    if (selectedIds.length === 0) {
+        container.innerHTML = `<p style="text-align:center; color:#888; padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>`;
+        return;
+    }
+
+    const users = _cachedUsers.filter(u => selectedIds.includes(u.userId));
+
+    // Skapa en tabell som stöder horisontell scroll
+    let html = `<table class="group-table" style="width:100%; min-width:${selectedIds.length * 140 + 200}px; border-collapse: separate; border-spacing: 0;">`;
+
+    // ── HEADER (Sticky Left) ──
+    html += `<thead><tr>`;
+    html += `<th style="text-align:left; position:sticky; left:0; background:#1a1a1a; color:white; z-index:2; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Fas</th>`;
+    users.forEach(u => {
+        html += `<th style="background:#1a1a1a; color:white; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${u.name}</th>`;
+    });
+    html += `</tr></thead><tbody style="font-size:13px;">`;
+
+    if (_comparisonState.viewMode === 'simple') {
+        // --- ENKEL VY (Bara Grupper + Finalist) ---
+        GROUP_LETTERS.forEach(letter => {
+            html += `<tr>`;
+            html += `<td style="font-weight:700; position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">Grupp ${letter}</td>`;
+            
+            users.forEach(u => {
+                const picks = u.groupPicks ? u.groupPicks[letter] : null;
+                if (picks && picks.first && picks.second) {
+                    html += `<td style="background:white;">
+                        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; padding-left:10px;">
+                            <span style="white-space:nowrap;" title="Etta">🥇 ${f(picks.first)}${picks.first}</span>
+                            <span style="white-space:nowrap; color:#555;" title="Tvåa">🥈 ${f(picks.second)}${picks.second}</span>
+                        </div>
+                    </td>`;
+                } else {
+                    html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                }
+            });
+            html += `</tr>`;
+        });
+
+        // Vinnare
+        html += `<tr>`;
+        html += `<td style="font-weight:700; position:sticky; left:0; background:#fffdf5; z-index:1; border-right:2px solid #ddd; color:#d4a017; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">🏆 VM-mästare</td>`;
+        users.forEach(u => {
+            const final = u.knockoutPicks?.final;
+            if (final) {
+                html += `<td style="background:#fffdf5; font-weight:700; color:#d4a017;">${f(final)}${final}</td>`;
+            } else {
+                html += `<td style="background:#fffdf5; color:#ccc; text-align:center;">-</td>`;
+            }
+        });
+        html += `</tr>`;
+
+    } else {
+        // --- AVANCERAD VY (Alla Matcher) ---
+        const matchDocs = window._cachedMatchDocs || [];
+        
+        // Gruppera efter stage (Grupp A, Grupp B osv)
+        const groupedMatches = {};
+        matchDocs.forEach(m => {
+            const stage = m.stage || 'Övrigt';
+            if (!groupedMatches[stage]) groupedMatches[stage] = [];
+            groupedMatches[stage].push(m);
+        });
+
+        const stages = Object.keys(groupedMatches).sort();
+
+        if (stages.length === 0) {
+             html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:#888;">Laddar matcher... / Inga matcher hittades.</td></tr>`;
+        }
+
+        stages.forEach(stage => {
+            // Sektionsrubrik (T.ex. "Grupp A")
+            html += `<tr><td colspan="${users.length + 1}" style="background:#e9ecef; font-weight:700; text-align:center; padding:6px; font-size:12px; position:sticky; left:0; z-index:1;">${stage}</td></tr>`;
+
+            groupedMatches[stage].sort((a,b) => a.id.localeCompare(b.id)).forEach(m => {
+                html += `<tr>`;
+                
+                // Matchinfo (Sticky)
+                html += `<td style="position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
+                    <div style="font-size:10px; color:#888; margin-bottom:4px;">${m.date || ''}</div>
+                    <div style="display:flex; justify-content:space-between; font-weight:600; font-size:12px;">
+                        <span>${f(m.homeTeam)}${m.homeTeam}</span>
+                        <span style="color:#aaa; margin:0 4px;">-</span>
+                        <span>${m.awayTeam}${f(m.awayTeam)}</span>
+                    </div>
+                </td>`;
+
+                // Tipsarens resultat
+                users.forEach(u => {
+                    const tip = u.matchTips ? u.matchTips[m.id] : null;
+                    if (tip && tip.homeScore !== undefined) {
+                        html += `<td style="font-size:16px; font-weight:800; text-align:center; background:white;">
+                            ${tip.homeScore} - ${tip.awayScore}
+                        </td>`;
+                    } else {
+                        html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                    }
+                });
+                html += `</tr>`;
+            });
+        });
+    }
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
 }
 
 // ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
