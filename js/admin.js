@@ -32,6 +32,18 @@ export async function initAdmin(matchesData) {
         document.getElementById('admin-unlock-tips').addEventListener('click', () => toggleLock(false));
         document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
         document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
+        // Test tools
+        document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
+        document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);
+        document.getElementById('admin-autofill-group-results').addEventListener('click', autoFillGroupResults);
+        document.getElementById('admin-clear-group-results').addEventListener('click', clearGroupResults);
+        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32'));
+        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16'));
+        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF'));
+        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF'));
+        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final'));
+        document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
+        document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
         initDone = true;
     }
 }
@@ -159,7 +171,7 @@ async function saveAdminResults() {
         if (hEl && aEl && hEl.value !== '' && aEl.value !== '') {
             existingResults[m.id] = {
                 homeScore: parseInt(hEl.value), awayScore: parseInt(aEl.value),
-                homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage
+                homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage, date: m.date
             };
             saved++;
         }
@@ -525,6 +537,280 @@ async function saveAdminBracket(rounds, matchCounts) {
     const btn = document.getElementById('admin-save-bracket');
     btn.textContent = '✓ Sparat!';
     setTimeout(() => { btn.textContent = 'Spara bracket'; }, 2000);
+}
+
+// ═══ TEST TOOLS ═══════════════════════════════════════════════
+
+const FAKE_NAMES = [
+    'Lure Drejeri', 'Bo Ring', 'Anna Conda', 'Sansen Dansen',
+    'Bert-Ove Trollström', 'Göran-Göran Sansen', 'Ella Fansen',
+    'Nansen Klansen', 'Bansen Kranström', 'Pransen Fjällqvist',
+    'Hjansen Vransen', 'Stansen Brankvist', 'Fansen Grenqvist',
+    'Dransen Ljungström', 'Klansen Glansen', 'Vransen Panström',
+    'Gransen Bansen', 'Transen Kanström', 'Ljansen Stanström',
+    'Bransen Pranström', 'Kansen Nansen', 'Glansen Fanström',
+    'Fjansen Dranström', 'Pansen Granström', 'Dansen Hjanström',
+    'Sansen Trollqvist', 'Kransen Vransen', 'Bert-Ansen Dansen',
+    'Göran Granström', 'Nansen Nilström'
+];
+let fakeNameIdx = 0;
+
+function showToast(msg) {
+    let t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function addFakeTeachers() {
+    const statusEl = document.getElementById('admin-fake-status');
+    statusEl.textContent = 'Skapar fejklärare...';
+
+    const groupTeams = {};
+    GROUP_LETTERS.forEach(letter => {
+        const teams = new Set();
+        allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
+            teams.add(m.homeTeam);
+            teams.add(m.awayTeam);
+        });
+        groupTeams[letter] = Array.from(teams);
+    });
+    const allTeamsList = [...new Set(allMatches.filter(m => m.stage?.startsWith('Grupp')).flatMap(m => [m.homeTeam, m.awayTeam]))];
+    const groupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
+
+    // Offset name index by existing fake count
+    const usersSnap = await getDocs(collection(db, "users"));
+    const existingFakeCount = usersSnap.docs.filter(d => d.id.startsWith('fake_')).length;
+    fakeNameIdx = existingFakeCount;
+
+    for (let i = 0; i < 10; i++) {
+        const name = FAKE_NAMES[(fakeNameIdx + i) % FAKE_NAMES.length];
+        const fakeId = `fake_${Date.now()}_${i}`;
+
+        const batch = writeBatch(db);
+
+        batch.set(doc(db, "users", fakeId), { email: `${fakeId}@fake.test` });
+        batch.set(doc(db, "users", fakeId, "tips", "_profile"), { name });
+
+        // Group picks: random 1st/2nd per group
+        const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
+        GROUP_LETTERS.forEach(letter => {
+            const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
+            groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
+        });
+        batch.set(doc(db, "users", fakeId, "tips", "_groupPicks"), groupPicks);
+
+        // Match tips: random scores for each group match
+        groupMatches.forEach(m => {
+            batch.set(doc(db, "users", fakeId, "tips", String(m.id)), {
+                homeScore: Math.floor(Math.random() * 4),
+                awayScore: Math.floor(Math.random() * 4),
+                homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                stage: m.stage
+            });
+        });
+
+        // Knockout picks: random teams advancing
+        const shuffled = [...allTeamsList].sort(() => Math.random() - 0.5);
+        batch.set(doc(db, "users", fakeId, "tips", "_knockout"), {
+            r32: shuffled.slice(0, 16),
+            r16: shuffled.slice(0, 8),
+            qf: shuffled.slice(0, 4),
+            sf: shuffled.slice(0, 2),
+            final: shuffled[0]
+        });
+
+        await batch.commit();
+    }
+
+    fakeNameIdx += 10;
+    statusEl.textContent = `✓ 10 fejklärare tillagda! (${fakeNameIdx} totalt)`;
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+}
+
+async function removeFakeTeachers() {
+    const statusEl = document.getElementById('admin-fake-status');
+    statusEl.textContent = 'Tar bort fejklärare...';
+
+    const usersSnap = await getDocs(collection(db, "users"));
+    let removed = 0;
+
+    for (const userDoc of usersSnap.docs) {
+        if (!userDoc.id.startsWith('fake_')) continue;
+
+        const tipsSnap = await getDocs(collection(db, "users", userDoc.id, "tips"));
+        const batch = writeBatch(db);
+        tipsSnap.forEach(tipDoc => {
+            batch.delete(doc(db, "users", userDoc.id, "tips", tipDoc.id));
+        });
+        batch.delete(doc(db, "users", userDoc.id));
+        await batch.commit();
+        removed++;
+    }
+
+    fakeNameIdx = 0;
+    statusEl.textContent = `✓ ${removed} fejklärare borttagna!`;
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+}
+
+async function autoFillGroupResults() {
+    const resultsSnap = await getDoc(doc(db, "matches", "_results"));
+    const results = resultsSnap.exists() ? resultsSnap.data() : {};
+
+    const groupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
+    let filled = 0;
+    groupMatches.forEach(m => {
+        if (results[m.id]?.homeScore !== undefined) return;
+        results[m.id] = {
+            homeScore: Math.floor(Math.random() * 5),
+            awayScore: Math.floor(Math.random() * 5),
+            homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+            stage: m.stage, date: m.date
+        };
+        filled++;
+    });
+
+    await setDoc(doc(db, "matches", "_results"), results);
+    existingResults = results;
+    renderGroupButtons();
+    renderAdminMatches(currentAdminGroup);
+    showToast(`${filled} gruppresultat autofyllda!`);
+}
+
+async function clearGroupResults() {
+    await setDoc(doc(db, "matches", "_results"), {});
+    existingResults = {};
+    renderGroupButtons();
+    renderAdminMatches(currentAdminGroup);
+    showToast('Alla gruppresultat rensade!');
+}
+
+async function autoFillKnockoutRound(targetRound) {
+    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
+    if (!bracket.rounds) bracket.rounds = {};
+
+    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
+    const matchCounts = { R32: 16, R16: 8, KF: 4, SF: 2, Final: 1 };
+
+    // For R32: populate teams from group standings if empty
+    if (targetRound === 'R32') {
+        if (!bracket.rounds.R32) bracket.rounds.R32 = [];
+        const hasTeams = bracket.rounds.R32.some(m => m?.team1);
+        if (!hasTeams) {
+            const standings = getGroupStandings();
+            const firsts = [], seconds = [], thirds = [];
+            GROUP_LETTERS.forEach(letter => {
+                const s = standings[letter];
+                if (!s || s.length < 2) return;
+                firsts.push(s[0].name);
+                seconds.push(s[1].name);
+                if (s.length >= 3) thirds.push(s[2]);
+            });
+            thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+            const qualifiedThirds = thirds.slice(0, 8).map(t => t.name);
+            const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
+            for (let i = 0; i < 16; i++) {
+                if (!bracket.rounds.R32[i]) bracket.rounds.R32[i] = {};
+                bracket.rounds.R32[i].team1 = allQualified[i] || '';
+                bracket.rounds.R32[i].team2 = allQualified[i + 16] || '';
+            }
+        }
+    } else {
+        // Advance winners from previous round
+        const prevRoundIdx = rounds.indexOf(targetRound) - 1;
+        if (prevRoundIdx >= 0) {
+            const prevRound = rounds[prevRoundIdx];
+            if (!bracket.rounds[targetRound]) bracket.rounds[targetRound] = [];
+            const prevMatches = bracket.rounds[prevRound] || [];
+            for (let i = 0; i < prevMatches.length; i++) {
+                const m = prevMatches[i];
+                if (m?.winner) {
+                    const nextIdx = Math.floor(i / 2);
+                    if (!bracket.rounds[targetRound][nextIdx]) bracket.rounds[targetRound][nextIdx] = {};
+                    if (i % 2 === 0) {
+                        bracket.rounds[targetRound][nextIdx].team1 = m.winner;
+                    } else {
+                        bracket.rounds[targetRound][nextIdx].team2 = m.winner;
+                    }
+                }
+            }
+        }
+    }
+
+    // Generate random non-draw scores
+    const count = matchCounts[targetRound];
+    let filled = 0;
+    for (let i = 0; i < count; i++) {
+        if (!bracket.rounds[targetRound]) bracket.rounds[targetRound] = [];
+        if (!bracket.rounds[targetRound][i]) bracket.rounds[targetRound][i] = {};
+        const match = bracket.rounds[targetRound][i];
+        if (!match.team1 || !match.team2) continue;
+        if (match.winner) continue;
+
+        let s1, s2;
+        do {
+            s1 = Math.floor(Math.random() * 4);
+            s2 = Math.floor(Math.random() * 4);
+        } while (s1 === s2);
+
+        match.score1 = s1;
+        match.score2 = s2;
+        match.winner = s1 > s2 ? match.team1 : match.team2;
+        filled++;
+    }
+
+    // Auto-advance winners to next round
+    const roundIdx = rounds.indexOf(targetRound);
+    if (roundIdx < rounds.length - 1) {
+        const nextRound = rounds[roundIdx + 1];
+        if (!bracket.rounds[nextRound]) bracket.rounds[nextRound] = [];
+        for (let i = 0; i < count; i++) {
+            const match = bracket.rounds[targetRound][i];
+            if (!match?.winner) continue;
+            const nextIdx = Math.floor(i / 2);
+            if (!bracket.rounds[nextRound][nextIdx]) bracket.rounds[nextRound][nextIdx] = {};
+            if (i % 2 === 0) {
+                bracket.rounds[nextRound][nextIdx].team1 = match.winner;
+            } else {
+                bracket.rounds[nextRound][nextIdx].team2 = match.winner;
+            }
+        }
+    }
+
+    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
+    await setDoc(doc(db, "matches", "_bracket"), bracket);
+    await renderAdminBracket();
+    showToast(`${targetRound}: ${filled} matcher autofyllda!`);
+}
+
+async function clearKnockoutResults() {
+    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
+
+    // Remove scores and winners, but keep R32 teams
+    ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
+        (bracket.rounds[round] || []).forEach(m => {
+            delete m.score1; delete m.score2; delete m.winner;
+        });
+    });
+    // Clear teams from R16 onwards (they're derived from results)
+    ['R16', 'KF', 'SF', 'Final'].forEach(round => {
+        (bracket.rounds[round] || []).forEach(m => {
+            m.team1 = ''; m.team2 = '';
+        });
+    });
+
+    await setDoc(doc(db, "matches", "_bracket"), bracket);
+    await renderAdminBracket();
+    showToast('Slutspelsresultat rensade!');
+}
+
+async function clearKnockoutTeams() {
+    await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
+    await renderAdminBracket();
+    showToast('Hela bracketen rensad!');
 }
 
 export async function checkTipsLocked() {

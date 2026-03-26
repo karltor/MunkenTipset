@@ -45,6 +45,8 @@ export async function loadCommunityStats() {
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
     const tipsVisible = settings.tipsVisible !== false; // default true
     const allMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
+    const matchDocMap = {};
+    allMatchDocs.forEach(m => matchDocMap[String(m.id)] = m);
 
     _cachedSettings = settings;
     _cachedScoring = scoring;
@@ -154,13 +156,14 @@ export async function loadCommunityStats() {
     // ── Build combined played matches list ──────────
     const allPlayedMatches = [];
 
-    // Group results
+    // Group results (fallback date from match docs for old results without date)
     playedMatches.forEach(([matchId, r]) => {
+        const date = r.date || matchDocMap[matchId]?.date;
         allPlayedMatches.push({
             matchId, homeTeam: r.homeTeam, awayTeam: r.awayTeam,
             homeScore: r.homeScore, awayScore: r.awayScore,
-            stage: r.stage, date: r.date,
-            _parsed: parseMatchDate(r.date), _isKnockout: false
+            stage: r.stage, date,
+            _parsed: parseMatchDate(date), _isKnockout: false
         });
     });
 
@@ -168,10 +171,10 @@ export async function loadCommunityStats() {
     if (bracket?.rounds) {
         ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
             (bracket.rounds[round] || []).forEach((m, mi) => {
-                if (m.winner && m.homeTeam && m.awayTeam && m.homeScore !== undefined) {
+                if (m.winner && m.team1 && m.team2 && m.score1 !== undefined) {
                     allPlayedMatches.push({
-                        matchId: `ko_${round}_${mi}`, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
-                        homeScore: m.homeScore, awayScore: m.awayScore,
+                        matchId: `ko_${round}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
+                        homeScore: m.score1, awayScore: m.score2,
                         stage: roundNames[round], date: m.date,
                         _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
                         _isKnockout: true, _koRound: round,
@@ -282,9 +285,9 @@ export async function loadCommunityStats() {
     if (bracket?.rounds) {
         ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
             (bracket.rounds[round] || []).forEach((m, mi) => {
-                if (m.homeTeam && m.awayTeam && !m.winner) {
+                if (m.team1 && m.team2 && !m.winner) {
                     allUpcoming.push({
-                        matchId: `ko_${round}_${mi}`, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                        matchId: `ko_${round}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
                         date: m.date, stage: roundNames[round],
                         _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
                         _isKnockout: true,
@@ -302,7 +305,7 @@ export async function loadCommunityStats() {
     // Tournament state detection
     const tournamentOver = bracket?.rounds?.Final?.some(m => m.winner) || false;
     const allGroupsDone = allMatchDocs.length > 0 && allMatchDocs.every(m => results[m.id] && results[m.id].homeScore !== undefined);
-    const hasKnockoutScheduled = bracket?.rounds && Object.values(bracket.rounds).some(round => round?.some(m => m.homeTeam && m.awayTeam));
+    const hasKnockoutScheduled = bracket?.rounds && Object.values(bracket.rounds).some(round => round?.some(m => m.team1 && m.team2));
 
     html += `<h3>Kommande matcher</h3>`;
     if (upcomingMatches.length > 0) {
