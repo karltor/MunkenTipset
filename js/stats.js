@@ -33,16 +33,18 @@ export async function loadCommunityStats() {
     container.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
 
     // Load official results + bracket + settings
-    const [resultsSnap, bracketSnap, settingsSnap] = await Promise.all([
+    const [resultsSnap, bracketSnap, settingsSnap, matchesColSnap] = await Promise.all([
         getDoc(doc(db, "matches", "_results")),
         getDoc(doc(db, "matches", "_bracket")),
-        getDoc(doc(db, "matches", "_settings"))
+        getDoc(doc(db, "matches", "_settings")),
+        getDocs(collection(db, "matches"))
     ]);
     const results = resultsSnap.exists() ? resultsSnap.data() : {};
     const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
     const settings = settingsSnap.exists() ? settingsSnap.data() : {};
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
     const tipsVisible = settings.tipsVisible !== false; // default true
+    const allMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
 
     _cachedSettings = settings;
     _cachedScoring = scoring;
@@ -143,53 +145,219 @@ export async function loadCommunityStats() {
 
     html += `</div>`; // end dashboard-left
 
-    // ── RIGHT COLUMN: Recent Results + Champion Chart ──────
+    // ── RIGHT COLUMN: Recent Results + Upcoming + Champion Chart ──────
     html += `<div class="dashboard-right">`;
 
-    // ── RECENT RESULTS ──────────────────────────────
-    if (playedMatches.length > 0) {
-        html += `<h3>Senaste resultat</h3>`;
-        const sorted = playedMatches.sort((a, b) => {
-            const da = a[1].date || '', db2 = b[1].date || '';
-            return db2.localeCompare(da);
-        }).slice(0, 6);
+    const now = new Date();
+    const roundNames = { 'R32': '32-delsfinal', 'R16': '16-delsfinal', 'KF': 'Kvartsfinal', 'SF': 'Semifinal', 'Final': 'Final' };
 
-        sorted.forEach(([matchId, r]) => {
-            const h = r.homeScore, a = r.awayScore;
-            const exactTippers = [], winnerTippers = [];
+    // ── Build combined played matches list ──────────
+    const allPlayedMatches = [];
 
-            users.forEach(u => {
-                const tip = u.matchTips[matchId];
-                if (!tip) return;
-                if (tip.homeScore === h && tip.awayScore === a) {
-                    exactTippers.push(u.name);
-                } else if (sign(tip.homeScore - tip.awayScore) === sign(h - a)) {
-                    winnerTippers.push(u.name);
+    // Group results
+    playedMatches.forEach(([matchId, r]) => {
+        allPlayedMatches.push({
+            matchId, homeTeam: r.homeTeam, awayTeam: r.awayTeam,
+            homeScore: r.homeScore, awayScore: r.awayScore,
+            stage: r.stage, date: r.date,
+            _parsed: parseMatchDate(r.date), _isKnockout: false
+        });
+    });
+
+    // Knockout results from bracket
+    if (bracket?.rounds) {
+        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
+            (bracket.rounds[round] || []).forEach((m, mi) => {
+                if (m.winner && m.homeTeam && m.awayTeam && m.homeScore !== undefined) {
+                    allPlayedMatches.push({
+                        matchId: `ko_${round}_${mi}`, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                        homeScore: m.homeScore, awayScore: m.awayScore,
+                        stage: roundNames[round], date: m.date,
+                        _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
+                        _isKnockout: true, _koRound: round,
+                        _koRoundKey: round === 'KF' ? 'qf' : round.toLowerCase(),
+                        _winner: m.winner
+                    });
                 }
             });
+        });
+    }
 
-            const hw = h > a ? 'font-weight:800;' : '', aw = a > h ? 'font-weight:800;' : '';
+    allPlayedMatches.sort((a, b) => (b._parsed || 0) - (a._parsed || 0));
+
+    // Select last 4: prefer past matches, fallback to future (testing)
+    const pastResults = allPlayedMatches.filter(m => m._parsed && m._parsed <= now);
+    const recentResults = pastResults.length > 0 ? pastResults.slice(0, 4) : allPlayedMatches.slice(0, 4);
+
+    // ── RECENT RESULTS (4 senaste) ──────────────────────────────
+    if (recentResults.length > 0) {
+        html += `<h3>Senaste resultat</h3>`;
+        recentResults.forEach(match => {
+            const h = match.homeScore, a2 = match.awayScore;
+            const hw = h > a2 ? 'font-weight:800;' : '', aw = a2 > h ? 'font-weight:800;' : '';
+
             html += `<div class="stat-card result-card" style="padding:14px; margin-bottom:10px;">`;
-            html += `<div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="${hw}">${f(r.homeTeam)}${r.homeTeam}</span>
-                <span style="font-size:1.3rem; font-weight:800; letter-spacing:2px;">${h} - ${a}</span>
-                <span style="${aw}">${r.awayTeam}${f(r.awayTeam)}</span>
+
+            // Stage + date label
+            if (match.stage) {
+                html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage}${match.date ? ' · ' + match.date : ''}</div>`;
+            }
+
+            // Score row — CENTERED with flex:1 on both sides
+            html += `<div style="display:flex; align-items:center;">
+                <span style="flex:1; text-align:right; ${hw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f(match.homeTeam)}${match.homeTeam}</span>
+                <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:1.3rem; font-weight:800; letter-spacing:2px;">${h} - ${a2}</span>
+                <span style="flex:1; text-align:left; ${aw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
             </div>`;
-            if (exactTippers.length > 0) {
-                html += `<div style="font-size:12px; color:#28a745; margin-top:4px;">🎯 ${exactTippers.join(' & ')} tipsade exakt rätt!</div>`;
+
+            // My tip
+            if (me) {
+                if (!match._isKnockout) {
+                    const myTip = me.matchTips[match.matchId];
+                    if (myTip) {
+                        const myExact = myTip.homeScore === h && myTip.awayScore === a2;
+                        const myWinner = !myExact && sign(myTip.homeScore - myTip.awayScore) === sign(h - a2);
+                        const tipStyle = myExact ? 'color:#28a745; font-weight:700;' : (myWinner ? 'color:#17a2b8;' : 'color:#dc3545;');
+                        html += `<div style="font-size:12px; ${tipStyle} margin-top:6px; text-align:center;">Ditt tips: ${myTip.homeScore} - ${myTip.awayScore}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`;
+                    }
+                } else if (me.knockoutPicks) {
+                    const roundKey = match._koRoundKey;
+                    const picks = roundKey === 'final' ? (me.knockoutPicks.final ? [me.knockoutPicks.final] : []) : (me.knockoutPicks[roundKey] || []);
+                    const pickedHome = picks.includes(match.homeTeam);
+                    const pickedAway = picks.includes(match.awayTeam);
+                    if (pickedHome || pickedAway) {
+                        const team = pickedHome ? match.homeTeam : match.awayTeam;
+                        const correctPick = (pickedHome && match._winner === match.homeTeam) || (pickedAway && match._winner === match.awayTeam);
+                        const tipStyle = correctPick ? 'color:#28a745; font-weight:700;' : 'color:#dc3545;';
+                        html += `<div style="font-size:12px; ${tipStyle} margin-top:6px; text-align:center;">Du tippade: ${f(team)}${team} vidare${correctPick ? ' ✓' : ''}</div>`;
+                    }
+                }
             }
-            if (winnerTippers.length > 0) {
-                const names = winnerTippers.join(', ');
-                html += `<div class="tipper-hover" style="font-size:12px; color:#17a2b8; margin-top:2px; cursor:default; position:relative;">
-                    ✓ ${winnerTippers.length} ${winnerTippers.length === 1 ? 'person' : 'andra'} tippade rätt vinnare
-                    <span class="tipper-tooltip">${names}</span>
-                </div>`;
+
+            // Tippers analysis
+            if (!match._isKnockout) {
+                const exactTippers = [], winnerTippers = [];
+                users.forEach(u => {
+                    if (u.userId === currentUserId) return;
+                    const tip = u.matchTips[match.matchId];
+                    if (!tip) return;
+                    if (tip.homeScore === h && tip.awayScore === a2) exactTippers.push(u.name);
+                    else if (sign(tip.homeScore - tip.awayScore) === sign(h - a2)) winnerTippers.push(u.name);
+                });
+                html += renderTippersSummary(exactTippers, winnerTippers);
+            } else {
+                const correctPickers = [];
+                const roundKey = match._koRoundKey;
+                users.forEach(u => {
+                    if (u.userId === currentUserId) return;
+                    if (!u.knockoutPicks) return;
+                    const picks = roundKey === 'final' ? (u.knockoutPicks.final ? [u.knockoutPicks.final] : []) : (u.knockoutPicks[roundKey] || []);
+                    if (picks.includes(match._winner)) correctPickers.push(u.name);
+                });
+                if (correctPickers.length > 0) {
+                    html += renderTippersLine('✓', correctPickers, 'tippade rätt', '#17a2b8');
+                }
             }
-            if (exactTippers.length === 0 && winnerTippers.length === 0) {
-                html += `<div style="font-size:12px; color:#999; margin-top:4px;">Ingen tippade rätt</div>`;
-            }
+
             html += `</div>`;
         });
+    }
+
+    // ── UPCOMING MATCHES (4 nästkommande) ──────────────────────────────
+    const allUpcoming = [];
+
+    // Unplayed group matches
+    allMatchDocs.forEach(m => {
+        const hasResult = results[m.id] && results[m.id].homeScore !== undefined;
+        if (!hasResult) {
+            allUpcoming.push({
+                matchId: String(m.id), homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                date: m.date, stage: m.stage,
+                _parsed: parseMatchDate(m.date), _isKnockout: false
+            });
+        }
+    });
+
+    // Unplayed knockout matches from bracket
+    if (bracket?.rounds) {
+        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
+            (bracket.rounds[round] || []).forEach((m, mi) => {
+                if (m.homeTeam && m.awayTeam && !m.winner) {
+                    allUpcoming.push({
+                        matchId: `ko_${round}_${mi}`, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                        date: m.date, stage: roundNames[round],
+                        _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
+                        _isKnockout: true,
+                        _koRoundKey: round === 'KF' ? 'qf' : round.toLowerCase()
+                    });
+                }
+            });
+        });
+    }
+
+    allUpcoming.sort((a, b) => (a._parsed || Infinity) - (b._parsed || Infinity));
+    const futureUpcoming = allUpcoming.filter(m => m._parsed && m._parsed > now);
+    const upcomingMatches = futureUpcoming.length > 0 ? futureUpcoming.slice(0, 4) : allUpcoming.slice(0, 4);
+
+    // Tournament state detection
+    const tournamentOver = bracket?.rounds?.Final?.some(m => m.winner) || false;
+    const allGroupsDone = allMatchDocs.length > 0 && allMatchDocs.every(m => results[m.id] && results[m.id].homeScore !== undefined);
+    const hasKnockoutScheduled = bracket?.rounds && Object.values(bracket.rounds).some(round => round?.some(m => m.homeTeam && m.awayTeam));
+
+    html += `<h3>Kommande matcher</h3>`;
+    if (upcomingMatches.length > 0) {
+        upcomingMatches.forEach(match => {
+            html += `<div class="stat-card upcoming-card" style="padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;">`;
+
+            // Stage + date
+            html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage || ''}${match.date ? ' · ' + match.date : ''}</div>`;
+
+            // Teams row — centered with "vs"
+            html += `<div style="display:flex; align-items:center;">
+                <span style="flex:1; text-align:right; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f(match.homeTeam)}${match.homeTeam}</span>
+                <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:1rem; color:#999; font-weight:600;">vs</span>
+                <span style="flex:1; text-align:left; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
+            </div>`;
+
+            // My tip
+            if (me) {
+                if (!match._isKnockout) {
+                    const myTip = me.matchTips[match.matchId];
+                    if (myTip) {
+                        html += `<div style="font-size:12px; color:#555; margin-top:6px; text-align:center;">Ditt tips: <strong>${myTip.homeScore} - ${myTip.awayScore}</strong></div>`;
+                    } else {
+                        html += `<div style="font-size:12px; color:#ccc; margin-top:6px; text-align:center;">Inte tippat ännu</div>`;
+                    }
+                } else if (me.knockoutPicks) {
+                    const roundKey = match._koRoundKey;
+                    const picks = roundKey === 'final' ? (me.knockoutPicks.final ? [me.knockoutPicks.final] : []) : (me.knockoutPicks[roundKey] || []);
+                    const pickedHome = picks.includes(match.homeTeam);
+                    const pickedAway = picks.includes(match.awayTeam);
+                    if (pickedHome || pickedAway) {
+                        const team = pickedHome ? match.homeTeam : match.awayTeam;
+                        html += `<div style="font-size:12px; color:#555; margin-top:6px; text-align:center;">Du tippade: ${f(team)}${team} vidare</div>`;
+                    }
+                }
+            }
+
+            html += `</div>`;
+        });
+    } else if (tournamentOver) {
+        html += `<div class="stat-card" style="text-align:center; padding:30px;">
+            <div style="font-size:2.5rem; margin-bottom:12px;">⚽🏆</div>
+            <p style="font-size:16px; font-weight:700; margin:0;">Nästa match? Dröm vidare!</p>
+            <p style="color:#888; margin:8px 0 0; font-size:14px;">Vi ses om 4 år i nästa upplaga av MunkenTipset 🍻</p>
+        </div>`;
+    } else if (allGroupsDone && !hasKnockoutScheduled) {
+        html += `<div class="stat-card" style="text-align:center; padding:30px;">
+            <div style="font-size:2rem; margin-bottom:12px;">⏳</div>
+            <p style="font-size:15px; font-weight:700; margin:0;">Inväntar att Jonas publicerar slutspelsmatcher...</p>
+            <p style="color:#888; margin:8px 0 0; font-size:13px;">Gruppspelet är avklarat! Slutspelet kommer snart.</p>
+        </div>`;
+    } else {
+        html += `<div class="stat-card" style="text-align:center; padding:20px;">
+            <p style="color:#999; margin:0;">Inga kommande matcher just nu</p>
+        </div>`;
     }
 
     // Champion picks
@@ -399,6 +567,43 @@ function calcLeaderboard(users, results, bracket, scoring, officialGroupStanding
 }
 
 function sign(n) { return n > 0 ? 1 : (n < 0 ? -1 : 0); }
+
+// Parse date like "18 juni 21:00" relative to 2026
+function parseMatchDate(dateStr) {
+    if (!dateStr) return null;
+    const months = { 'januari': 0, 'februari': 1, 'mars': 2, 'april': 3, 'maj': 4, 'juni': 5, 'juli': 6, 'augusti': 7, 'september': 8, 'oktober': 9, 'november': 10, 'december': 11 };
+    const parts = dateStr.trim().match(/^(\d+)\s+(\w+)\s+(\d{1,2}):(\d{2})$/);
+    if (!parts) return null;
+    const day = parseInt(parts[1]);
+    const month = months[parts[2].toLowerCase()];
+    if (month === undefined) return null;
+    return new Date(2026, month, day, parseInt(parts[3]), parseInt(parts[4]));
+}
+
+function renderTippersSummary(exactTippers, winnerTippers) {
+    let html = '';
+    if (exactTippers.length > 0) {
+        html += renderTippersLine('🎯', exactTippers, 'tippade exakt rätt', '#28a745');
+    }
+    if (winnerTippers.length > 0) {
+        html += renderTippersLine('✓', winnerTippers, 'tippade rätt vinnare', '#17a2b8');
+    }
+    if (exactTippers.length === 0 && winnerTippers.length === 0) {
+        html += `<div style="font-size:12px; color:#999; margin-top:4px; text-align:center;">Ingen tippade rätt</div>`;
+    }
+    return html;
+}
+
+function renderTippersLine(icon, names, suffix, color) {
+    if (names.length <= 3) {
+        const joined = names.length <= 2 ? names.join(' & ') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+        return `<div style="font-size:12px; color:${color}; margin-top:4px; text-align:center;">${icon} ${joined} ${suffix}</div>`;
+    }
+    return `<div class="tipper-hover" style="font-size:12px; color:${color}; margin-top:4px; cursor:default; text-align:center;">
+        ${icon} ${names.length} st ${suffix}
+        <span class="tipper-tooltip">${names.join(', ')}</span>
+    </div>`;
+}
 
 function renderStatBar(team, pct) {
     return `<div class="stat-bar">

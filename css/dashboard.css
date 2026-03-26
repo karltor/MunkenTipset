@@ -135,8 +135,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* Tipper hover tooltip */
 .tipper-hover { position: relative; display: inline-block; }
-.tipper-tooltip { display: none; position: absolute; bottom: 120%; left: 0; background: #333; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; white-space: nowrap; z-index: 10; pointer-events: none; }
-.tipper-tooltip::after { content: ''; position: absolute; top: 100%; left: 20px; border: 5px solid transparent; border-top-color: #333; }
+.tipper-tooltip { display: none; position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 8px 14px; border-radius: 6px; font-size: 12px; white-space: normal; max-width: 300px; line-height: 1.5; z-index: 10; pointer-events: none; }
+.tipper-tooltip::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #333; }
 .tipper-hover:hover .tipper-tooltip { display: block; }
 
 /* Stats */
