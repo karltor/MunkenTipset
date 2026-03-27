@@ -1,5 +1,5 @@
 import { db, auth } from './config.js';
-import { doc, getDoc, setDoc, getDocs, collection, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
 // Flagg-hjälpare
 export const flags = { "Mexiko": "mx", "Sydafrika": "za", "Sydkorea": "kr", "Kanada": "ca", "USA": "us", "Paraguay": "py", "Qatar": "qa", "Schweiz": "ch", "Brasilien": "br", "Marocko": "ma", "Haiti": "ht", "Skottland": "gb-sct", "Australien": "au", "Tyskland": "de", "Curaçao": "cw", "Nederländerna": "nl", "Japan": "jp", "Elfenbenskusten": "ci", "Ecuador": "ec", "Tunisien": "tn", "Spanien": "es", "Kap Verde": "cv", "Belgien": "be", "Egypten": "eg", "Saudiarabien": "sa", "Uruguay": "uy", "Iran": "ir", "Nya Zeeland": "nz", "Frankrike": "fr", "Senegal": "sn", "Norge": "no", "Argentina": "ar", "Algeriet": "dz", "Österrike": "at", "Jordanien": "jo", "Portugal": "pt", "England": "gb-eng", "Kroatien": "hr", "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co" };
@@ -23,31 +23,18 @@ export async function initWizard(matchesData, onComplete, locked) {
     tipsLocked = locked;
     const userId = auth.currentUser.uid;
 
-    const metaRef = doc(db, "users", userId, "tips", "_groupPicks");
-    const metaSnap = await getDoc(metaRef);
-    if (metaSnap.exists()) {
-        existingGroupPicks = metaSnap.data();
-    } else {
-        const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
-        const matchTips = [];
-        tipsSnap.forEach(d => { if (!d.id.startsWith('_')) matchTips.push(d.data()); });
-        if (matchTips.length > 0) {
-            existingGroupPicks = migrateOldTips(matchTips);
-            await setDoc(metaRef, existingGroupPicks, { merge: true });
-        }
-    }
+    // Read all tips from the user doc (single read)
+    const userSnap = await getDoc(doc(db, "users", userId));
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    existingGroupPicks = userData.groupPicks || null;
+    const storedTips = userData.matchTips || {};
 
-    // Load saved match tips into savedScores so they show when editing
-    if (existingGroupPicks) {
-        const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
-        tipsSnap.forEach(d => {
-            if (d.id.startsWith('_')) return;
-            const data = d.data();
-            if (data.homeScore !== undefined && data.awayScore !== undefined) {
-                savedScores[d.id] = { h: data.homeScore.toString(), a: data.awayScore.toString() };
-            }
-        });
-    }
+    // Populate savedScores so they show when editing
+    Object.entries(storedTips).forEach(([matchId, data]) => {
+        if (data.homeScore !== undefined && data.awayScore !== undefined) {
+            savedScores[matchId] = { h: data.homeScore.toString(), a: data.awayScore.toString() };
+        }
+    });
 
     if (existingGroupPicks && existingGroupPicks.completedAt) {
         document.getElementById('wizard-already-done').style.display = 'flex';
@@ -72,32 +59,6 @@ export async function initWizard(matchesData, onComplete, locked) {
     document.getElementById('btn-prev-group').addEventListener('click', () => {
         if (currentIndex > 0) { storeCurrentScores(); currentIndex--; loadGroup(currentIndex); }
     });
-}
-
-function migrateOldTips(matchTips) {
-    const picks = { mode: 'detailed' };
-    const groups = {};
-    matchTips.forEach(m => {
-        const letter = m.stage?.replace('Grupp ', '');
-        if (!letter || !GROUP_LETTERS.includes(letter)) return;
-        if (!groups[letter]) groups[letter] = [];
-        groups[letter].push(m);
-    });
-    Object.keys(groups).forEach(letter => {
-        const tData = {};
-        groups[letter].forEach(m => {
-            [m.homeTeam, m.awayTeam].forEach(t => { if (!tData[t]) tData[t] = { name: t, pts: 0, gd: 0, gf: 0 }; });
-            tData[m.homeTeam].gf += m.homeScore; tData[m.awayTeam].gf += m.awayScore;
-            tData[m.homeTeam].gd += (m.homeScore - m.awayScore); tData[m.awayTeam].gd += (m.awayScore - m.homeScore);
-            if (m.homeScore > m.awayScore) tData[m.homeTeam].pts += 3;
-            else if (m.homeScore < m.awayScore) tData[m.awayTeam].pts += 3;
-            else { tData[m.homeTeam].pts++; tData[m.awayTeam].pts++; }
-        });
-        const sorted = Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-        if (sorted.length >= 2) picks[letter] = { first: sorted[0].name, second: sorted[1].name };
-    });
-    if (Object.keys(picks).filter(k => GROUP_LETTERS.includes(k)).length === 12) picks.completedAt = new Date().toISOString();
-    return picks;
 }
 
 // ─── TOAST ───────────────────────────────────────────
@@ -397,20 +358,19 @@ async function saveAndNext() {
     if (!selFirst || !selSecond) return showToast("Välj gruppetta och grupptvåa först!");
 
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
-    const batch = writeBatch(db);
     let allFilled = true;
+    const updates = {};
     groupMatches.forEach(m => {
         const h = document.getElementById(`wizHome-${m.id}`)?.value;
         const a = document.getElementById(`wizAway-${m.id}`)?.value;
         if (h === '' || a === '' || h === undefined) { allFilled = false; return; }
-        batch.set(doc(db, "users", userId, "tips", m.id.toString()), { homeScore: parseInt(h), awayScore: parseInt(a), homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage });
+        updates[`matchTips.${m.id}`] = { homeScore: parseInt(h), awayScore: parseInt(a), homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage };
     });
 
     if (!allFilled && currentMode === 'detailed') return showToast("Fyll i alla matchresultat först!");
     if (!allFilled && currentMode === 'casual') autoFillScores();
 
     const standings = calcFullStandings(groupMatches);
-    const picksRef = doc(db, "users", userId, "tips", "_groupPicks");
     const existing = existingGroupPicks || {};
     existing[letter] = {
         first: standings[0]?.name, second: standings[1]?.name,
@@ -419,10 +379,10 @@ async function saveAndNext() {
     };
     existing.mode = currentMode;
     if (currentIndex === 11) existing.completedAt = new Date().toISOString();
-    batch.set(picksRef, existing, { merge: true });
+    updates.groupPicks = existing;
 
     try {
-        await batch.commit();
+        await updateDoc(doc(db, "users", userId), updates);
         existingGroupPicks = existing;
     } catch (e) {
         console.error("Fel vid sparning", e);

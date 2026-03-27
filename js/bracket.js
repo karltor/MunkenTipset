@@ -1,5 +1,5 @@
 import { db, auth } from './config.js';
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
 
 const ROUNDS = ['r32', 'r16', 'qf', 'sf', 'final'];
@@ -22,9 +22,8 @@ export async function initBracket(groupPicks) {
     if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
 
     const userId = auth.currentUser.uid;
-    const koRef = doc(db, "users", userId, "tips", "_knockout");
-    const koSnap = await getDoc(koRef);
-    knockoutData = koSnap.exists() ? koSnap.data() : {};
+    const userSnap = await getDoc(doc(db, "users", userId));
+    knockoutData = userSnap.exists() ? (userSnap.data().knockout || {}) : {};
 
     allTeamsInRound = buildQualifiedTeams(groupPicks);
 
@@ -188,7 +187,7 @@ async function saveBracketRound() {
     if (roundKey === 'final') knockoutData.final = Array.from(selectedTeams)[0];
     else knockoutData[roundKey] = Array.from(selectedTeams);
 
-    await setDoc(doc(db, "users", userId, "tips", "_knockout"), knockoutData, { merge: true });
+    await updateDoc(doc(db, "users", userId), { knockout: knockoutData });
 
     if (roundKey === 'final') { showChampion(knockoutData.final); }
     else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }

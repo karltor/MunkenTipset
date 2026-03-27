@@ -81,18 +81,18 @@ export async function loadCommunityStats() {
         bracket = bracketSnap.exists() ? bracketSnap.data() : null;
         matchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => ({ id: d.id, ...d.data() }));
 
+        // All tips are stored directly on the user doc — one read per user, no subcollections
         const usersSnap = await getDocs(collection(db, "users"));
         users = [];
         for (const userDoc of usersSnap.docs) {
-            const userId = userDoc.id;
-            const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
-            const u = { userId, name: userId, groupPicks: null, knockoutPicks: null, matchTips: {} };
-            tipsSnap.forEach(tipDoc => {
-                if (tipDoc.id === '_groupPicks') u.groupPicks = tipDoc.data();
-                else if (tipDoc.id === '_knockout') u.knockoutPicks = tipDoc.data();
-                else if (tipDoc.id === '_profile') u.name = tipDoc.data().name || userId;
-                else u.matchTips[tipDoc.id] = tipDoc.data();
-            });
+            const d = userDoc.data();
+            const u = {
+                userId: userDoc.id,
+                name: d.name || userDoc.id,
+                groupPicks: d.groupPicks || null,
+                knockoutPicks: d.knockout || null,
+                matchTips: d.matchTips || {}
+            };
             if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
         }
 

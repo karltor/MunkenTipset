@@ -49,6 +49,7 @@ export async function initAdmin(matchesData) {
         document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final'));
         document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
         document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
+        document.getElementById('admin-migrate-data').addEventListener('click', migrateTipsToUserDocs);
         initDone = true;
     }
 }
@@ -596,40 +597,38 @@ async function addFakeTeachers() {
         const name = FAKE_NAMES[(fakeNameIdx + i) % FAKE_NAMES.length];
         const fakeId = `fake_${Date.now()}_${i}`;
 
-        const batch = writeBatch(db);
-
-        batch.set(doc(db, "users", fakeId), { email: `${fakeId}@fake.test` });
-        batch.set(doc(db, "users", fakeId, "tips", "_profile"), { name });
-
         // Group picks: random 1st/2nd per group
         const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
         GROUP_LETTERS.forEach(letter => {
             const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
             groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
         });
-        batch.set(doc(db, "users", fakeId, "tips", "_groupPicks"), groupPicks);
 
         // Match tips: random scores for each group match
+        const matchTips = {};
         groupMatches.forEach(m => {
-            batch.set(doc(db, "users", fakeId, "tips", String(m.id)), {
+            matchTips[String(m.id)] = {
                 homeScore: Math.floor(Math.random() * 4),
                 awayScore: Math.floor(Math.random() * 4),
                 homeTeam: m.homeTeam, awayTeam: m.awayTeam,
                 stage: m.stage
-            });
+            };
         });
 
         // Knockout picks: random teams advancing
         const shuffled = [...allTeamsList].sort(() => Math.random() - 0.5);
-        batch.set(doc(db, "users", fakeId, "tips", "_knockout"), {
+        const knockout = {
             r32: shuffled.slice(0, 16),
             r16: shuffled.slice(0, 8),
             qf: shuffled.slice(0, 4),
             sf: shuffled.slice(0, 2),
             final: shuffled[0]
-        });
+        };
 
-        await batch.commit();
+        // All data in a single user doc — no subcollection writes
+        await setDoc(doc(db, "users", fakeId), {
+            email: `${fakeId}@fake.test`, name, groupPicks, matchTips, knockout
+        });
     }
 
     fakeNameIdx += 10;
@@ -647,13 +646,19 @@ async function removeFakeTeachers() {
     for (const userDoc of usersSnap.docs) {
         if (!userDoc.id.startsWith('fake_')) continue;
 
+        // Clean up any legacy subcollection docs
         const tipsSnap = await getDocs(collection(db, "users", userDoc.id, "tips"));
-        const batch = writeBatch(db);
-        tipsSnap.forEach(tipDoc => {
-            batch.delete(doc(db, "users", userDoc.id, "tips", tipDoc.id));
-        });
-        batch.delete(doc(db, "users", userDoc.id));
-        await batch.commit();
+        if (!tipsSnap.empty) {
+            const batch = writeBatch(db);
+            tipsSnap.forEach(tipDoc => {
+                batch.delete(doc(db, "users", userDoc.id, "tips", tipDoc.id));
+            });
+            await batch.commit();
+        }
+        // Delete the user doc itself
+        const delBatch = writeBatch(db);
+        delBatch.delete(doc(db, "users", userDoc.id));
+        await delBatch.commit();
         removed++;
     }
 
@@ -829,4 +834,34 @@ async function clearKnockoutTeams() {
 export async function checkTipsLocked() {
     const snap = await getDoc(doc(db, "matches", "_settings"));
     return snap.exists() && snap.data().tipsLocked === true;
+}
+
+// ─── DATA MIGRATION ─────────────────────────────────
+// One-time migration: copy tips subcollection data into user docs
+async function migrateTipsToUserDocs() {
+    const statusEl = document.getElementById('admin-migrate-status');
+    statusEl.textContent = 'Migrerar data...';
+    const usersSnap = await getDocs(collection(db, "users"));
+    let migrated = 0;
+
+    for (const userDoc of usersSnap.docs) {
+        const userId = userDoc.id;
+        const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
+        if (tipsSnap.empty) continue;
+
+        const update = { matchTips: {} };
+        tipsSnap.forEach(tipDoc => {
+            if (tipDoc.id === '_groupPicks') update.groupPicks = tipDoc.data();
+            else if (tipDoc.id === '_knockout') update.knockout = tipDoc.data();
+            else if (tipDoc.id === '_profile') update.name = tipDoc.data().name;
+            else update.matchTips[tipDoc.id] = tipDoc.data();
+        });
+
+        await setDoc(doc(db, "users", userId), update, { merge: true });
+        migrated++;
+    }
+
+    await bumpDataVersion();
+    statusEl.textContent = `✓ ${migrated} användare migrerade!`;
+    setTimeout(() => { statusEl.textContent = ''; }, 5000);
 }

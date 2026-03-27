@@ -56,10 +56,8 @@ onAuthStateChanged(auth, async (user) => {
     }
     document.getElementById('user-name').textContent = user.displayName || user.email;
 
-    // Ensure parent user doc exists (needed for stats to discover users)
-    await setDoc(doc(db, "users", user.uid), { email: user.email }, { merge: true });
-    const profileRef = doc(db, "users", user.uid, "tips", "_profile");
-    await setDoc(profileRef, { name: user.displayName || user.email }, { merge: true });
+    // Ensure user doc exists with email + display name (single write)
+    await setDoc(doc(db, "users", user.uid), { email: user.email, name: user.displayName || user.email }, { merge: true });
 
     // Admin check
     isAdmin = ADMINS.includes(email);
@@ -70,10 +68,10 @@ onAuthStateChanged(auth, async (user) => {
     // Check lock status
     const locked = await checkTipsLocked();
 
-    // Check if user has completed group tips
-    const picksRef = doc(db, "users", user.uid, "tips", "_groupPicks");
-    const picksSnap = await getDoc(picksRef);
-    if (picksSnap.exists() && picksSnap.data().completedAt) {
+    // Check if user has completed group tips (read from user doc)
+    const userSnap = await getDoc(doc(db, "users", user.uid));
+    const userData = userSnap.data() || {};
+    if (userData.groupPicks?.completedAt) {
         unlockBracket();
     } else {
         lockBracket();
