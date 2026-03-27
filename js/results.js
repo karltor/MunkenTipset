@@ -77,12 +77,12 @@ function renderGroupTables(allMatches, results) {
                 else if (a > h) { tData[m.awayTeam].w++; tData[m.awayTeam].pts += 3; tData[m.homeTeam].l++; }
                 else { tData[m.homeTeam].d++; tData[m.awayTeam].d++; tData[m.homeTeam].pts++; tData[m.awayTeam].pts++; }
                 const hw = h > a ? 'font-weight:700;' : '', aw = a > h ? 'font-weight:700;' : '';
-                matchListHtml += `<div style="font-size:12px; padding:3px 0; display:flex; justify-content:space-between;">
-                    <span style="${hw}">${f(m.homeTeam)}${m.homeTeam}</span><span style="font-weight:700;">${h} - ${a}</span><span style="${aw}">${m.awayTeam}${f(m.awayTeam)}</span>
+                matchListHtml += `<div style="font-size:12px; padding:3px 0; display:flex; align-items:center;">
+                    <span style="flex:1; text-align:left; ${hw}">${f(m.homeTeam)}${m.homeTeam}</span><span style="flex:0 0 auto; font-weight:700; padding:0 8px;">${h} - ${a}</span><span style="flex:1; text-align:right; ${aw}">${m.awayTeam}${f(m.awayTeam)}</span>
                 </div>`;
             } else {
-                matchListHtml += `<div style="font-size:12px; padding:3px 0; color:#aaa; display:flex; justify-content:space-between;">
-                    <span>${f(m.homeTeam)}${m.homeTeam}</span><span>${m.date || '— : —'}</span><span>${m.awayTeam}${f(m.awayTeam)}</span>
+                matchListHtml += `<div style="font-size:12px; padding:3px 0; color:#aaa; display:flex; align-items:center;">
+                    <span style="flex:1; text-align:left;">${f(m.homeTeam)}${m.homeTeam}</span><span style="flex:0 0 auto; padding:0 8px;">${m.date || '— : —'}</span><span style="flex:1; text-align:right;">${m.awayTeam}${f(m.awayTeam)}</span>
                 </div>`;
             }
         });
@@ -108,50 +108,63 @@ function renderGroupTables(allMatches, results) {
 }
 
 function renderOfficialBracket(bracket) {
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const roundLabels = { R32: 'Åttondelsfinaler', R16: 'Kvartsfinaler', KF: 'Kvartsfinaler', SF: 'Semifinaler', Final: 'Final' };
     const rd = bracket.rounds || {};
 
-    // Build proper bracket tree - left side (top half) and right side (bottom half)
-    // R32 has 16 matches, split 8 left + 8 right, converging to center final
-    let html = `<div style="background: linear-gradient(135deg, #1f1f3a, #2b2b52); border-radius: 16px; padding: 20px; overflow-x: auto;">`;
-    html += `<div class="bracket-tree">`;
+    const leftRounds = [
+        { key: 'R32', label: 'Åttondelsfinal', start: 0, count: 8 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 0, count: 4 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
+        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
+    ];
+    const rightRounds = [
+        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 4, count: 4 },
+        { key: 'R32', label: 'Åttondelsfinal', start: 8, count: 8 },
+    ];
 
-    // Left half: matches 0-7 of each round
-    html += `<div class="bracket-half bracket-left">`;
-    for (let r = 0; r < rounds.length - 1; r++) {
-        const roundName = rounds[r];
-        const matches = rd[roundName] || [];
-        const halfCount = Math.pow(2, 3 - r); // 8,4,2,1
-        html += `<div class="bracket-round-col">`;
-        if (r === 0) html += `<div class="bracket-round-label">${roundLabels[roundName] || roundName}</div>`;
-        for (let i = 0; i < halfCount; i++) {
-            const m = matches[i] || {};
+    let html = `<div style="background: linear-gradient(135deg, #1f1f3a, #2b2b52); border-radius: 16px; padding: 20px; overflow-x: auto;">`;
+    html += `<div class="abt-tree">`;
+
+    // Left half
+    leftRounds.forEach((round, ri) => {
+        html += `<div class="abt-round abt-round-left abt-depth-${ri}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const m = (rd[round.key] || [])[round.start + i] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${ri}">`;
             html += renderBracketMatch(m);
+            html += `</div>`;
         }
-        html += `</div>`;
-    }
-    // Final in center
+        html += `</div></div>`;
+    });
+
+    // Final (center)
     const finalMatch = (rd['Final'] || [])[0] || {};
-    html += `<div class="bracket-round-col bracket-final-col">`;
-    html += `<div class="bracket-round-label" style="color:#ffc107;">Final</div>`;
+    html += `<div class="abt-round abt-round-final">`;
+    html += `<div class="abt-round-label abt-final-label">FINAL</div>`;
+    html += `<div class="abt-round-matches">`;
+    html += `<div class="abt-match-wrapper abt-mw-final">`;
     html += renderBracketMatch(finalMatch, true);
     html += `</div>`;
-    // Right half: matches 8-15 (reversed order for mirror effect)
-    for (let r = rounds.length - 2; r >= 0; r--) {
-        const roundName = rounds[r];
-        const matches = rd[roundName] || [];
-        const halfCount = Math.pow(2, 3 - r);
-        const offset = halfCount; // second half of matches
-        html += `<div class="bracket-round-col">`;
-        if (r === 0) html += `<div class="bracket-round-label">${roundLabels[roundName] || roundName}</div>`;
-        for (let i = 0; i < halfCount; i++) {
-            const m = matches[offset + i] || {};
+    html += `</div></div>`;
+
+    // Right half (mirrored)
+    rightRounds.forEach((round, ri) => {
+        const depth = 3 - ri;
+        html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const m = (rd[round.key] || [])[round.start + i] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${depth}">`;
             html += renderBracketMatch(m);
+            html += `</div>`;
         }
-        html += `</div>`;
-    }
-    html += `</div>`; // bracket-half
+        html += `</div></div>`;
+    });
+
     html += `</div></div>`;
     return html;
 }
@@ -164,13 +177,15 @@ function renderBracketMatch(match, isFinal) {
     const w = match.winner;
     const t1w = w === t1, t2w = w === t2;
     const sz = isFinal ? 'font-size:13px; padding:6px 10px;' : '';
+    const dateStr = match.date ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date}</div>` : '';
 
-    return `<div class="bracket-matchup${isFinal ? ' bracket-matchup-final' : ''}">
-        <div class="bracket-slot${t1w ? ' winner' : ''}${!match.team1 ? ' empty' : ''}" style="${sz}">
-            <span>${match.team1 ? f(t1) : ''}${t1}</span><span class="bracket-score">${s1}</span>
+    return `<div class="abt-match" style="pointer-events:none;">
+        ${dateStr}
+        <div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team1 ? 'opacity:0.4;' : ''}">
+            <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s1}</span>
         </div>
-        <div class="bracket-slot${t2w ? ' winner' : ''}${!match.team2 ? ' empty' : ''}" style="${sz}">
-            <span>${match.team2 ? f(t2) : ''}${t2}</span><span class="bracket-score">${s2}</span>
+        <div class="abt-team-row" style="${sz}${t2w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team2 ? 'opacity:0.4;' : ''}">
+            <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s2}</span>
         </div>
     </div>`;
 }
