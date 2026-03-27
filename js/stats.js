@@ -48,13 +48,18 @@ function _saveStatsCache(dataVersion, payload) {
     } catch { /* quota exceeded or localStorage unavailable */ }
 }
 
-export async function loadCommunityStats() {
+export async function loadCommunityStats(prefetchedSettings) {
     const container = document.getElementById('community-stats');
     container.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
 
-    // Single cheap read to check if data has changed since last visit
-    const settingsSnap = await getDoc(doc(db, "matches", "_settings"));
-    const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+    // Reuse settings from app.js if available, otherwise fetch (1 read)
+    let settings;
+    if (prefetchedSettings) {
+        settings = prefetchedSettings;
+    } else {
+        const settingsSnap = await getDoc(doc(db, "matches", "_settings"));
+        settings = settingsSnap.exists() ? settingsSnap.data() : {};
+    }
     const dataVersion = settings.dataVersion || 0;
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
     const tipsVisible = settings.tipsVisible !== false; // default true

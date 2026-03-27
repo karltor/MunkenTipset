@@ -8,6 +8,7 @@ import { initAdmin, checkTipsLocked } from './admin.js';
 import { loadResults } from './results.js';
 
 const ADMINS = ['karl.tornered@nyamunken.se', 'jonas.waltelius@nyamunken.se'];
+const MATCHES_CACHE_KEY = 'munkenbollen_matches_cache_v1';
 let allMatchesData = [];
 let isAdmin = false;
 
@@ -65,8 +66,9 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById('admin-btn').style.display = 'inline-block';
     }
 
-    // Check lock status
-    const locked = await checkTipsLocked();
+    // Check lock status + get settings (1 read — reused by loadCommunityStats)
+    const { locked, settings } = await checkTipsLocked();
+    const dataVersion = settings.dataVersion || 0;
 
     // Check if user has completed group tips (read from user doc)
     const userSnap = await getDoc(doc(db, "users", user.uid));
@@ -77,15 +79,30 @@ onAuthStateChanged(auth, async (user) => {
         lockBracket();
     }
 
-    // Hämta officiella matcher
-    const matchesRef = collection(db, "matches");
-    const snap = await getDocs(matchesRef);
-    if (!snap.empty) {
-        allMatchesData = snap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
+    // Load matches — cached in localStorage, only re-fetched when dataVersion changes
+    let matchesCached;
+    try {
+        const raw = localStorage.getItem(MATCHES_CACHE_KEY);
+        matchesCached = raw ? JSON.parse(raw) : null;
+    } catch { matchesCached = null; }
+
+    if (matchesCached && matchesCached.dataVersion === dataVersion && Array.isArray(matchesCached.matches)) {
+        allMatchesData = matchesCached.matches;
+    } else {
+        const snap = await getDocs(collection(db, "matches"));
+        if (!snap.empty) {
+            allMatchesData = snap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
+        }
+        try {
+            localStorage.setItem(MATCHES_CACHE_KEY, JSON.stringify({ dataVersion, matches: allMatchesData }));
+        } catch { /* quota exceeded */ }
+    }
+
+    if (allMatchesData.length > 0) {
         initWizard(allMatchesData, onGroupsComplete, locked);
     }
 
-    loadCommunityStats();
+    loadCommunityStats(settings);
 });
 
 function onGroupsComplete() {
