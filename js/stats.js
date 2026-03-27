@@ -119,7 +119,7 @@ export async function loadCommunityStats(prefetchedSettings) {
     const playedMatches = Object.entries(results).filter(([, r]) => r.homeScore !== undefined);
 
     // Build official group standings from results for group winner/runner-up scoring
-    const officialGroupStandings = buildOfficialGroupStandings(results);
+    const officialGroupStandings = buildOfficialGroupStandings(results, matchDocs);
 
     const scores = calcLeaderboard(users, results, bracket, scoring, officialGroupStandings);
     scores.sort((a, b) => b.total - a.total);
@@ -162,6 +162,32 @@ export async function loadCommunityStats(prefetchedSettings) {
     html += `</div>`;
 
     // ── MY TIPS (table-aligned) ──────────────────────
+    // Build official knockout winners for color-coding
+    const officialKoWinners = {};
+    if (bracket?.rounds) {
+        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
+            const key = round === 'KF' ? 'qf' : round.toLowerCase();
+            officialKoWinners[key] = [];
+            (bracket.rounds[round] || []).forEach(m => {
+                if (m.winner) officialKoWinners[key].push(m.winner);
+            });
+        });
+    }
+    // Build set of teams eliminated per round (lost in that round)
+    const eliminatedInRound = {};
+    if (bracket?.rounds) {
+        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
+            const key = round === 'KF' ? 'qf' : round.toLowerCase();
+            eliminatedInRound[key] = [];
+            (bracket.rounds[round] || []).forEach(m => {
+                if (m.winner && m.team1 && m.team2) {
+                    const loser = m.winner === m.team1 ? m.team2 : m.team1;
+                    eliminatedInRound[key].push(loser);
+                }
+            });
+        });
+    }
+
     const me = users.find(u => u.userId === currentUserId);
     if (me && me.groupPicks) {
         html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
@@ -169,23 +195,29 @@ export async function loadCommunityStats(prefetchedSettings) {
         GROUP_LETTERS.forEach(letter => {
             const pick = me.groupPicks[letter];
             if (!pick) return;
+            const official = officialGroupStandings[letter];
+            let firstColor = '', secondColor = '';
+            if (official && official.complete) {
+                firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
+                secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
+            }
             html += `<tr>
                 <td class="mtt-label">Grupp ${letter}</td>
-                <td class="mtt-team">${f(pick.first)}${pick.first}</td>
+                <td class="mtt-team" style="${firstColor}">${f(pick.first)}${pick.first}</td>
                 <td class="mtt-sep">·</td>
-                <td class="mtt-team">${f(pick.second)}${pick.second}</td>
+                <td class="mtt-team" style="${secondColor}">${f(pick.second)}${pick.second}</td>
             </tr>`;
         });
         html += `</table>`;
 
-        // Show knockout picks summary
+        // Show knockout picks summary with color-coding
         if (me.knockoutPicks) {
             const ko = me.knockoutPicks;
             const koRounds = [
-                { key: 'r32', label: 'Åttondelsfinal', count: 16 },
-                { key: 'r16', label: 'Kvartsfinal', count: 8 },
-                { key: 'qf', label: 'Semifinal', count: 4 },
-                { key: 'sf', label: 'Final', count: 2 }
+                { key: 'r32', label: 'Åttondelsfinal' },
+                { key: 'r16', label: 'Kvartsfinal' },
+                { key: 'qf', label: 'Semifinal' },
+                { key: 'sf', label: 'Final' }
             ];
 
             html += `<div style="margin-top:12px; padding-top:10px; border-top:1px solid #eee;">`;
@@ -194,17 +226,46 @@ export async function loadCommunityStats(prefetchedSettings) {
             koRounds.forEach(round => {
                 const picks = ko[round.key];
                 if (!picks || picks.length === 0) return;
+                const winners = officialKoWinners[round.key] || [];
+                // A team is wrong if it was eliminated in a previous round (never reached this round)
+                // Collect all teams eliminated before this round
+                const roundOrder = ['r32', 'r16', 'qf', 'sf', 'final'];
+                const thisIdx = roundOrder.indexOf(round.key);
+                const eliminatedBefore = new Set();
+                for (let ri = 0; ri < thisIdx; ri++) {
+                    (eliminatedInRound[roundOrder[ri]] || []).forEach(t => eliminatedBefore.add(t));
+                }
+
                 html += `<div style="margin-bottom:8px;">`;
                 html += `<div style="font-size:11px; font-weight:700; color:#888; margin-bottom:4px;">Vidare till ${round.label} (${picks.length} lag)</div>`;
                 html += `<div style="display:flex; flex-wrap:wrap; gap:4px;">`;
                 picks.forEach(team => {
-                    html += `<span style="font-size:12px; background:#f4f7f6; padding:2px 8px; border-radius:4px; white-space:nowrap;">${f(team)}${team}</span>`;
+                    let color = '';
+                    if (winners.length > 0 && winners.includes(team)) {
+                        color = 'color:#28a745; border-color:#28a745;'; // correct - advanced
+                    } else if (eliminatedBefore.has(team)) {
+                        color = 'color:#dc3545; border-color:#dc3545;'; // eliminated before reaching this round
+                    } else if (winners.length > 0 && !winners.includes(team)) {
+                        // Round has results but team not in winners — could still be pending if not all matches played
+                        // Check if team was eliminated in this round
+                        if ((eliminatedInRound[round.key] || []).includes(team)) {
+                            color = 'color:#dc3545; border-color:#dc3545;';
+                        }
+                    }
+                    html += `<span style="font-size:12px; background:#f4f7f6; padding:2px 8px; border-radius:4px; border:1px solid #e0e0e0; white-space:nowrap; ${color}">${f(team)}${team}</span>`;
                 });
                 html += `</div></div>`;
             });
 
             if (ko.final) {
-                html += `<div style="margin-top:10px; padding:10px; background:linear-gradient(135deg, #fffdf5, #fff8e1); border-radius:8px; text-align:center; font-size:15px; font-weight:700; border:1px solid #ffc107;">🏆 VM-mästare: ${f(ko.final)}${ko.final}</div>`;
+                const finalWinners = officialKoWinners['final'] || [];
+                let champStyle = 'background:linear-gradient(135deg, #fffdf5, #fff8e1); border:1px solid #ffc107;';
+                if (finalWinners.length > 0) {
+                    champStyle = finalWinners.includes(ko.final)
+                        ? 'background:linear-gradient(135deg, #e8f5e9, #c8e6c9); border:2px solid #28a745; color:#28a745;'
+                        : 'background:linear-gradient(135deg, #fce8e6, #f8d7da); border:2px solid #dc3545; color:#dc3545;';
+                }
+                html += `<div style="margin-top:10px; padding:10px; border-radius:8px; text-align:center; font-size:15px; font-weight:700; ${champStyle}">🏆 VM-mästare: ${f(ko.final)}${ko.final}</div>`;
             }
             html += `</div>`;
         }
@@ -540,8 +601,9 @@ function showAllTips() {
     html += `<div style="flex:1; min-width:200px;">
         <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:#555;">1. Välj vy:</label>
         <div class="tabs" style="border:none; margin:0; padding:0; gap:5px;">
-            <button class="tab-btn active" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Enkel (Grupper)</button>
-            <button class="tab-btn" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Avancerad (Matcher)</button>
+            <button class="tab-btn active" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Grupper</button>
+            <button class="tab-btn" id="btn-view-knockout" style="padding:8px 12px; font-size:13px; flex:1;">Slutspel</button>
+            <button class="tab-btn" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Matcher</button>
         </div>
     </div>`;
 
@@ -572,21 +634,20 @@ function showAllTips() {
     document.getElementById('btn-back-from-tips').addEventListener('click', () => loadCommunityStats());
 
     const simpleBtn = document.getElementById('btn-view-simple');
+    const koBtn = document.getElementById('btn-view-knockout');
     const advBtn = document.getElementById('btn-view-advanced');
+    const allViewBtns = [simpleBtn, koBtn, advBtn];
 
-    simpleBtn.addEventListener('click', () => {
-        _comparisonState.viewMode = 'simple';
-        simpleBtn.classList.add('active');
-        advBtn.classList.remove('active');
+    function setActiveView(mode, activeBtn) {
+        _comparisonState.viewMode = mode;
+        allViewBtns.forEach(b => b.classList.remove('active'));
+        activeBtn.classList.add('active');
         renderComparisonTable();
-    });
+    }
 
-    advBtn.addEventListener('click', () => {
-        _comparisonState.viewMode = 'advanced';
-        advBtn.classList.add('active');
-        simpleBtn.classList.remove('active');
-        renderComparisonTable();
-    });
+    simpleBtn.addEventListener('click', () => setActiveView('simple', simpleBtn));
+    koBtn.addEventListener('click', () => setActiveView('knockout', koBtn));
+    advBtn.addEventListener('click', () => setActiveView('advanced', advBtn));
 
     const checkboxes = document.querySelectorAll('.user-compare-cb');
     checkboxes.forEach(cb => {
@@ -674,6 +735,60 @@ function renderComparisonTable() {
         });
         html += `</tr>`;
 
+    } else if (_comparisonState.viewMode === 'knockout') {
+        // --- SLUTSPELSVY ---
+        const koRoundDefs = [
+            { key: 'r32', label: 'Åttondelsfinal (16 lag)' },
+            { key: 'r16', label: 'Kvartsfinal (8 lag)' },
+            { key: 'qf', label: 'Semifinal (4 lag)' },
+            { key: 'sf', label: 'Final (2 lag)' },
+            { key: 'final', label: '🏆 VM-mästare' }
+        ];
+
+        // Collect all unique teams across all selected users' knockout picks for each round
+        koRoundDefs.forEach(round => {
+            // Section header
+            html += `<tr><td colspan="${users.length + 1}" style="background:#1f1f3a; color:#ffc107; font-weight:700; text-align:center; padding:8px; font-size:13px; position:sticky; left:0; z-index:1;">${round.label}</td></tr>`;
+
+            // Gather all teams picked for this round across users
+            const allTeamsInRound = new Set();
+            users.forEach(u => {
+                if (!u.knockoutPicks) return;
+                if (round.key === 'final') {
+                    if (u.knockoutPicks.final) allTeamsInRound.add(u.knockoutPicks.final);
+                } else {
+                    (u.knockoutPicks[round.key] || []).forEach(t => allTeamsInRound.add(t));
+                }
+            });
+
+            // Sort teams alphabetically
+            const teamList = Array.from(allTeamsInRound).sort();
+
+            if (teamList.length === 0) {
+                html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:#888; padding:10px; background:white;">Inga tips registrerade</td></tr>`;
+                return;
+            }
+
+            teamList.forEach(team => {
+                html += `<tr>`;
+                html += `<td style="font-weight:600; position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05); white-space:nowrap; font-size:12px;">${f(team)}${team}</td>`;
+
+                users.forEach(u => {
+                    if (!u.knockoutPicks) { html += `<td style="background:white; text-align:center; color:#ccc;">-</td>`; return; }
+                    const hasPick = round.key === 'final'
+                        ? u.knockoutPicks.final === team
+                        : (u.knockoutPicks[round.key] || []).includes(team);
+
+                    if (hasPick) {
+                        html += `<td style="background:#e8f5e9; text-align:center; font-size:16px;">✅</td>`;
+                    } else {
+                        html += `<td style="background:white; text-align:center; color:#e0e0e0;">–</td>`;
+                    }
+                });
+                html += `</tr>`;
+            });
+        });
+
     } else {
         // --- AVANCERAD VY (Alla Matcher) ---
         const matchDocs = window._cachedMatchDocs || [];
@@ -730,9 +845,19 @@ function renderComparisonTable() {
 }
 
 // ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
-function buildOfficialGroupStandings(results) {
+function buildOfficialGroupStandings(results, matchDocs) {
     const standings = {};
     const groupResults = {};
+    // Count total matches per group from match docs
+    const groupMatchCounts = {};
+    if (matchDocs) {
+        matchDocs.forEach(m => {
+            if (!m.stage || !m.stage.startsWith('Grupp ')) return;
+            const letter = m.stage.replace('Grupp ', '');
+            groupMatchCounts[letter] = (groupMatchCounts[letter] || 0) + 1;
+        });
+    }
+
     Object.entries(results).forEach(([, r]) => {
         if (!r.stage || !r.stage.startsWith('Grupp ')) return;
         if (r.homeScore === undefined) return;
@@ -754,7 +879,13 @@ function buildOfficialGroupStandings(results) {
             else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
         });
         const sorted = Object.entries(teams).sort((a, b) => b[1].pts - a[1].pts || b[1].gd - a[1].gd || b[1].gf - a[1].gf);
-        standings[letter] = { first: sorted[0]?.[0] || null, second: sorted[1]?.[0] || null, third: sorted[2]?.[0] || null };
+        const totalExpected = groupMatchCounts[letter] || 6;
+        standings[letter] = {
+            first: sorted[0]?.[0] || null,
+            second: sorted[1]?.[0] || null,
+            third: sorted[2]?.[0] || null,
+            complete: matches.length >= totalExpected
+        };
     });
     return standings;
 }
@@ -790,12 +921,12 @@ function calcLeaderboard(users, results, bracket, scoring, officialGroupStanding
             }
         });
 
-        // Score group winner/runner-up predictions
+        // Score group winner/runner-up predictions (only when all group matches are played)
         if (u.groupPicks) {
             GROUP_LETTERS.forEach(letter => {
                 const pick = u.groupPicks[letter];
                 const official = officialGroupStandings[letter];
-                if (!pick || !official) return;
+                if (!pick || !official || !official.complete) return;
                 if (official.first && pick.first === official.first) { groupPts += scoring.groupWinner; detail.groupPlace += scoring.groupWinner; }
                 if (official.second && pick.second === official.second) { groupPts += scoring.groupRunnerUp; detail.groupPlace += scoring.groupRunnerUp; }
                 if (scoring.groupThird > 0 && official.third && pick.third === official.third) { groupPts += scoring.groupThird; detail.groupPlace += scoring.groupThird; }
