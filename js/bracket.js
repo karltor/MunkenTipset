@@ -1,6 +1,7 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
+import { invalidateStatsCache } from './stats.js';
 
 const ROUNDS = ['r32', 'r16', 'qf', 'sf', 'final'];
 const ROUND_LABELS = {
@@ -203,6 +204,7 @@ async function saveBracketRound() {
     }
 
     await updateDoc(doc(db, "users", userId), { knockout: knockoutData });
+    invalidateStatsCache();
 
     if (roundKey === 'final') { showChampion(knockoutData.final); }
     else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }
