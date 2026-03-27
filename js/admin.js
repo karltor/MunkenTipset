@@ -135,11 +135,13 @@ export function renderAdminMatches(letter) {
         const overdue = !isDone && isOverdue(m.date, Date.now());
         html += `<div class="admin-match-row ${isDone ? 'done' : ''} ${overdue ? 'overdue' : ''}">
             <span class="admin-match-label">${m.date || ''}</span>
-            <span class="admin-match-teams">${f(m.homeTeam)}${m.homeTeam}</span>
-            <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="home" value="${homeVal}" placeholder="-">
-            <span class="admin-sep">–</span>
-            <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="away" value="${awayVal}" placeholder="-">
-            <span class="admin-match-teams">${m.awayTeam}${f(m.awayTeam)}</span>
+            <span class="admin-match-home">${f(m.homeTeam)}${m.homeTeam}</span>
+            <span class="admin-score-group">
+                <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="home" value="${homeVal}" placeholder="-">
+                <span class="admin-sep">–</span>
+                <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="away" value="${awayVal}" placeholder="-">
+            </span>
+            <span class="admin-match-away">${m.awayTeam}${f(m.awayTeam)}</span>
         </div>`;
     });
     container.innerHTML = html;
@@ -180,15 +182,18 @@ function renderTeamRenames() {
         if (m.homeTeam) teams.add(m.homeTeam);
         if (m.awayTeam) teams.add(m.awayTeam);
     });
-    const sorted = [...teams].sort();
+    // Only show teams that don't have a known flag (unclear qualification names)
+    const unclearTeams = [...teams].filter(t => !flags[t]).sort();
+    if (unclearTeams.length === 0) {
+        container.innerHTML = '<p style="color:#28a745; font-size:13px;">✓ Alla lag har kända namn — inget att döpa om.</p>';
+        return;
+    }
     let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;">';
-    sorted.forEach(team => {
-        const flag = flags[team] || '';
-        html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:13px;">
-            <span style="min-width:30px;">${flag}</span>
-            <span style="min-width:120px; font-weight:600;">${team}</span>
+    unclearTeams.forEach(team => {
+        html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:13px;">
+            <span style="min-width:140px; font-weight:600; color:#dc3545;">${team}</span>
             <span>→</span>
-            <input class="admin-rename-input" data-old="${team}" value="${team}" style="flex:1; padding:3px 8px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+            <input class="admin-rename-input" data-old="${team}" value="${team}" style="flex:1; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
         </div>`;
     });
     html += '</div>';
