@@ -17,8 +17,10 @@ let knockoutData = {};
 let allTeamsInRound = [];
 let selectedTeams = new Set();
 let listenersAttached = false;
+let bracketLocked = false;
 
-export async function initBracket(groupPicks) {
+export async function initBracket(groupPicks, tipsLocked) {
+    bracketLocked = tipsLocked || false;
     if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
 
     const userId = auth.currentUser.uid;
@@ -156,6 +158,7 @@ function fLarge(t) {
 }
 
 window.toggleBracketTeam = function (team) {
+    if (bracketLocked) return;
     const roundKey = ROUNDS[currentRound];
     const required = ROUND_PICK_COUNT[roundKey];
 
@@ -182,6 +185,7 @@ function updateSaveBtn(roundKey) {
 }
 
 async function saveBracketRound() {
+    if (bracketLocked) return;
     const roundKey = ROUNDS[currentRound];
     const userId = auth.currentUser.uid;
 

@@ -177,8 +177,36 @@ export async function loadCommunityStats(prefetchedSettings) {
             </tr>`;
         });
         html += `</table>`;
-        if (me.knockoutPicks?.final) {
-            html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid #eee; font-size:14px; font-weight:700;">🏆 VM-mästare: ${f(me.knockoutPicks.final)}${me.knockoutPicks.final}</div>`;
+
+        // Show knockout picks summary
+        if (me.knockoutPicks) {
+            const ko = me.knockoutPicks;
+            const koRounds = [
+                { key: 'r32', label: 'Åttondelsfinal', count: 16 },
+                { key: 'r16', label: 'Kvartsfinal', count: 8 },
+                { key: 'qf', label: 'Semifinal', count: 4 },
+                { key: 'sf', label: 'Final', count: 2 }
+            ];
+
+            html += `<div style="margin-top:12px; padding-top:10px; border-top:1px solid #eee;">`;
+            html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Slutspelstips</h4>`;
+
+            koRounds.forEach(round => {
+                const picks = ko[round.key];
+                if (!picks || picks.length === 0) return;
+                html += `<div style="margin-bottom:8px;">`;
+                html += `<div style="font-size:11px; font-weight:700; color:#888; margin-bottom:4px;">Vidare till ${round.label} (${picks.length} lag)</div>`;
+                html += `<div style="display:flex; flex-wrap:wrap; gap:4px;">`;
+                picks.forEach(team => {
+                    html += `<span style="font-size:12px; background:#f4f7f6; padding:2px 8px; border-radius:4px; white-space:nowrap;">${f(team)}${team}</span>`;
+                });
+                html += `</div></div>`;
+            });
+
+            if (ko.final) {
+                html += `<div style="margin-top:10px; padding:10px; background:linear-gradient(135deg, #fffdf5, #fff8e1); border-radius:8px; text-align:center; font-size:15px; font-weight:700; border:1px solid #ffc107;">🏆 VM-mästare: ${f(ko.final)}${ko.final}</div>`;
+            }
+            html += `</div>`;
         }
         html += `</div>`;
     }
