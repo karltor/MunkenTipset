@@ -1,0 +1,222 @@
+import { db } from './config.js';
+import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { f } from './wizard.js';
+import { bumpDataVersion } from './admin.js';
+
+const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+
+export function getGroupStandings(allMatches, existingResults) {
+    const standings = {};
+    GROUP_LETTERS.forEach(letter => {
+        const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+        if (groupMatches.length === 0) return;
+        const teams = {};
+        groupMatches.forEach(m => {
+            if (!teams[m.homeTeam]) teams[m.homeTeam] = { name: m.homeTeam, pts: 0, gd: 0, gf: 0 };
+            if (!teams[m.awayTeam]) teams[m.awayTeam] = { name: m.awayTeam, pts: 0, gd: 0, gf: 0 };
+            const r = existingResults[m.id];
+            if (!r || r.homeScore === undefined) return;
+            const h = r.homeScore, a = r.awayScore;
+            teams[m.homeTeam].gf += h; teams[m.homeTeam].gd += (h - a);
+            teams[m.awayTeam].gf += a; teams[m.awayTeam].gd += (a - h);
+            if (h > a) teams[m.homeTeam].pts += 3;
+            else if (a > h) teams[m.awayTeam].pts += 3;
+            else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
+        });
+        const sorted = Object.values(teams).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+        standings[letter] = sorted;
+    });
+    return standings;
+}
+
+function getAllTeamsForAutocomplete(allMatches) {
+    const teams = new Set();
+    allMatches.forEach(m => {
+        if (!m.stage || !m.stage.startsWith('Grupp ')) return;
+        if (m.homeTeam) teams.add(m.homeTeam);
+        if (m.awayTeam) teams.add(m.awayTeam);
+    });
+    return Array.from(teams).sort();
+}
+
+function renderMatchCard(round, matchIdx, match, side) {
+    return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
+        <div class="abt-team-row">
+            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
+            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
+        </div>
+        <div class="abt-team-row">
+            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
+            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
+        </div>
+        <input class="admin-bracket-date abt-date" data-round="${round}" data-match="${matchIdx}" value="${match.date || ''}" placeholder="t.ex. 21 juni 18:00" style="width:100%; font-size:11px; padding:3px 6px; border:1px solid #ddd; border-radius:4px; margin-top:3px; color:#666;">
+    </div>`;
+}
+
+export async function renderAdminBracket(allMatches, existingResults) {
+    const container = document.getElementById('admin-bracket');
+    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
+    const rd = bracket.rounds || {};
+
+    const standings = getGroupStandings(allMatches, existingResults);
+    const allTeams = getAllTeamsForAutocomplete(allMatches);
+
+    let html = '';
+    const hasStandings = Object.keys(standings).length > 0;
+    if (hasStandings) {
+        html += `<div style="margin-bottom:15px;">`;
+        html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
+        html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:10px;">`;
+        GROUP_LETTERS.forEach(letter => {
+            const s = standings[letter];
+            if (!s || s.length < 2) return;
+            html += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
+        });
+        html += `</div>`;
+        html += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:10px;">Autofyll R32 från gruppresultat</button>`;
+        html += `</div>`;
+    }
+
+    html += `<datalist id="team-autocomplete">`;
+    allTeams.forEach(t => { html += `<option value="${t}">`; });
+    html += `</datalist>`;
+
+    const leftRounds = [
+        { key: 'R32', label: 'Åttondelsfinal', start: 0, count: 8 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 0, count: 4 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
+        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
+    ];
+    const rightRounds = [
+        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
+        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
+        { key: 'R16', label: 'Sextondelsfinal', start: 4, count: 4 },
+        { key: 'R32', label: 'Åttondelsfinal', start: 8, count: 8 },
+    ];
+
+    html += `<div class="abt-tree">`;
+
+    leftRounds.forEach((round, ri) => {
+        html += `<div class="abt-round abt-round-left abt-depth-${ri}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const matchIdx = round.start + i;
+            const match = (rd[round.key] || [])[matchIdx] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${ri}">`;
+            html += renderMatchCard(round.key, matchIdx, match, 'left');
+            html += `</div>`;
+        }
+        html += `</div></div>`;
+    });
+
+    const finalMatch = (rd['Final'] || [])[0] || {};
+    html += `<div class="abt-round abt-round-final">`;
+    html += `<div class="abt-round-label abt-final-label">FINAL</div>`;
+    html += `<div class="abt-round-matches">`;
+    html += `<div class="abt-match-wrapper abt-mw-final">`;
+    html += renderMatchCard('Final', 0, finalMatch, 'center');
+    html += `</div>`;
+    html += `</div></div>`;
+
+    rightRounds.forEach((round, ri) => {
+        const depth = 3 - ri;
+        html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
+        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-matches">`;
+        for (let i = 0; i < round.count; i++) {
+            const matchIdx = round.start + i;
+            const match = (rd[round.key] || [])[matchIdx] || {};
+            html += `<div class="abt-match-wrapper abt-mw-d${depth}">`;
+            html += renderMatchCard(round.key, matchIdx, match, 'right');
+            html += `</div>`;
+        }
+        html += `</div></div>`;
+    });
+
+    html += `</div>`;
+
+    html += `<button class="btn" id="admin-save-bracket" style="margin-top: 15px; width: 100%; background: #ffc107; color: #000;">Spara bracket</button>`;
+    container.innerHTML = html;
+
+    const autofillBtn = document.getElementById('admin-autofill-r32');
+    if (autofillBtn) {
+        autofillBtn.addEventListener('click', () => autofillR32(standings));
+    }
+
+    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
+    const matchCounts = [16, 8, 4, 2, 1];
+    document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
+    container.querySelectorAll('.abt-score').forEach(input => {
+        input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
+    });
+}
+
+function autofillR32(standings) {
+    const firsts = [], seconds = [], thirds = [];
+    GROUP_LETTERS.forEach(letter => {
+        const s = standings[letter];
+        if (!s || s.length < 2) return;
+        firsts.push({ name: s[0].name, group: letter });
+        seconds.push({ name: s[1].name, group: letter });
+        if (s.length >= 3) thirds.push({ ...s[2], group: letter });
+    });
+    thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+    const qualifiedThirds = thirds.slice(0, 8);
+    const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
+
+    for (let i = 0; i < 16; i++) {
+        const t1 = allQualified[i]?.name || '';
+        const t2 = allQualified[i + 16]?.name || '';
+        const el1 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="1"]`);
+        const el2 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="2"]`);
+        if (el1) el1.value = t1;
+        if (el2) el2.value = t2;
+    }
+}
+
+function autoAdvanceWinners(rounds, matchCounts) {
+    for (let ri = 0; ri < rounds.length - 1; ri++) {
+        const round = rounds[ri], nextRound = rounds[ri + 1], count = matchCounts[ri];
+        for (let i = 0; i < count; i++) {
+            const t1El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`);
+            const t2El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`);
+            const s1El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`);
+            const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
+            if (!t1El || !t2El || !s1El || !s2El || s1El.value === '' || s2El.value === '') continue;
+            const s1 = parseInt(s1El.value), s2 = parseInt(s2El.value);
+            const winner = s1 > s2 ? t1El.value : (s2 > s1 ? t2El.value : '');
+            if (winner) {
+                const nextEl = document.querySelector(`.admin-bracket-team[data-round="${nextRound}"][data-match="${Math.floor(i / 2)}"][data-side="${(i % 2) + 1}"]`);
+                if (nextEl) nextEl.value = winner;
+            }
+        }
+    }
+}
+
+async function saveAdminBracket(rounds, matchCounts) {
+    const bracket = { rounds: {} };
+    rounds.forEach((round, ri) => {
+        bracket.rounds[round] = [];
+        for (let i = 0; i < matchCounts[ri]; i++) {
+            const t1 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value || '';
+            const t2 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value || '';
+            const s1 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
+            const s2 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
+            const dateVal = document.querySelector(`.admin-bracket-date[data-round="${round}"][data-match="${i}"]`)?.value || '';
+            const match = { team1: t1, team2: t2, date: dateVal };
+            if (s1 !== '' && s2 !== '' && s1 !== undefined && s2 !== undefined) {
+                match.score1 = parseInt(s1); match.score2 = parseInt(s2);
+                match.winner = match.score1 > match.score2 ? t1 : (match.score2 > match.score1 ? t2 : '');
+            }
+            bracket.rounds[round].push(match);
+        }
+    });
+    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
+    await setDoc(doc(db, "matches", "_bracket"), bracket, { merge: true });
+    await bumpDataVersion();
+    const btn = document.getElementById('admin-save-bracket');
+    btn.textContent = '✓ Sparat!';
+    setTimeout(() => { btn.textContent = 'Spara bracket'; }, 2000);
+}

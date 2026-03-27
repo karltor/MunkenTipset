@@ -1,7 +1,9 @@
 import { db } from './config.js';
-import { doc, getDoc, setDoc, deleteDoc, deleteField, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
 import { DEFAULT_SCORING } from './stats.js';
+import { renderAdminBracket } from './admin-bracket.js';
+import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 let allMatches = [];
@@ -10,7 +12,7 @@ let existingResults = {};
 let initDone = false;
 
 // Bump dataVersion in _settings so clients know to invalidate their stats cache
-async function bumpDataVersion() {
+export async function bumpDataVersion() {
     await setDoc(doc(db, "matches", "_settings"), { dataVersion: Date.now() }, { merge: true });
 }
 
@@ -30,8 +32,8 @@ export async function initAdmin(matchesData) {
     renderAdminMatches(currentAdminGroup);
     renderTeamRenames();
     renderScoringConfig();
-    renderAdminBracket();
-    renderMatchManager();
+    renderAdminBracket(allMatches, existingResults);
+    renderMatchManager(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup);
 
     if (!initDone) {
         document.getElementById('admin-lock-tips').addEventListener('click', () => toggleLock(true));
@@ -39,17 +41,17 @@ export async function initAdmin(matchesData) {
         document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
         document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
         // Test tools
-        document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
+        document.getElementById('admin-add-fake-teachers').addEventListener('click', () => addFakeTeachers(allMatches));
         document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);
-        document.getElementById('admin-autofill-group-results').addEventListener('click', autoFillGroupResults);
-        document.getElementById('admin-clear-group-results').addEventListener('click', clearGroupResults);
-        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32'));
-        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16'));
-        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF'));
-        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF'));
-        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final'));
-        document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
-        document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
+        document.getElementById('admin-autofill-group-results').addEventListener('click', () => autoFillGroupResults(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup));
+        document.getElementById('admin-clear-group-results').addEventListener('click', () => clearGroupResults(existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup));
+        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32', allMatches, existingResults));
+        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16', allMatches, existingResults));
+        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF', allMatches, existingResults));
+        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF', allMatches, existingResults));
+        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final', allMatches, existingResults));
+        document.getElementById('admin-clear-ko-results').addEventListener('click', () => clearKnockoutResults(allMatches, existingResults));
+        document.getElementById('admin-clear-ko-teams').addEventListener('click', () => clearKnockoutTeams(allMatches, existingResults));
         initDone = true;
     }
 }
@@ -79,7 +81,6 @@ function renderGroupButtons() {
     });
 }
 
-// Parse date like "18 juni 21:00" or "12 juni 04:00" relative to 2026
 function parseMatchDate(dateStr) {
     if (!dateStr) return null;
     const months = { 'januari': 0, 'februari': 1, 'mars': 2, 'april': 3, 'maj': 4, 'juni': 5, 'juli': 6, 'augusti': 7, 'september': 8, 'oktober': 9, 'november': 10, 'december': 11 };
@@ -92,819 +93,185 @@ function parseMatchDate(dateStr) {
 }
 
 function isOverdue(dateStr, now) {
-    const kickoff = parseMatchDate(dateStr);
-    if (!kickoff) return false;
-    return (now - kickoff.getTime()) > 2.5 * 60 * 60 * 1000;
+    const d = parseMatchDate(dateStr);
+    if (!d) return false;
+    return d.getTime() + 3 * 60 * 60 * 1000 < now;
 }
 
 async function refreshLockStatus() {
-    const el = document.getElementById('admin-lock-status');
     const snap = await getDoc(doc(db, "matches", "_settings"));
-    const locked = snap.exists() && snap.data().tipsLocked;
-    el.textContent = locked ? '🔒 Tipsraderna är LÅSTA.' : '🔓 Tipsraderna är öppna.';
-    el.style.background = locked ? '#fce8e6' : '#e8f5e9';
-    el.style.color = locked ? '#c62828' : '#2e7d32';
+    const settings = snap.exists() ? snap.data() : {};
+    const lockBtn = document.getElementById('admin-lock-tips');
+    const unlockBtn = document.getElementById('admin-unlock-tips');
+    lockBtn.style.display = settings.tipsLocked ? 'none' : 'inline-block';
+    unlockBtn.style.display = settings.tipsLocked ? 'inline-block' : 'none';
 }
 
 async function toggleLock(lock) {
     await setDoc(doc(db, "matches", "_settings"), { tipsLocked: lock }, { merge: true });
-    await refreshLockStatus();
+    refreshLockStatus();
 }
 
 async function toggleTipsVisible() {
     const snap = await getDoc(doc(db, "matches", "_settings"));
-    const current = snap.exists() ? snap.data().tipsVisible : true;
-    const newVal = current === false ? true : false;
-    await setDoc(doc(db, "matches", "_settings"), { tipsVisible: newVal }, { merge: true });
+    const settings = snap.exists() ? snap.data() : {};
+    const current = settings.tipsVisible !== false;
+    await setDoc(doc(db, "matches", "_settings"), { tipsVisible: !current }, { merge: true });
     const btn = document.getElementById('admin-toggle-tips-visible');
-    btn.textContent = newVal ? '👁 Tips synliga' : '🙈 Tips dolda';
-    btn.style.background = newVal ? '#28a745' : '#dc3545';
-    setTimeout(() => { btn.textContent = 'Dölj/Visa andras tips'; btn.style.background = '#17a2b8'; }, 2000);
+    btn.textContent = !current ? '🔓 Tipsrader synliga för alla' : '🔒 Tipsrader dolda';
+    btn.style.background = !current ? '#28a745' : '#6c757d';
 }
 
 function renderAdminMatches(letter) {
     const container = document.getElementById('admin-matches');
-    let groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
-
-    if (groupMatches.length === 0) {
-        container.innerHTML = '<p style="color: #999;">Inga matcher i denna grupp.</p>';
-        return;
-    }
-
-    groupMatches.sort((a, b) => {
-        const aDone = !!existingResults[a.id];
-        const bDone = !!existingResults[b.id];
-        if (aDone !== bDone) return aDone ? 1 : -1;
-        return (a.date || '').localeCompare(b.date || '');
-    });
-
-    container.innerHTML = '';
+    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`).sort((a, b) => a.id - b.id);
+    if (groupMatches.length === 0) { container.innerHTML = '<p>Inga matcher i denna grupp.</p>'; return; }
+    let html = '';
     groupMatches.forEach(m => {
-        const r = existingResults[m.id] || {};
-        const done = r.homeScore !== undefined;
-        const div = document.createElement('div');
-        div.className = 'admin-match-card' + (done ? ' completed' : '');
-        div.innerHTML = `
-            <span class="match-date">${m.date || ''}</span>
-            <span style="flex:1; font-weight:600;">${f(m.homeTeam)}${m.homeTeam}</span>
-            <input type="number" min="0" class="score-input" id="adminHome-${m.id}" value="${r.homeScore ?? ''}" placeholder="-">
-            <span style="color:#aaa; font-weight:bold;">:</span>
-            <input type="number" min="0" class="score-input" id="adminAway-${m.id}" value="${r.awayScore ?? ''}" placeholder="-">
-            <span style="flex:1; text-align:right; font-weight:600;">${m.awayTeam}${f(m.awayTeam)}</span>
-            ${done ? `<button class="btn-delete-result" data-match-id="${m.id}" title="Ta bort resultat">✕</button>` : ''}`;
-        container.appendChild(div);
+        const r = existingResults[m.id];
+        const homeVal = r?.homeScore ?? '';
+        const awayVal = r?.awayScore ?? '';
+        const isDone = homeVal !== '' && awayVal !== '';
+        const overdue = !isDone && isOverdue(m.date, Date.now());
+        html += `<div class="admin-match-row ${isDone ? 'done' : ''} ${overdue ? 'overdue' : ''}">
+            <span class="admin-match-label">${m.date || ''}</span>
+            <span class="admin-match-teams">${f(m.homeTeam)}${m.homeTeam}</span>
+            <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="home" value="${homeVal}" placeholder="-">
+            <span class="admin-sep">–</span>
+            <input type="number" min="0" class="admin-score" data-match="${m.id}" data-side="away" value="${awayVal}" placeholder="-">
+            <span class="admin-match-teams">${m.awayTeam}${f(m.awayTeam)}</span>
+        </div>`;
     });
-
-    // Wire delete buttons
-    container.querySelectorAll('.btn-delete-result').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const matchId = btn.dataset.matchId;
-            delete existingResults[matchId];
-            await setDoc(doc(db, "matches", "_results"), existingResults);
-            await bumpDataVersion();
-            renderAdminMatches(currentAdminGroup);
-            renderGroupButtons();
-        });
-    });
+    container.innerHTML = html;
 }
 
 async function saveAdminResults() {
-    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${currentAdminGroup}`);
-    let saved = 0;
-    groupMatches.forEach(m => {
-        const hEl = document.getElementById(`adminHome-${m.id}`);
-        const aEl = document.getElementById(`adminAway-${m.id}`);
-        if (hEl && aEl && hEl.value !== '' && aEl.value !== '') {
-            existingResults[m.id] = {
-                homeScore: parseInt(hEl.value), awayScore: parseInt(aEl.value),
-                homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage, date: m.date
+    const inputs = document.querySelectorAll('.admin-score');
+    const updates = {};
+    inputs.forEach(input => {
+        const matchId = input.dataset.match;
+        if (!updates[matchId]) updates[matchId] = {};
+        updates[matchId][input.dataset.side] = input.value !== '' ? parseInt(input.value) : undefined;
+    });
+
+    Object.entries(updates).forEach(([matchId, scores]) => {
+        if (scores.home !== undefined && scores.away !== undefined) {
+            const m = allMatches.find(m2 => String(m2.id) === matchId);
+            existingResults[matchId] = {
+                homeScore: scores.home, awayScore: scores.away,
+                homeTeam: m?.homeTeam, awayTeam: m?.awayTeam,
+                stage: m?.stage, date: m?.date
             };
-            saved++;
         }
     });
-    if (!saved) return;
-    await setDoc(doc(db, "matches", "_results"), existingResults, { merge: true });
+
+    await setDoc(doc(db, "matches", "_results"), existingResults);
     await bumpDataVersion();
-    renderAdminMatches(currentAdminGroup);
     renderGroupButtons();
+    const btn = document.getElementById('admin-save-results');
+    btn.textContent = '✓ Sparat!';
+    setTimeout(() => { btn.textContent = 'Spara resultat'; }, 2000);
 }
 
-// ─── TEAM RENAME ────────────────────────────────────
 function renderTeamRenames() {
-    const container = document.getElementById('admin-team-rename');
-    // Find teams with "/" in name from GROUP stage only (not knockout placeholders like "3A/B/C/D/F")
-    const undecided = new Set();
+    const container = document.getElementById('admin-team-renames');
+    const teams = new Set();
     allMatches.forEach(m => {
-        if (!m.stage || !m.stage.startsWith('Grupp ')) return;
-        if (m.homeTeam?.includes('/')) undecided.add(m.homeTeam);
-        if (m.awayTeam?.includes('/')) undecided.add(m.awayTeam);
+        if (m.homeTeam) teams.add(m.homeTeam);
+        if (m.awayTeam) teams.add(m.awayTeam);
     });
-
-    if (undecided.size === 0) {
-        container.innerHTML = '<p style="color:#999; font-size:14px;">Alla lag är bekräftade.</p>';
-        return;
-    }
-
-    let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px;">';
-    Array.from(undecided).sort().forEach(team => {
-        html += `<div style="display:flex; gap:6px; align-items:center;">
-            <span style="font-size:13px; min-width:130px; font-weight:600;">${f(team)}${team}</span>
-            <span style="color:#aaa;">→</span>
-            <input class="rename-input" data-old-name="${team}" value="" placeholder="Nytt namn" style="flex:1; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+    const sorted = [...teams].sort();
+    let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;">';
+    sorted.forEach(team => {
+        const flag = flags[team] || '';
+        html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:13px;">
+            <span style="min-width:30px;">${flag}</span>
+            <span style="min-width:120px; font-weight:600;">${team}</span>
+            <span>→</span>
+            <input class="admin-rename-input" data-old="${team}" value="${team}" style="flex:1; padding:3px 8px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
         </div>`;
     });
     html += '</div>';
-    html += '<button class="btn" id="admin-save-renames" style="margin-top:10px; width:100%;">Uppdatera lagnamn</button>';
+    html += `<button class="btn" id="admin-save-renames" style="margin-top:10px; width:100%; background:#ffc107; color:#000;">Spara namnändringar</button>`;
     container.innerHTML = html;
-
     document.getElementById('admin-save-renames').addEventListener('click', saveTeamRenames);
 }
 
 async function saveTeamRenames() {
-    const inputs = document.querySelectorAll('.rename-input');
+    const inputs = document.querySelectorAll('.admin-rename-input');
     const renames = {};
-    inputs.forEach(inp => {
-        const newName = inp.value.trim();
-        if (newName) renames[inp.dataset.oldName] = newName;
+    inputs.forEach(input => {
+        const oldName = input.dataset.old;
+        const newName = input.value.trim();
+        if (newName && newName !== oldName) renames[oldName] = newName;
     });
 
     if (Object.keys(renames).length === 0) return;
 
-    // Update all match documents in Firestore
-    const matchesSnap = await getDocs(collection(db, "matches"));
-    const batch = writeBatch(db);
-    let updated = 0;
-
-    matchesSnap.docs.forEach(d => {
-        if (d.id.startsWith('_')) return;
-        const data = d.data();
+    // Rename in match documents
+    const snap = await getDocs(collection(db, "matches"));
+    for (const matchDoc of snap.docs) {
+        if (matchDoc.id.startsWith('_')) continue;
+        const data = matchDoc.data();
         let changed = false;
-        const newData = { ...data };
-        if (renames[data.homeTeam]) { newData.homeTeam = renames[data.homeTeam]; changed = true; }
-        if (renames[data.awayTeam]) { newData.awayTeam = renames[data.awayTeam]; changed = true; }
-        if (changed) { batch.set(doc(db, "matches", d.id), newData); updated++; }
-    });
-
-    if (updated > 0) {
-        await batch.commit();
-        await bumpDataVersion();
-        // Update local data too
-        allMatches.forEach(m => {
-            if (renames[m.homeTeam]) m.homeTeam = renames[m.homeTeam];
-            if (renames[m.awayTeam]) m.awayTeam = renames[m.awayTeam];
-        });
-        renderAdminMatches(currentAdminGroup);
-        renderTeamRenames();
+        if (renames[data.homeTeam]) { data.homeTeam = renames[data.homeTeam]; changed = true; }
+        if (renames[data.awayTeam]) { data.awayTeam = renames[data.awayTeam]; changed = true; }
+        if (changed) await setDoc(doc(db, "matches", matchDoc.id), data);
     }
+
+    // Rename in results
+    const resultsSnap = await getDoc(doc(db, "matches", "_results"));
+    if (resultsSnap.exists()) {
+        const results = resultsSnap.data();
+        let changed = false;
+        Object.values(results).forEach(r => {
+            if (renames[r.homeTeam]) { r.homeTeam = renames[r.homeTeam]; changed = true; }
+            if (renames[r.awayTeam]) { r.awayTeam = renames[r.awayTeam]; changed = true; }
+        });
+        if (changed) await setDoc(doc(db, "matches", "_results"), results);
+    }
+
+    await bumpDataVersion();
+    const btn = document.getElementById('admin-save-renames');
+    btn.textContent = '✓ Sparat!';
+    btn.style.background = '#28a745';
+    setTimeout(() => { btn.textContent = 'Spara namnändringar'; btn.style.background = ''; }, 2000);
 }
 
-// ─── SCORING CONFIG ────────────────────────────────
-const SCORING_LABELS = {
-    matchResult: 'Rätt 1X2 (per match)',
-    matchHomeGoals: 'Rätt hemmalag mål (per match)',
-    matchAwayGoals: 'Rätt bortalag mål (per match)',
-    exactScore: 'Bonus exakt rätt resultat (per match)',
-    groupWinner: 'Rätt gruppetta (per grupp)',
-    groupRunnerUp: 'Rätt grupptvåa (per grupp)',
-    groupThird: 'Rätt grupptrea (per grupp)',
-    koR32: 'Rätt lag vidare R32 (per lag)',
-    koR16: 'Rätt lag vidare R16 (per lag)',
-    koQF: 'Rätt lag vidare KF (per lag)',
-    koSF: 'Rätt lag vidare SF (per lag)',
-    koFinal: 'Rätt VM-mästare',
-};
-
 async function renderScoringConfig() {
-    const container = document.getElementById('admin-scoring');
-    const settingsSnap = await getDoc(doc(db, "matches", "_settings"));
-    const settings = settingsSnap.exists() ? settingsSnap.data() : {};
-    const current = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
+    const snap = await getDoc(doc(db, "matches", "_settings"));
+    const settings = snap.exists() ? snap.data() : {};
+    const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
 
-    let html = '<div class="scoring-grid">';
-    // Group into sections
-    const sections = [
-        { title: 'Gruppspel — Matcher', keys: ['matchResult', 'matchHomeGoals', 'matchAwayGoals', 'exactScore'] },
-        { title: 'Gruppspel — Placeringar', keys: ['groupWinner', 'groupRunnerUp', 'groupThird'] },
-        { title: 'Slutspel', keys: ['koR32', 'koR16', 'koQF', 'koSF', 'koFinal'] },
-    ];
-
-    sections.forEach(section => {
-        html += `<div class="scoring-section"><h4 style="margin:0 0 8px; font-size:14px; color:#555;">${section.title}</h4>`;
-        section.keys.forEach(key => {
-            html += `<div class="scoring-row">
-                <label>${SCORING_LABELS[key]}</label>
-                <input type="number" min="0" class="scoring-input" data-key="${key}" value="${current[key]}" style="width:50px; text-align:center; padding:4px; border:1px solid #ddd; border-radius:4px; font-size:14px; font-weight:600;">
-                <span style="color:#999; font-size:12px;">p</span>
-            </div>`;
-        });
-        html += `</div>`;
+    const container = document.getElementById('admin-scoring-config');
+    const labels = {
+        matchResult: 'Rätt 1X2', matchHomeGoals: 'Rätt hemmalag mål',
+        matchAwayGoals: 'Rätt bortalag mål', exactScore: 'Bonus exakt resultat',
+        groupWinner: 'Rätt gruppetta', groupRunnerUp: 'Rätt grupptvåa', groupThird: 'Rätt grupptrea',
+        koR32: 'Rätt lag R32', koR16: 'Rätt lag R16', koQF: 'Rätt lag KF',
+        koSF: 'Rätt lag SF', koFinal: 'Rätt VM-mästare'
+    };
+    let html = '<div style="display:grid; grid-template-columns: 1fr 60px; gap:4px 12px; max-width:400px;">';
+    Object.entries(labels).forEach(([key, label]) => {
+        html += `<label style="font-size:13px; align-self:center;">${label}</label>`;
+        html += `<input type="number" min="0" class="admin-scoring-input" data-key="${key}" value="${scoring[key]}" style="width:60px; padding:4px; text-align:center; border:1px solid #ddd; border-radius:4px;">`;
     });
     html += '</div>';
-    html += '<button class="btn" id="admin-save-scoring" style="margin-top:12px; width:100%;">Spara poänginställningar</button>';
+    html += `<button class="btn" id="admin-save-scoring" style="margin-top:10px; background:#ffc107; color:#000;">Spara poänginställningar</button>`;
     container.innerHTML = html;
-
     document.getElementById('admin-save-scoring').addEventListener('click', saveScoringConfig);
 }
 
 async function saveScoringConfig() {
+    const inputs = document.querySelectorAll('.admin-scoring-input');
     const scoring = {};
-    document.querySelectorAll('.scoring-input').forEach(input => {
-        scoring[input.dataset.key] = parseInt(input.value) || 0;
-    });
+    inputs.forEach(input => { scoring[input.dataset.key] = parseInt(input.value) || 0; });
     await setDoc(doc(db, "matches", "_settings"), { scoring }, { merge: true });
-    // Visual feedback
+    await bumpDataVersion();
     const btn = document.getElementById('admin-save-scoring');
     btn.textContent = '✓ Sparat!';
     btn.style.background = '#28a745';
     setTimeout(() => { btn.textContent = 'Spara poänginställningar'; btn.style.background = ''; }, 2000);
-}
-
-// ─── ADMIN BRACKET BUILDER ──────────────────────────
-function getGroupStandings() {
-    const standings = {};
-    GROUP_LETTERS.forEach(letter => {
-        const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
-        if (groupMatches.length === 0) return;
-        const teams = {};
-        groupMatches.forEach(m => {
-            if (!teams[m.homeTeam]) teams[m.homeTeam] = { name: m.homeTeam, pts: 0, gd: 0, gf: 0 };
-            if (!teams[m.awayTeam]) teams[m.awayTeam] = { name: m.awayTeam, pts: 0, gd: 0, gf: 0 };
-            const r = existingResults[m.id];
-            if (!r || r.homeScore === undefined) return;
-            const h = r.homeScore, a = r.awayScore;
-            teams[m.homeTeam].gf += h; teams[m.homeTeam].gd += (h - a);
-            teams[m.awayTeam].gf += a; teams[m.awayTeam].gd += (a - h);
-            if (h > a) teams[m.homeTeam].pts += 3;
-            else if (a > h) teams[m.awayTeam].pts += 3;
-            else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
-        });
-        const sorted = Object.values(teams).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-        standings[letter] = sorted;
-    });
-    return standings;
-}
-
-function getAllTeamsForAutocomplete() {
-    // Only include real nation names from group stage matches (not knockout placeholders like "1A", "3A/B/C/D/F")
-    const teams = new Set();
-    allMatches.forEach(m => {
-        if (!m.stage || !m.stage.startsWith('Grupp ')) return;
-        if (m.homeTeam) teams.add(m.homeTeam);
-        if (m.awayTeam) teams.add(m.awayTeam);
-    });
-    return Array.from(teams).sort();
-}
-
-function renderMatchCard(round, matchIdx, match, side) {
-    // side: 'left' or 'right' (affects connector direction)
-    return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
-        <div class="abt-team-row">
-            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
-            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
-        </div>
-        <div class="abt-team-row">
-            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
-            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
-        </div>
-        <input class="admin-bracket-date abt-date" data-round="${round}" data-match="${matchIdx}" value="${match.date || ''}" placeholder="t.ex. 21 juni 18:00" style="width:100%; font-size:11px; padding:3px 6px; border:1px solid #ddd; border-radius:4px; margin-top:3px; color:#666;">
-    </div>`;
-}
-
-async function renderAdminBracket() {
-    const container = document.getElementById('admin-bracket');
-    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
-    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
-    const rd = bracket.rounds || {};
-
-    const standings = getGroupStandings();
-    const allTeams = getAllTeamsForAutocomplete();
-
-    // Qualified teams summary
-    let html = '';
-    const hasStandings = Object.keys(standings).length > 0;
-    if (hasStandings) {
-        html += `<div style="margin-bottom:15px;">`;
-        html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
-        html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:10px;">`;
-        GROUP_LETTERS.forEach(letter => {
-            const s = standings[letter];
-            if (!s || s.length < 2) return;
-            html += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
-        });
-        html += `</div>`;
-        html += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:10px;">Autofyll R32 från gruppresultat</button>`;
-        html += `</div>`;
-    }
-
-    // Datalist for autocomplete
-    html += `<datalist id="team-autocomplete">`;
-    allTeams.forEach(t => { html += `<option value="${t}">`; });
-    html += `</datalist>`;
-
-    // ── BUILD BRACKET TREE ──────────────────────────
-    // Left half: R32 matches 0-7 → R16 0-3 → KF 0-1 → SF 0
-    // Right half: R32 matches 8-15 → R16 4-7 → KF 2-3 → SF 1
-    // Center: Final
-
-    const leftRounds = [
-        { key: 'R32', label: 'Åttondelsfinal', start: 0, count: 8 },
-        { key: 'R16', label: 'Sextondelsfinal', start: 0, count: 4 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
-        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
-    ];
-    const rightRounds = [
-        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
-        { key: 'R16', label: 'Sextondelsfinal', start: 4, count: 4 },
-        { key: 'R32', label: 'Åttondelsfinal', start: 8, count: 8 },
-    ];
-
-    html += `<div class="abt-tree">`;
-
-    // Left half
-    leftRounds.forEach((round, ri) => {
-        html += `<div class="abt-round abt-round-left abt-depth-${ri}">`;
-        html += `<div class="abt-round-label">${round.label}</div>`;
-        html += `<div class="abt-round-matches">`;
-        for (let i = 0; i < round.count; i++) {
-            const matchIdx = round.start + i;
-            const match = (rd[round.key] || [])[matchIdx] || {};
-            html += `<div class="abt-match-wrapper abt-mw-d${ri}">`;
-            html += renderMatchCard(round.key, matchIdx, match, 'left');
-            html += `</div>`;
-        }
-        html += `</div></div>`;
-    });
-
-    // Final (center)
-    const finalMatch = (rd['Final'] || [])[0] || {};
-    html += `<div class="abt-round abt-round-final">`;
-    html += `<div class="abt-round-label abt-final-label">FINAL</div>`;
-    html += `<div class="abt-round-matches">`;
-    html += `<div class="abt-match-wrapper abt-mw-final">`;
-    html += renderMatchCard('Final', 0, finalMatch, 'center');
-    html += `</div>`;
-    html += `</div></div>`;
-
-    // Right half (mirrored)
-    rightRounds.forEach((round, ri) => {
-        const depth = 3 - ri; // SF=3, KF=2, R16=1, R32=0
-        html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
-        html += `<div class="abt-round-label">${round.label}</div>`;
-        html += `<div class="abt-round-matches">`;
-        for (let i = 0; i < round.count; i++) {
-            const matchIdx = round.start + i;
-            const match = (rd[round.key] || [])[matchIdx] || {};
-            html += `<div class="abt-match-wrapper abt-mw-d${depth}">`;
-            html += renderMatchCard(round.key, matchIdx, match, 'right');
-            html += `</div>`;
-        }
-        html += `</div></div>`;
-    });
-
-    html += `</div>`; // .abt-tree
-
-    html += `<button class="btn" id="admin-save-bracket" style="margin-top: 15px; width: 100%; background: #ffc107; color: #000;">Spara bracket</button>`;
-    container.innerHTML = html;
-
-    // Wire autofill
-    const autofillBtn = document.getElementById('admin-autofill-r32');
-    if (autofillBtn) {
-        autofillBtn.addEventListener('click', () => autofillR32(standings));
-    }
-
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const matchCounts = [16, 8, 4, 2, 1];
-    document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
-    container.querySelectorAll('.abt-score').forEach(input => {
-        input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
-    });
-}
-
-function autofillR32(standings) {
-    const firsts = [], seconds = [], thirds = [];
-    GROUP_LETTERS.forEach(letter => {
-        const s = standings[letter];
-        if (!s || s.length < 2) return;
-        firsts.push({ name: s[0].name, group: letter });
-        seconds.push({ name: s[1].name, group: letter });
-        if (s.length >= 3) thirds.push({ ...s[2], group: letter });
-    });
-    thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-    const qualifiedThirds = thirds.slice(0, 8);
-    const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
-
-    for (let i = 0; i < 16; i++) {
-        const t1 = allQualified[i]?.name || '';
-        const t2 = allQualified[i + 16]?.name || '';
-        const el1 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="1"]`);
-        const el2 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="2"]`);
-        if (el1) el1.value = t1;
-        if (el2) el2.value = t2;
-    }
-}
-
-function autoAdvanceWinners(rounds, matchCounts) {
-    for (let ri = 0; ri < rounds.length - 1; ri++) {
-        const round = rounds[ri], nextRound = rounds[ri + 1], count = matchCounts[ri];
-        for (let i = 0; i < count; i++) {
-            const t1El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`);
-            const t2El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`);
-            const s1El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`);
-            const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
-            if (!t1El || !t2El || !s1El || !s2El || s1El.value === '' || s2El.value === '') continue;
-            const s1 = parseInt(s1El.value), s2 = parseInt(s2El.value);
-            const winner = s1 > s2 ? t1El.value : (s2 > s1 ? t2El.value : '');
-            if (winner) {
-                const nextEl = document.querySelector(`.admin-bracket-team[data-round="${nextRound}"][data-match="${Math.floor(i / 2)}"][data-side="${(i % 2) + 1}"]`);
-                if (nextEl) nextEl.value = winner;
-            }
-        }
-    }
-}
-
-async function saveAdminBracket(rounds, matchCounts) {
-    const bracket = { rounds: {} };
-    rounds.forEach((round, ri) => {
-        bracket.rounds[round] = [];
-        for (let i = 0; i < matchCounts[ri]; i++) {
-            const t1 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value || '';
-            const t2 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value || '';
-            const s1 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
-            const s2 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
-            const dateVal = document.querySelector(`.admin-bracket-date[data-round="${round}"][data-match="${i}"]`)?.value || '';
-            const match = { team1: t1, team2: t2, date: dateVal };
-            if (s1 !== '' && s2 !== '' && s1 !== undefined && s2 !== undefined) {
-                match.score1 = parseInt(s1); match.score2 = parseInt(s2);
-                match.winner = match.score1 > match.score2 ? t1 : (match.score2 > match.score1 ? t2 : '');
-            }
-            bracket.rounds[round].push(match);
-        }
-    });
-    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
-    await setDoc(doc(db, "matches", "_bracket"), bracket, { merge: true });
-    await bumpDataVersion();
-    // Visual feedback
-    const btn = document.getElementById('admin-save-bracket');
-    btn.textContent = '✓ Sparat!';
-    setTimeout(() => { btn.textContent = 'Spara bracket'; }, 2000);
-}
-
-// ═══ TEST TOOLS ═══════════════════════════════════════════════
-
-const FAKE_NAMES = [
-    'Lure Drejeri', 'Bo Ring', 'Anna Conda', 'Sansen Dansen',
-    'Bert-Ove Trollström', 'Göran-Göran Sansen', 'Ella Fansen',
-    'Nansen Klansen', 'Bansen Kranström', 'Pransen Fjällqvist',
-    'Hjansen Vransen', 'Stansen Brankvist', 'Fansen Grenqvist',
-    'Dransen Ljungström', 'Klansen Glansen', 'Vransen Panström',
-    'Gransen Bansen', 'Transen Kanström', 'Ljansen Stanström',
-    'Bransen Pranström', 'Kansen Nansen', 'Glansen Fanström',
-    'Fjansen Dranström', 'Pansen Granström', 'Dansen Hjanström',
-    'Sansen Trollqvist', 'Kransen Vransen', 'Bert-Ansen Dansen',
-    'Göran Granström', 'Nansen Nilström'
-];
-let fakeNameIdx = 0;
-
-function showToast(msg) {
-    let t = document.querySelector('.toast');
-    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-async function addFakeTeachers() {
-    const statusEl = document.getElementById('admin-fake-status');
-    statusEl.textContent = 'Skapar fejklärare...';
-
-    const groupTeams = {};
-    GROUP_LETTERS.forEach(letter => {
-        const teams = new Set();
-        allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
-            teams.add(m.homeTeam);
-            teams.add(m.awayTeam);
-        });
-        groupTeams[letter] = Array.from(teams);
-    });
-    const allTeamsList = [...new Set(allMatches.filter(m => m.stage?.startsWith('Grupp')).flatMap(m => [m.homeTeam, m.awayTeam]))];
-    const groupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
-
-    // Offset name index by existing fake count
-    const usersSnap = await getDocs(collection(db, "users"));
-    const existingFakeCount = usersSnap.docs.filter(d => d.id.startsWith('fake_')).length;
-    fakeNameIdx = existingFakeCount;
-
-    for (let i = 0; i < 10; i++) {
-        const name = FAKE_NAMES[(fakeNameIdx + i) % FAKE_NAMES.length];
-        const fakeId = `fake_${Date.now()}_${i}`;
-
-        // Group picks: random 1st/2nd per group
-        const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
-        GROUP_LETTERS.forEach(letter => {
-            const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
-            groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
-        });
-
-        // Match tips: random scores for each group match
-        const matchTips = {};
-        groupMatches.forEach(m => {
-            matchTips[String(m.id)] = {
-                homeScore: Math.floor(Math.random() * 4),
-                awayScore: Math.floor(Math.random() * 4),
-                homeTeam: m.homeTeam, awayTeam: m.awayTeam,
-                stage: m.stage
-            };
-        });
-
-        // Knockout picks: random teams advancing
-        const shuffled = [...allTeamsList].sort(() => Math.random() - 0.5);
-        const knockout = {
-            r32: shuffled.slice(0, 16),
-            r16: shuffled.slice(0, 8),
-            qf: shuffled.slice(0, 4),
-            sf: shuffled.slice(0, 2),
-            final: shuffled[0]
-        };
-
-        // All data in a single user doc — no subcollection writes
-        await setDoc(doc(db, "users", fakeId), {
-            email: `${fakeId}@fake.test`, name, groupPicks, matchTips, knockout
-        });
-    }
-
-    fakeNameIdx += 10;
-    statusEl.textContent = `✓ 10 fejklärare tillagda! (${fakeNameIdx} totalt)`;
-    setTimeout(() => { statusEl.textContent = ''; }, 4000);
-}
-
-async function removeFakeTeachers() {
-    const statusEl = document.getElementById('admin-fake-status');
-    statusEl.textContent = 'Tar bort fejklärare...';
-
-    const usersSnap = await getDocs(collection(db, "users"));
-    let removed = 0;
-
-    for (const userDoc of usersSnap.docs) {
-        if (!userDoc.id.startsWith('fake_')) continue;
-
-        // Clean up any legacy subcollection docs
-        const tipsSnap = await getDocs(collection(db, "users", userDoc.id, "tips"));
-        if (!tipsSnap.empty) {
-            const batch = writeBatch(db);
-            tipsSnap.forEach(tipDoc => {
-                batch.delete(doc(db, "users", userDoc.id, "tips", tipDoc.id));
-            });
-            await batch.commit();
-        }
-        // Delete the user doc itself
-        const delBatch = writeBatch(db);
-        delBatch.delete(doc(db, "users", userDoc.id));
-        await delBatch.commit();
-        removed++;
-    }
-
-    fakeNameIdx = 0;
-    statusEl.textContent = `✓ ${removed} fejklärare borttagna!`;
-    setTimeout(() => { statusEl.textContent = ''; }, 4000);
-}
-
-async function autoFillGroupResults() {
-    const resultsSnap = await getDoc(doc(db, "matches", "_results"));
-    const results = resultsSnap.exists() ? resultsSnap.data() : {};
-
-    const groupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
-    let filled = 0;
-    groupMatches.forEach(m => {
-        if (results[m.id]?.homeScore !== undefined) return;
-        results[m.id] = {
-            homeScore: Math.floor(Math.random() * 5),
-            awayScore: Math.floor(Math.random() * 5),
-            homeTeam: m.homeTeam, awayTeam: m.awayTeam,
-            stage: m.stage, date: m.date
-        };
-        filled++;
-    });
-
-    await setDoc(doc(db, "matches", "_results"), results);
-    await bumpDataVersion();
-    existingResults = results;
-    renderGroupButtons();
-    renderAdminMatches(currentAdminGroup);
-    showToast(`${filled} gruppresultat autofyllda!`);
-}
-
-async function clearGroupResults() {
-    await setDoc(doc(db, "matches", "_results"), {});
-    await bumpDataVersion();
-    existingResults = {};
-    renderGroupButtons();
-    renderAdminMatches(currentAdminGroup);
-    showToast('Alla gruppresultat rensade!');
-}
-
-async function autoFillKnockoutRound(targetRound) {
-    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
-    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
-    if (!bracket.rounds) bracket.rounds = {};
-
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const matchCounts = { R32: 16, R16: 8, KF: 4, SF: 2, Final: 1 };
-
-    // For R32: populate teams from group standings if empty
-    if (targetRound === 'R32') {
-        if (!bracket.rounds.R32) bracket.rounds.R32 = [];
-        const hasTeams = bracket.rounds.R32.some(m => m?.team1);
-        if (!hasTeams) {
-            const standings = getGroupStandings();
-            const firsts = [], seconds = [], thirds = [];
-            GROUP_LETTERS.forEach(letter => {
-                const s = standings[letter];
-                if (!s || s.length < 2) return;
-                firsts.push(s[0].name);
-                seconds.push(s[1].name);
-                if (s.length >= 3) thirds.push(s[2]);
-            });
-            thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-            const qualifiedThirds = thirds.slice(0, 8).map(t => t.name);
-            const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
-            for (let i = 0; i < 16; i++) {
-                if (!bracket.rounds.R32[i]) bracket.rounds.R32[i] = {};
-                bracket.rounds.R32[i].team1 = allQualified[i] || '';
-                bracket.rounds.R32[i].team2 = allQualified[i + 16] || '';
-            }
-        }
-    } else {
-        // Advance winners from previous round
-        const prevRoundIdx = rounds.indexOf(targetRound) - 1;
-        if (prevRoundIdx >= 0) {
-            const prevRound = rounds[prevRoundIdx];
-            if (!bracket.rounds[targetRound]) bracket.rounds[targetRound] = [];
-            const prevMatches = bracket.rounds[prevRound] || [];
-            for (let i = 0; i < prevMatches.length; i++) {
-                const m = prevMatches[i];
-                if (m?.winner) {
-                    const nextIdx = Math.floor(i / 2);
-                    if (!bracket.rounds[targetRound][nextIdx]) bracket.rounds[targetRound][nextIdx] = {};
-                    if (i % 2 === 0) {
-                        bracket.rounds[targetRound][nextIdx].team1 = m.winner;
-                    } else {
-                        bracket.rounds[targetRound][nextIdx].team2 = m.winner;
-                    }
-                }
-            }
-        }
-    }
-
-    // Generate random non-draw scores
-    const count = matchCounts[targetRound];
-    let filled = 0;
-    for (let i = 0; i < count; i++) {
-        if (!bracket.rounds[targetRound]) bracket.rounds[targetRound] = [];
-        if (!bracket.rounds[targetRound][i]) bracket.rounds[targetRound][i] = {};
-        const match = bracket.rounds[targetRound][i];
-        if (!match.team1 || !match.team2) continue;
-        if (match.winner) continue;
-
-        let s1, s2;
-        do {
-            s1 = Math.floor(Math.random() * 4);
-            s2 = Math.floor(Math.random() * 4);
-        } while (s1 === s2);
-
-        match.score1 = s1;
-        match.score2 = s2;
-        match.winner = s1 > s2 ? match.team1 : match.team2;
-        filled++;
-    }
-
-    // Auto-advance winners to next round
-    const roundIdx = rounds.indexOf(targetRound);
-    if (roundIdx < rounds.length - 1) {
-        const nextRound = rounds[roundIdx + 1];
-        if (!bracket.rounds[nextRound]) bracket.rounds[nextRound] = [];
-        for (let i = 0; i < count; i++) {
-            const match = bracket.rounds[targetRound][i];
-            if (!match?.winner) continue;
-            const nextIdx = Math.floor(i / 2);
-            if (!bracket.rounds[nextRound][nextIdx]) bracket.rounds[nextRound][nextIdx] = {};
-            if (i % 2 === 0) {
-                bracket.rounds[nextRound][nextIdx].team1 = match.winner;
-            } else {
-                bracket.rounds[nextRound][nextIdx].team2 = match.winner;
-            }
-        }
-    }
-
-    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
-    await setDoc(doc(db, "matches", "_bracket"), bracket);
-    await bumpDataVersion();
-    await renderAdminBracket();
-    showToast(`${targetRound}: ${filled} matcher autofyllda!`);
-}
-
-async function clearKnockoutResults() {
-    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
-    const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
-
-    // Remove scores and winners, but keep R32 teams
-    ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-        (bracket.rounds[round] || []).forEach(m => {
-            delete m.score1; delete m.score2; delete m.winner;
-        });
-    });
-    // Clear teams from R16 onwards (they're derived from results)
-    ['R16', 'KF', 'SF', 'Final'].forEach(round => {
-        (bracket.rounds[round] || []).forEach(m => {
-            m.team1 = ''; m.team2 = '';
-        });
-    });
-
-    await setDoc(doc(db, "matches", "_bracket"), bracket);
-    await bumpDataVersion();
-    await renderAdminBracket();
-    showToast('Slutspelsresultat rensade!');
-}
-
-async function clearKnockoutTeams() {
-    await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
-    await bumpDataVersion();
-    await renderAdminBracket();
-    showToast('Hela bracketen rensad!');
-}
-
-// ─── MATCH MANAGER ──────────────────────────────────
-// Lists all docs in the matches collection so admins can delete old/unwanted ones
-async function renderMatchManager() {
-    const container = document.getElementById('admin-match-manager');
-    container.innerHTML = '<p style="color:#999;">Laddar matcher...</p>';
-
-    const snap = await getDocs(collection(db, "matches"));
-    const docs = snap.docs
-        .filter(d => !d.id.startsWith('_'))
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-            // Sort by stage then by id
-            const stageA = a.stage || '';
-            const stageB = b.stage || '';
-            if (stageA !== stageB) return stageA.localeCompare(stageB);
-            return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
-        });
-
-    if (docs.length === 0) {
-        container.innerHTML = '<p style="color:#999;">Inga matcher i databasen.</p>';
-        return;
-    }
-
-    let html = '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px;">';
-    html += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
-    html += '<thead style="position:sticky; top:0; background:#f8f9fa;"><tr><th style="text-align:left;padding:8px;">ID</th><th style="text-align:left;padding:8px;">Match</th><th style="text-align:left;padding:8px;">Fas</th><th style="text-align:left;padding:8px;">Datum</th><th style="padding:8px;">Ta bort</th></tr></thead><tbody>';
-
-    docs.forEach(m => {
-        const home = m.homeTeam || '?';
-        const away = m.awayTeam || '?';
-        const stage = m.stage || '-';
-        const date = m.date || '-';
-        html += `<tr style="border-top:1px solid #eee;">
-            <td style="padding:6px 8px; font-family:monospace; font-weight:600;">${m.id}</td>
-            <td style="padding:6px 8px;">${f(home)}${home} — ${f(away)}${away}</td>
-            <td style="padding:6px 8px; color:#666;">${stage}</td>
-            <td style="padding:6px 8px; color:#888; font-size:12px;">${date}</td>
-            <td style="padding:6px 8px; text-align:center;"><button class="btn btn-delete-match" data-match-id="${m.id}" style="background:#dc3545; font-size:11px; padding:3px 10px;">✕</button></td>
-        </tr>`;
-    });
-
-    html += '</tbody></table></div>';
-    html += `<p style="font-size:12px; color:#888; margin-top:6px;">${docs.length} matcher totalt</p>`;
-    container.innerHTML = html;
-
-    // Wire delete buttons
-    container.querySelectorAll('.btn-delete-match').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const matchId = btn.dataset.matchId;
-            if (!confirm(`Ta bort match "${matchId}"? Denna åtgärd kan inte ångras.`)) return;
-
-            // Delete the match document
-            await deleteDoc(doc(db, "matches", matchId));
-
-            // Also remove from _results if it exists there
-            if (existingResults[matchId]) {
-                delete existingResults[matchId];
-                await setDoc(doc(db, "matches", "_results"), existingResults);
-            }
-
-            await bumpDataVersion();
-
-            // Remove from local allMatches
-            allMatches = allMatches.filter(m => String(m.id) !== matchId);
-
-            showToast(`Match "${matchId}" borttagen!`);
-            renderMatchManager();
-            renderGroupButtons();
-            renderAdminMatches(currentAdminGroup);
-        });
-    });
 }
 
 export async function checkTipsLocked() {

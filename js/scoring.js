@@ -1,0 +1,187 @@
+import { f } from './wizard.js';
+
+const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+
+// Default scoring config - admin can override via _settings.scoring
+export const DEFAULT_SCORING = {
+    matchResult: 1,   // Rätt 1X2
+    matchHomeGoals: 1, // Rätt hemmalag mål
+    matchAwayGoals: 1, // Rätt bortalag mål
+    groupWinner: 1,    // Rätt gruppetta
+    groupRunnerUp: 1,  // Rätt grupptvåa
+    koR32: 2,          // Rätt lag vidare R32
+    koR16: 2,          // Rätt lag vidare R16
+    koQF: 2,           // Rätt lag vidare KF
+    koSF: 5,           // Rätt lag vidare SF
+    koFinal: 10,       // Rätt VM-mästare
+    exactScore: 0,     // Bonus för exakt rätt resultat (alla 3 ovan)
+    groupThird: 0,     // Rätt grupptrea
+};
+
+// ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
+export function buildOfficialGroupStandings(results, matchDocs) {
+    const standings = {};
+    const groupResults = {};
+    const groupMatchCounts = {};
+    if (matchDocs) {
+        matchDocs.forEach(m => {
+            if (!m.stage || !m.stage.startsWith('Grupp ')) return;
+            const letter = m.stage.replace('Grupp ', '');
+            groupMatchCounts[letter] = (groupMatchCounts[letter] || 0) + 1;
+        });
+    }
+
+    Object.entries(results).forEach(([, r]) => {
+        if (!r.stage || !r.stage.startsWith('Grupp ')) return;
+        if (r.homeScore === undefined) return;
+        const letter = r.stage.replace('Grupp ', '');
+        if (!groupResults[letter]) groupResults[letter] = [];
+        groupResults[letter].push(r);
+    });
+
+    Object.entries(groupResults).forEach(([letter, matches]) => {
+        const teams = {};
+        matches.forEach(m => {
+            if (!teams[m.homeTeam]) teams[m.homeTeam] = { pts: 0, gd: 0, gf: 0 };
+            if (!teams[m.awayTeam]) teams[m.awayTeam] = { pts: 0, gd: 0, gf: 0 };
+            const h = m.homeScore, a = m.awayScore;
+            teams[m.homeTeam].gf += h; teams[m.homeTeam].gd += (h - a);
+            teams[m.awayTeam].gf += a; teams[m.awayTeam].gd += (a - h);
+            if (h > a) { teams[m.homeTeam].pts += 3; }
+            else if (a > h) { teams[m.awayTeam].pts += 3; }
+            else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
+        });
+        const sorted = Object.entries(teams).sort((a, b) => b[1].pts - a[1].pts || b[1].gd - a[1].gd || b[1].gf - a[1].gf);
+        const totalExpected = groupMatchCounts[letter] || 6;
+        standings[letter] = {
+            first: sorted[0]?.[0] || null,
+            second: sorted[1]?.[0] || null,
+            third: sorted[2]?.[0] || null,
+            complete: matches.length >= totalExpected
+        };
+    });
+    return standings;
+}
+
+// ── SCORING (returns detailed breakdown) ──────────────
+export function calcLeaderboard(users, results, bracket, scoring, officialGroupStandings) {
+    const officialWinners = {};
+    if (bracket?.rounds) {
+        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
+            const key = round === 'KF' ? 'qf' : round.toLowerCase();
+            officialWinners[key] = [];
+            (bracket.rounds[round] || []).forEach(m => {
+                if (m.winner) officialWinners[key].push(m.winner);
+            });
+        });
+    }
+
+    return users.map(u => {
+        let groupPts = 0;
+        const detail = { matchResult: 0, matchGoals: 0, exactScore: 0, groupPlace: 0 };
+
+        // Score individual match tips
+        Object.entries(u.matchTips).forEach(([matchId, tip]) => {
+            const r = results[matchId];
+            if (!r || r.homeScore === undefined) return;
+            const tipSign = sign(tip.homeScore - tip.awayScore);
+            const realSign = sign(r.homeScore - r.awayScore);
+            if (tipSign === realSign) { groupPts += scoring.matchResult; detail.matchResult += scoring.matchResult; }
+            if (tip.homeScore === r.homeScore) { groupPts += scoring.matchHomeGoals; detail.matchGoals += scoring.matchHomeGoals; }
+            if (tip.awayScore === r.awayScore) { groupPts += scoring.matchAwayGoals; detail.matchGoals += scoring.matchAwayGoals; }
+            if (scoring.exactScore > 0 && tip.homeScore === r.homeScore && tip.awayScore === r.awayScore) {
+                groupPts += scoring.exactScore; detail.exactScore += scoring.exactScore;
+            }
+        });
+
+        // Score group winner/runner-up predictions (only when all group matches are played)
+        if (u.groupPicks) {
+            GROUP_LETTERS.forEach(letter => {
+                const pick = u.groupPicks[letter];
+                const official = officialGroupStandings[letter];
+                if (!pick || !official || !official.complete) return;
+                if (official.first && pick.first === official.first) { groupPts += scoring.groupWinner; detail.groupPlace += scoring.groupWinner; }
+                if (official.second && pick.second === official.second) { groupPts += scoring.groupRunnerUp; detail.groupPlace += scoring.groupRunnerUp; }
+                if (scoring.groupThird > 0 && official.third && pick.third === official.third) { groupPts += scoring.groupThird; detail.groupPlace += scoring.groupThird; }
+            });
+        }
+
+        let koPts = 0;
+        const koKeyMap = { r32: 'koR32', r16: 'koR16', qf: 'koQF', sf: 'koSF', final: 'koFinal' };
+        if (u.knockoutPicks) {
+            Object.entries(koKeyMap).forEach(([round, scoreKey]) => {
+                const winners = officialWinners[round] || [];
+                if (winners.length === 0) return;
+                const pts = scoring[scoreKey] || 0;
+                if (round === 'final') {
+                    if (u.knockoutPicks.final && winners.includes(u.knockoutPicks.final)) koPts += pts;
+                } else {
+                    const userPicks = u.knockoutPicks[round] || [];
+                    userPicks.forEach(team => { if (winners.includes(team)) koPts += pts; });
+                }
+            });
+        }
+
+        return { userId: u.userId, name: u.name, groupPts, koPts, total: groupPts + koPts, detail };
+    });
+}
+
+export function sign(n) { return n > 0 ? 1 : (n < 0 ? -1 : 0); }
+
+// Parse date like "18 juni 21:00" relative to 2026
+export function parseMatchDate(dateStr) {
+    if (!dateStr) return null;
+    const months = { 'januari': 0, 'februari': 1, 'mars': 2, 'april': 3, 'maj': 4, 'juni': 5, 'juli': 6, 'augusti': 7, 'september': 8, 'oktober': 9, 'november': 10, 'december': 11 };
+    const parts = dateStr.trim().match(/^(\d+)\s+(\w+)\s+(\d{1,2}):(\d{2})$/);
+    if (!parts) return null;
+    const day = parseInt(parts[1]);
+    const month = months[parts[2].toLowerCase()];
+    if (month === undefined) return null;
+    return new Date(2026, month, day, parseInt(parts[3]), parseInt(parts[4]));
+}
+
+export function renderStatBar(team, pct) {
+    return `<div class="stat-bar">
+        <span class="stat-bar-label">${f(team)}${team}</span>
+        <div style="flex:1; margin: 0 8px;"><div class="stat-bar-fill" style="width: ${Math.max(pct, 3)}%;">${pct > 15 ? pct + '%' : ''}</div></div>
+        <span class="stat-bar-pct">${pct}%</span>
+    </div>`;
+}
+
+export function renderTippersSummary(exactTippers, winnerTippers) {
+    let html = '';
+    if (exactTippers.length > 0) {
+        html += renderTippersLine('🎯', exactTippers, 'tippade exakt rätt', '#28a745');
+    }
+    if (winnerTippers.length > 0) {
+        html += renderTippersLine('✓', winnerTippers, 'tippade rätt vinnare', '#17a2b8');
+    }
+    if (exactTippers.length === 0 && winnerTippers.length === 0) {
+        html += `<div style="font-size:12px; color:#999; margin-top:4px; text-align:center;">Ingen tippade rätt</div>`;
+    }
+    return html;
+}
+
+export function renderTippersLine(icon, names, suffix, color) {
+    if (names.length <= 3) {
+        const joined = names.length <= 2 ? names.join(' & ') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+        return `<div style="font-size:12px; color:${color}; margin-top:4px; text-align:center;">${icon} ${joined} ${suffix}</div>`;
+    }
+
+    let displayNames = [...names].sort(() => 0.5 - Math.random());
+    let tooltipText = "";
+    const MAX_NAMES = 10;
+
+    if (displayNames.length > MAX_NAMES) {
+        const selected = displayNames.slice(0, MAX_NAMES);
+        const hiddenCount = displayNames.length - MAX_NAMES;
+        tooltipText = selected.join(', ') + ` <br><span style="color:#aaa;">(och ${hiddenCount} fler)</span>`;
+    } else {
+        tooltipText = displayNames.join(', ');
+    }
+
+    return `<div class="tipper-hover" style="font-size:12px; color:${color}; margin-top:4px; cursor:default; text-align:center;">
+        ${icon} ${names.length} st ${suffix}
+        <span class="tipper-tooltip">${tooltipText}</span>
+    </div>`;
+}
