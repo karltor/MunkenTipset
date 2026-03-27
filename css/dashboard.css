@@ -455,3 +455,27 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     color: #1a1a1a;
 }
 .welcome-popup .btn-welcome-dismiss:hover { background: #e0a800; }
+
+/* ── Comparison table match cells ── */
+.compare-match-cell { min-width: 160px; }
+.compare-match-date { font-size: 10px; color: #888; margin-bottom: 4px; }
+.compare-match-teams { display: flex; align-items: center; font-weight: 600; font-size: 12px; white-space: nowrap; }
+.compare-team-sep { color: #aaa; margin: 0 4px; }
+.compare-team-name { overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Mobile: comparison table & match cards ── */
+@media (max-width: 600px) {
+    /* Comparison table: shrink sticky column */
+    .compare-match-cell { min-width: 100px !important; max-width: 110px; }
+    .compare-match-teams { font-size: 10px !important; }
+    .compare-team-flag { display: none; }
+    .compare-team-name { max-width: 45px; overflow: hidden; text-overflow: ellipsis; }
+    .compare-match-date { font-size: 9px; }
+    /* General comparison table cells */
+    #comparison-table-container td,
+    #comparison-table-container th { padding: 4px 5px; font-size: 12px; }
+    #comparison-table-container th { font-size: 11px; }
+    /* Tabs in comparison: smaller */
+    .tabs { gap: 3px; }
+    .tabs .tab-btn { font-size: 12px; padding: 6px 8px; }
+}
