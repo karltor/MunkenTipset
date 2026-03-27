@@ -32,48 +32,76 @@ let _comparisonState = {
     viewMode: 'simple' // 'simple' eller 'advanced'
 };
 
+// ── localStorage cache helpers ─────────────────────────────────────────────
+const STATS_CACHE_KEY = 'munkenbollen_stats_cache_v1';
+
+function _loadStatsCache() {
+    try {
+        const raw = localStorage.getItem(STATS_CACHE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+}
+
+function _saveStatsCache(dataVersion, payload) {
+    try {
+        localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ dataVersion, ...payload }));
+    } catch { /* quota exceeded or localStorage unavailable */ }
+}
+
 export async function loadCommunityStats() {
     const container = document.getElementById('community-stats');
     container.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
 
-    // Load official results + bracket + settings
-    const [resultsSnap, bracketSnap, settingsSnap, matchesColSnap] = await Promise.all([
-        getDoc(doc(db, "matches", "_results")),
-        getDoc(doc(db, "matches", "_bracket")),
-        getDoc(doc(db, "matches", "_settings")),
-        getDocs(collection(db, "matches"))
-    ]);
-    const results = resultsSnap.exists() ? resultsSnap.data() : {};
-    const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
+    // Single cheap read to check if data has changed since last visit
+    const settingsSnap = await getDoc(doc(db, "matches", "_settings"));
     const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+    const dataVersion = settings.dataVersion || 0;
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
     const tipsVisible = settings.tipsVisible !== false; // default true
-    const allMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => d.data());
-    const matchDocMap = {};
-    window._cachedMatchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => ({ id: d.id, ...d.data() }));
-    allMatchDocs.forEach(m => matchDocMap[String(m.id)] = m);
-
     _cachedSettings = settings;
     _cachedScoring = scoring;
 
-    // Load all users' tips via parent user docs
-    const usersSnap = await getDocs(collection(db, "users"));
-    const users = [];
+    let results, bracket, users, matchDocs;
 
-    for (const userDoc of usersSnap.docs) {
-        const userId = userDoc.id;
-        const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
-        const u = { userId, name: userId, groupPicks: null, knockoutPicks: null, matchTips: {} };
+    const cached = _loadStatsCache();
+    if (cached && cached.dataVersion === dataVersion && Array.isArray(cached.users) && cached.results !== undefined) {
+        // Cache hit – no additional reads needed
+        results = cached.results;
+        bracket = cached.bracket;
+        users = cached.users;
+        matchDocs = cached.matchDocs;
+    } else {
+        // Cache miss – full fetch (results, bracket, matches, all user tips)
+        const [resultsSnap, bracketSnap, matchesColSnap] = await Promise.all([
+            getDoc(doc(db, "matches", "_results")),
+            getDoc(doc(db, "matches", "_bracket")),
+            getDocs(collection(db, "matches"))
+        ]);
+        results = resultsSnap.exists() ? resultsSnap.data() : {};
+        bracket = bracketSnap.exists() ? bracketSnap.data() : null;
+        matchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => ({ id: d.id, ...d.data() }));
 
-        tipsSnap.forEach(tipDoc => {
-            if (tipDoc.id === '_groupPicks') u.groupPicks = tipDoc.data();
-            else if (tipDoc.id === '_knockout') u.knockoutPicks = tipDoc.data();
-            else if (tipDoc.id === '_profile') u.name = tipDoc.data().name || userId;
-            else u.matchTips[tipDoc.id] = tipDoc.data();
-        });
+        const usersSnap = await getDocs(collection(db, "users"));
+        users = [];
+        for (const userDoc of usersSnap.docs) {
+            const userId = userDoc.id;
+            const tipsSnap = await getDocs(collection(db, "users", userId, "tips"));
+            const u = { userId, name: userId, groupPicks: null, knockoutPicks: null, matchTips: {} };
+            tipsSnap.forEach(tipDoc => {
+                if (tipDoc.id === '_groupPicks') u.groupPicks = tipDoc.data();
+                else if (tipDoc.id === '_knockout') u.knockoutPicks = tipDoc.data();
+                else if (tipDoc.id === '_profile') u.name = tipDoc.data().name || userId;
+                else u.matchTips[tipDoc.id] = tipDoc.data();
+            });
+            if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
+        }
 
-        if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
+        _saveStatsCache(dataVersion, { results, bracket, users, matchDocs });
     }
+
+    window._cachedMatchDocs = matchDocs;
+    const matchDocMap = {};
+    matchDocs.forEach(m => matchDocMap[String(m.id)] = m);
 
     _cachedUsers = users;
 

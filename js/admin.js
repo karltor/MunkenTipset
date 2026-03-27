@@ -9,6 +9,11 @@ let currentAdminGroup = 'A';
 let existingResults = {};
 let initDone = false;
 
+// Bump dataVersion in _settings so clients know to invalidate their stats cache
+async function bumpDataVersion() {
+    await setDoc(doc(db, "matches", "_settings"), { dataVersion: Date.now() }, { merge: true });
+}
+
 export async function initAdmin(matchesData) {
     allMatches = matchesData;
     await refreshLockStatus();
@@ -156,6 +161,7 @@ function renderAdminMatches(letter) {
             const matchId = btn.dataset.matchId;
             delete existingResults[matchId];
             await setDoc(doc(db, "matches", "_results"), existingResults);
+            await bumpDataVersion();
             renderAdminMatches(currentAdminGroup);
             renderGroupButtons();
         });
@@ -178,6 +184,7 @@ async function saveAdminResults() {
     });
     if (!saved) return;
     await setDoc(doc(db, "matches", "_results"), existingResults, { merge: true });
+    await bumpDataVersion();
     renderAdminMatches(currentAdminGroup);
     renderGroupButtons();
 }
@@ -240,6 +247,7 @@ async function saveTeamRenames() {
 
     if (updated > 0) {
         await batch.commit();
+        await bumpDataVersion();
         // Update local data too
         allMatches.forEach(m => {
             if (renames[m.homeTeam]) m.homeTeam = renames[m.homeTeam];
@@ -672,6 +680,7 @@ async function autoFillGroupResults() {
     });
 
     await setDoc(doc(db, "matches", "_results"), results);
+    await bumpDataVersion();
     existingResults = results;
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);
@@ -680,6 +689,7 @@ async function autoFillGroupResults() {
 
 async function clearGroupResults() {
     await setDoc(doc(db, "matches", "_results"), {});
+    await bumpDataVersion();
     existingResults = {};
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);
@@ -781,6 +791,7 @@ async function autoFillKnockoutRound(targetRound) {
 
     bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
     await setDoc(doc(db, "matches", "_bracket"), bracket);
+    await bumpDataVersion();
     await renderAdminBracket();
     showToast(`${targetRound}: ${filled} matcher autofyllda!`);
 }
@@ -803,12 +814,14 @@ async function clearKnockoutResults() {
     });
 
     await setDoc(doc(db, "matches", "_bracket"), bracket);
+    await bumpDataVersion();
     await renderAdminBracket();
     showToast('Slutspelsresultat rensade!');
 }
 
 async function clearKnockoutTeams() {
     await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
+    await bumpDataVersion();
     await renderAdminBracket();
     showToast('Hela bracketen rensad!');
 }
