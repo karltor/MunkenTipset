@@ -39,7 +39,37 @@ function getAllTeamsForAutocomplete() {
     return Array.from(teams).sort();
 }
 
+const MONTHS = ['juni', 'juli', 'augusti'];
+
+function parseDateStr(dateStr) {
+    if (!dateStr) return { day: '', month: '', time: '' };
+    const m = dateStr.trim().match(/^(\d+)\s+(\w+)\s+(\d{1,2}:\d{2})$/);
+    if (m) return { day: m[1], month: m[2].toLowerCase(), time: m[3] };
+    return { day: '', month: '', time: '' };
+}
+
+function buildDateStr(round, matchIdx) {
+    const prefix = `[data-round="${round}"][data-match="${matchIdx}"]`;
+    const day = document.querySelector(`.abt-date-day${prefix}`)?.value || '';
+    const month = document.querySelector(`.abt-date-month${prefix}`)?.value || '';
+    const time = document.querySelector(`.abt-date-time${prefix}`)?.value || '';
+    if (!day || !month || !time) return '';
+    return `${day} ${month} ${time}`;
+}
+
 function renderMatchCard(round, matchIdx, match, side) {
+    const { day, month, time } = parseDateStr(match.date || '');
+    const dayOpts = '<option value="">--</option>' + Array.from({ length: 31 }, (_, i) => {
+        const d = String(i + 1);
+        return `<option value="${d}"${d === day ? ' selected' : ''}>${d}</option>`;
+    }).join('');
+    const monthOpts = '<option value="">--</option>' + MONTHS.map(m =>
+        `<option value="${m}"${m === month ? ' selected' : ''}>${m}</option>`
+    ).join('');
+    const timeOpts = '<option value="">--:--</option>' + [
+        '15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','03:00','04:00'
+    ].map(t => `<option value="${t}"${t === time ? ' selected' : ''}>${t}</option>`).join('');
+
     return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
         <div class="abt-team-row">
             <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
@@ -49,7 +79,11 @@ function renderMatchCard(round, matchIdx, match, side) {
             <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
             <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
         </div>
-        <input class="admin-bracket-date abt-date" data-round="${round}" data-match="${matchIdx}" value="${match.date || ''}" placeholder="t.ex. 21 juni 18:00" style="width:100%; font-size:11px; padding:3px 6px; border:1px solid #ddd; border-radius:4px; margin-top:3px; color:#666;">
+        <div class="abt-date-row" style="display:flex; gap:3px; margin-top:3px;">
+            <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
+            <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:1;">${monthOpts}</select>
+            <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
+        </div>
     </div>`;
 }
 
@@ -204,7 +238,7 @@ async function saveAdminBracket(rounds, matchCounts) {
             const t2 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value || '';
             const s1 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
             const s2 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
-            const dateVal = document.querySelector(`.admin-bracket-date[data-round="${round}"][data-match="${i}"]`)?.value || '';
+            const dateVal = buildDateStr(round, i);
             const match = { team1: t1, team2: t2, date: dateVal };
             if (s1 !== '' && s2 !== '' && s1 !== undefined && s2 !== undefined) {
                 match.score1 = parseInt(s1); match.score2 = parseInt(s2);
