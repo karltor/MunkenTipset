@@ -907,7 +907,8 @@ async function renderMatchManager() {
 
 export async function checkTipsLocked() {
     const snap = await getDoc(doc(db, "matches", "_settings"));
-    return snap.exists() && snap.data().tipsLocked === true;
+    const settings = snap.exists() ? snap.data() : {};
+    return { locked: settings.tipsLocked === true, settings };
 }
 
 // ─── DATA MIGRATION ─────────────────────────────────
