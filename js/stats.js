@@ -6,6 +6,10 @@ import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js
 
 export { DEFAULT_SCORING };
 
+export function invalidateStatsCache() {
+    try { localStorage.removeItem(STATS_CACHE_KEY); } catch { /* noop */ }
+}
+
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 // ── localStorage cache helpers ─────────────────────────────────────────────
