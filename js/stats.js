@@ -303,7 +303,7 @@ export async function loadCommunityStats() {
     const allUpcoming = [];
 
     // Unplayed group matches
-    allMatchDocs.forEach(m => {
+    matchDocs.forEach(m => {
         const hasResult = results[m.id] && results[m.id].homeScore !== undefined;
         if (!hasResult) {
             allUpcoming.push({
@@ -337,7 +337,7 @@ export async function loadCommunityStats() {
 
     // Tournament state detection
     const tournamentOver = bracket?.rounds?.Final?.some(m => m.winner) || false;
-    const allGroupsDone = allMatchDocs.length > 0 && allMatchDocs.every(m => results[m.id] && results[m.id].homeScore !== undefined);
+    const allGroupsDone = matchDocs.length > 0 && matchDocs.every(m => results[m.id] && results[m.id].homeScore !== undefined);
     const hasKnockoutScheduled = bracket?.rounds && Object.values(bracket.rounds).some(round => round?.some(m => m.team1 && m.team2));
 
     html += `<h3>Kommande matcher</h3>`;
