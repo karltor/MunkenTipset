@@ -1,7 +1,7 @@
 import { db } from './config.js';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { bumpDataVersion } from './admin.js';
+import { bumpDataVersion, allMatches, existingResults, currentAdminGroup, renderGroupButtons, renderAdminMatches } from './admin.js';
 import { getGroupStandings, renderAdminBracket } from './admin-bracket.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -28,7 +28,7 @@ function showToast(msg) {
     setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-export async function addFakeTeachers(allMatches) {
+export async function addFakeTeachers() {
     const statusEl = document.getElementById('admin-fake-status');
     statusEl.textContent = 'Skapar fejklärare...';
 
@@ -116,7 +116,7 @@ export async function removeFakeTeachers() {
     setTimeout(() => { statusEl.textContent = ''; }, 4000);
 }
 
-export async function autoFillGroupResults(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup) {
+export async function autoFillGroupResults() {
     const resultsSnap = await getDoc(doc(db, "matches", "_results"));
     const results = resultsSnap.exists() ? resultsSnap.data() : {};
 
@@ -141,7 +141,7 @@ export async function autoFillGroupResults(allMatches, existingResults, renderGr
     showToast(`${filled} gruppresultat autofyllda!`);
 }
 
-export async function clearGroupResults(existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup) {
+export async function clearGroupResults() {
     await setDoc(doc(db, "matches", "_results"), {});
     await bumpDataVersion();
     Object.keys(existingResults).forEach(k => delete existingResults[k]);
@@ -150,7 +150,7 @@ export async function clearGroupResults(existingResults, renderGroupButtons, ren
     showToast('Alla gruppresultat rensade!');
 }
 
-export async function autoFillKnockoutRound(targetRound, allMatches, existingResults) {
+export async function autoFillKnockoutRound(targetRound) {
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
     if (!bracket.rounds) bracket.rounds = {};
@@ -162,7 +162,7 @@ export async function autoFillKnockoutRound(targetRound, allMatches, existingRes
         if (!bracket.rounds.R32) bracket.rounds.R32 = [];
         const hasTeams = bracket.rounds.R32.some(m => m?.team1);
         if (!hasTeams) {
-            const standings = getGroupStandings(allMatches, existingResults);
+            const standings = getGroupStandings();
             const firsts = [], seconds = [], thirds = [];
             GROUP_LETTERS.forEach(letter => {
                 const s = standings[letter];
@@ -242,11 +242,11 @@ export async function autoFillKnockoutRound(targetRound, allMatches, existingRes
     bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
     await setDoc(doc(db, "matches", "_bracket"), bracket);
     await bumpDataVersion();
-    await renderAdminBracket(allMatches, existingResults);
+    await renderAdminBracket();
     showToast(`${targetRound}: ${filled} matcher autofyllda!`);
 }
 
-export async function clearKnockoutResults(allMatches, existingResults) {
+export async function clearKnockoutResults() {
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
 
@@ -263,18 +263,18 @@ export async function clearKnockoutResults(allMatches, existingResults) {
 
     await setDoc(doc(db, "matches", "_bracket"), bracket);
     await bumpDataVersion();
-    await renderAdminBracket(allMatches, existingResults);
+    await renderAdminBracket();
     showToast('Slutspelsresultat rensade!');
 }
 
-export async function clearKnockoutTeams(allMatches, existingResults) {
+export async function clearKnockoutTeams() {
     await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
     await bumpDataVersion();
-    await renderAdminBracket(allMatches, existingResults);
+    await renderAdminBracket();
     showToast('Hela bracketen rensad!');
 }
 
-export async function renderMatchManager(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup) {
+export async function renderMatchManager() {
     const container = document.getElementById('admin-match-manager');
     container.innerHTML = '<p style="color:#999;">Laddar matcher...</p>';
 
@@ -334,7 +334,7 @@ export async function renderMatchManager(allMatches, existingResults, renderGrou
             if (idx !== -1) allMatches.splice(idx, 1);
 
             showToast(`Match "${matchId}" borttagen!`);
-            renderMatchManager(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup);
+            renderMatchManager();
             renderGroupButtons();
             renderAdminMatches(currentAdminGroup);
         });

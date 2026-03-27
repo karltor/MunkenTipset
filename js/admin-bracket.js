@@ -1,11 +1,11 @@
 import { db } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { bumpDataVersion } from './admin.js';
+import { bumpDataVersion, allMatches, existingResults } from './admin.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
-export function getGroupStandings(allMatches, existingResults) {
+export function getGroupStandings() {
     const standings = {};
     GROUP_LETTERS.forEach(letter => {
         const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
@@ -29,7 +29,7 @@ export function getGroupStandings(allMatches, existingResults) {
     return standings;
 }
 
-function getAllTeamsForAutocomplete(allMatches) {
+function getAllTeamsForAutocomplete() {
     const teams = new Set();
     allMatches.forEach(m => {
         if (!m.stage || !m.stage.startsWith('Grupp ')) return;
@@ -53,14 +53,14 @@ function renderMatchCard(round, matchIdx, match, side) {
     </div>`;
 }
 
-export async function renderAdminBracket(allMatches, existingResults) {
+export async function renderAdminBracket() {
     const container = document.getElementById('admin-bracket');
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
     const rd = bracket.rounds || {};
 
-    const standings = getGroupStandings(allMatches, existingResults);
-    const allTeams = getAllTeamsForAutocomplete(allMatches);
+    const standings = getGroupStandings();
+    const allTeams = getAllTeamsForAutocomplete();
 
     let html = '';
     const hasStandings = Object.keys(standings).length > 0;
