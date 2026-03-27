@@ -93,9 +93,11 @@ function loadRound(roundIndex) {
         teamsForRound = prev.map(name => ({ name, seed: '', group: '' }));
     }
 
+    // Pre-select previously saved picks, but only if they're still available in this round
+    const availableNames = new Set(teamsForRound.map(t => t.name));
     if (knockoutData[roundKey]) {
         const picks = roundKey === 'final' ? [knockoutData[roundKey]] : knockoutData[roundKey];
-        picks.forEach(t => selectedTeams.add(t));
+        picks.forEach(t => { if (availableNames.has(t)) selectedTeams.add(t); });
     }
 
     document.getElementById('bracket-round-info').innerHTML =
@@ -189,8 +191,16 @@ async function saveBracketRound() {
     const roundKey = ROUNDS[currentRound];
     const userId = auth.currentUser.uid;
 
-    if (roundKey === 'final') knockoutData.final = Array.from(selectedTeams)[0];
-    else knockoutData[roundKey] = Array.from(selectedTeams);
+    if (roundKey === 'final') {
+        knockoutData.final = Array.from(selectedTeams)[0];
+    } else {
+        knockoutData[roundKey] = Array.from(selectedTeams);
+        // Clear all subsequent rounds — picks are now invalid since the pool changed
+        const thisIdx = ROUNDS.indexOf(roundKey);
+        for (let i = thisIdx + 1; i < ROUNDS.length; i++) {
+            delete knockoutData[ROUNDS[i]];
+        }
+    }
 
     await updateDoc(doc(db, "users", userId), { knockout: knockoutData });
 
