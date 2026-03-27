@@ -6,9 +6,9 @@ import { renderAdminBracket } from './admin-bracket.js';
 import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-let allMatches = [];
-let currentAdminGroup = 'A';
-let existingResults = {};
+export let allMatches = [];
+export let currentAdminGroup = 'A';
+export let existingResults = {};
 let initDone = false;
 
 // Bump dataVersion in _settings so clients know to invalidate their stats cache
@@ -32,8 +32,8 @@ export async function initAdmin(matchesData) {
     renderAdminMatches(currentAdminGroup);
     renderTeamRenames();
     renderScoringConfig();
-    renderAdminBracket(allMatches, existingResults);
-    renderMatchManager(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup);
+    renderAdminBracket();
+    renderMatchManager();
 
     if (!initDone) {
         document.getElementById('admin-lock-tips').addEventListener('click', () => toggleLock(true));
@@ -41,22 +41,22 @@ export async function initAdmin(matchesData) {
         document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
         document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
         // Test tools
-        document.getElementById('admin-add-fake-teachers').addEventListener('click', () => addFakeTeachers(allMatches));
+        document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
         document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);
-        document.getElementById('admin-autofill-group-results').addEventListener('click', () => autoFillGroupResults(allMatches, existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup));
-        document.getElementById('admin-clear-group-results').addEventListener('click', () => clearGroupResults(existingResults, renderGroupButtons, renderAdminMatches, currentAdminGroup));
-        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32', allMatches, existingResults));
-        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16', allMatches, existingResults));
-        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF', allMatches, existingResults));
-        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF', allMatches, existingResults));
-        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final', allMatches, existingResults));
-        document.getElementById('admin-clear-ko-results').addEventListener('click', () => clearKnockoutResults(allMatches, existingResults));
-        document.getElementById('admin-clear-ko-teams').addEventListener('click', () => clearKnockoutTeams(allMatches, existingResults));
+        document.getElementById('admin-autofill-group-results').addEventListener('click', autoFillGroupResults);
+        document.getElementById('admin-clear-group-results').addEventListener('click', clearGroupResults);
+        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32'));
+        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16'));
+        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF'));
+        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF'));
+        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final'));
+        document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
+        document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
         initDone = true;
     }
 }
 
-function renderGroupButtons() {
+export function renderGroupButtons() {
     const groupSelect = document.getElementById('admin-group-select');
     groupSelect.innerHTML = '';
     const now = Date.now();
@@ -122,7 +122,7 @@ async function toggleTipsVisible() {
     btn.style.background = !current ? '#28a745' : '#6c757d';
 }
 
-function renderAdminMatches(letter) {
+export function renderAdminMatches(letter) {
     const container = document.getElementById('admin-matches');
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`).sort((a, b) => a.id - b.id);
     if (groupMatches.length === 0) { container.innerHTML = '<p>Inga matcher i denna grupp.</p>'; return; }
@@ -174,7 +174,7 @@ async function saveAdminResults() {
 }
 
 function renderTeamRenames() {
-    const container = document.getElementById('admin-team-renames');
+    const container = document.getElementById('admin-team-rename');
     const teams = new Set();
     allMatches.forEach(m => {
         if (m.homeTeam) teams.add(m.homeTeam);
@@ -243,7 +243,7 @@ async function renderScoringConfig() {
     const settings = snap.exists() ? snap.data() : {};
     const scoring = { ...DEFAULT_SCORING, ...(settings.scoring || {}) };
 
-    const container = document.getElementById('admin-scoring-config');
+    const container = document.getElementById('admin-scoring');
     const labels = {
         matchResult: 'Rätt 1X2', matchHomeGoals: 'Rätt hemmalag mål',
         matchAwayGoals: 'Rätt bortalag mål', exactScore: 'Bonus exakt resultat',

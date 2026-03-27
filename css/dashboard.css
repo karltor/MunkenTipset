@@ -189,11 +189,14 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     padding-right: calc(50vw - 50% + 1.5rem);
 }
 
-/* Admin match cards */
-.admin-match-card { background: white; padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; border: 1px solid #eee; }
-.admin-match-card.completed { opacity: 0.6; }
-.admin-match-card .score-input { width: 36px; height: 30px; font-size: 14px; }
-.admin-match-card .match-date { font-size: 10px; color: #999; min-width: 55px; }
+/* Admin match rows */
+.admin-match-row { background: white; padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; font-size: 13px; border: 1px solid #eee; flex-wrap: wrap; }
+.admin-match-row.done { opacity: 0.55; }
+.admin-match-row.overdue { border-color: #dc3545; background: #fff5f5; }
+.admin-match-label { font-size: 11px; color: #999; min-width: 100px; }
+.admin-match-teams { font-weight: 600; white-space: nowrap; }
+.admin-score { width: 50px; height: 32px; font-size: 15px; text-align: center; border: 1px solid #ddd; border-radius: 4px; }
+.admin-sep { color: #999; font-weight: 700; }
 .admin-group-btn { padding: 4px 10px; border: 2px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-weight: 600; font-size: 12px; }
 .admin-group-btn.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 .admin-group-btn.overdue { border-color: #dc3545; color: #dc3545; animation: overdueGlow 2s ease infinite; }
