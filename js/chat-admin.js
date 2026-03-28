@@ -109,14 +109,16 @@ export function initChatAdmin() {
 
 export function toggleChatAdminPanel() {
     const panel = document.getElementById('chat-admin-panel');
+    const btn = document.getElementById('chat-admin-btn'); // Lade till hämtning av knappen
     const isVisible = panel.style.display !== 'none';
 
     if (isVisible) {
         panel.style.display = 'none';
+        if(btn) btn.textContent = '🛡 Öppna moderering'; // Ändrar text tillbaka när den stängs
         setAdminMode(false);
     } else {
         panel.style.display = 'block';
-        btn.textContent = '🛡 Stäng moderering';
+        if(btn) btn.textContent = '🛡 Stäng moderering';
         setAdminMode(true);
         initChatAdmin();
     }
