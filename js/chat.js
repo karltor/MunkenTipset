@@ -225,11 +225,13 @@ function renderMessages() {
             : `<span class="chat-msg-name">${displayName}</span>`;
 
         html += `<div class="${classes.join(' ')}" data-msg-id="${m.id}">
-            <span class="chat-msg-time">${time}</span>
-            ${nameHtml}
+            <div class="chat-msg-header">
+                <span class="chat-msg-time">${time}</span>
+                ${nameHtml}
+                ${badges ? `<span class="chat-msg-tips">${badges}</span>` : ''}
+                ${adminX}
+            </div>
             <span class="chat-msg-text">${escapeHtml(m.text)}</span>
-            ${badges ? `<span class="chat-msg-tips">${badges}</span>` : ''}
-            ${adminX}
         </div>`;
     });
 
