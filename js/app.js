@@ -8,6 +8,8 @@ import { initAdmin, checkTipsLocked } from './admin.js';
 import { loadResults } from './results.js';
 import { applyStoredTheme } from './admin-theme.js';
 import { loadEmailPref, showEmailPrefPopup, initSettingsTab } from './user-settings.js';
+import { initChat, destroyChat, setChatAdmin } from './chat.js';
+import { toggleChatAdminPanel } from './chat-admin.js';
 
 // Apply saved theme immediately before anything renders
 applyStoredTheme();
@@ -32,9 +34,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         e.target.classList.add('active');
         document.getElementById(target).classList.add('active');
 
+        // Destroy chat listener when leaving chat tab (saves reads)
+        destroyChat();
+
         if (target === 'bracket-tab') initBracket(getGroupPicks(), globalTipsLocked);
         if (target === 'results-tab') loadResults(allMatchesData);
         if (target === 'start-tab') loadCommunityStats();
+        if (target === 'chat-tab') initChat();
     });
 });
 
@@ -43,6 +49,7 @@ document.getElementById('admin-btn').addEventListener('click', () => {
     const adminTab = document.getElementById('admin-tab');
     const isShown = adminTab.classList.contains('active');
 
+    destroyChat();
     document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
 
     if (isShown) {
@@ -60,6 +67,7 @@ document.getElementById('settings-btn').addEventListener('click', () => {
     const settingsTab = document.getElementById('settings-tab');
     const isShown = settingsTab.classList.contains('active');
 
+    destroyChat();
     document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
 
     if (isShown) {
@@ -85,8 +93,10 @@ onAuthStateChanged(auth, async (user) => {
 
     // Admin check
     isAdmin = ADMINS.includes(email);
+    setChatAdmin(isAdmin);
     if (isAdmin) {
         document.getElementById('admin-btn').style.display = 'inline-block';
+        document.getElementById('chat-admin-btn').addEventListener('click', () => toggleChatAdminPanel());
     }
 
     // Check lock status + get settings (1 read — reused by loadCommunityStats)

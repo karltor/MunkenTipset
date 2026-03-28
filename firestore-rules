@@ -12,7 +12,8 @@ service cloud.firestore {
     function isValidUser() {
       return request.auth != null &&
         request.auth.token.email.matches('.*@nyamunken[.]se') &&
-        !request.auth.token.email.matches('qq.*');
+        !request.auth.token.email.matches('qq.*') &&
+        !request.auth.token.email.matches('.*[0-9]{3}.*@.*');
     }
 
     // Officiella matcher + admin-inställningar (Karl & Jonas får skriva)
@@ -33,6 +34,12 @@ service cloud.firestore {
     match /users/{userId}/tips/{tipId} {
       allow read: if isValidUser();
       allow write: if (isValidUser() && request.auth.uid == userId) || isAdmin();
+    }
+
+    // Livechatt — alla kan läsa, alla kan skriva meddelanden, bara admins kan skriva _meta
+    match /chat/{docId} {
+      allow read: if isValidUser();
+      allow write: if docId == '_meta' ? isAdmin() : isValidUser();
     }
 
   }
