@@ -109,16 +109,17 @@ export function initChatAdmin() {
 
 export function toggleChatAdminPanel() {
     const panel = document.getElementById('chat-admin-panel');
-    const btn = document.getElementById('chat-admin-btn');
     const isVisible = panel.style.display !== 'none';
 
     if (isVisible) {
         panel.style.display = 'none';
-        btn.textContent = '🛡 Moderering';
         setAdminMode(false);
     } else {
         panel.style.display = 'block';
+ claude/fix-background-image-KM2uX
+
         btn.textContent = '🛡 Stäng moderering';
+ main
         setAdminMode(true);
         initChatAdmin();
     }
