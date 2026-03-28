@@ -899,16 +899,11 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 /* Mobile chat */
 @media (max-width: 768px) {
     .chat-layout {
-        display: flex !important;
-        flex-direction: column !important;
+        display: block !important;
         grid-template-columns: unset !important;
-        height: calc(100dvh - 90px);
-        gap: 0;
-        overflow: hidden;
     }
     .chat-main {
-        flex: 1 1 0;
-        min-height: 0;
+        height: calc(100dvh - 90px);
         border-radius: 0;
         display: flex;
         flex-direction: column;
@@ -920,13 +915,11 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
         padding: 6px 8px;
     }
     .chat-sidebar {
-        order: 2 !important;
         flex-direction: row;
         overflow-x: auto;
         overflow-y: hidden;
         gap: 8px;
         padding: 10px 0 4px;
-        flex-shrink: 0;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
     }
