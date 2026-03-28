@@ -7,6 +7,28 @@ body { font-family: var(--font-body); margin: 0; background-color: var(--color-p
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-logout { background-color: var(--color-btn-danger); }
 .btn-admin-toggle { background-color: var(--color-btn-warning); color: #000; margin-left: 10px; }
+.btn-settings { background: transparent; color: var(--color-navbar-text); border: none; font-size: 18px; padding: 4px 8px; cursor: pointer; }
+
+/* ── Mobile: compact navbar ── */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 8px 12px;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .logo-text { font-size: 1.2rem; }
+    .navbar > div {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .navbar #user-name { font-size: 12px; margin-right: 0 !important; }
+    .navbar .btn { padding: 5px 10px; font-size: 11px; }
+    .navbar .btn-settings { font-size: 16px; padding: 2px 6px; }
+    .container { margin: 0.5rem auto; padding: 0 8px; }
+    .tabs { gap: 4px; margin-bottom: 10px; padding-bottom: 8px; }
+    .tab-btn { padding: 7px 10px; font-size: 12px; }
+}
 
 /* Tabs */
 .tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
@@ -872,22 +894,29 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .chat-date-sep::before { left: 5%; }
 .chat-date-sep::after { right: 5%; }
 
-/* Mobile */
+/* Mobile chat */
 @media (max-width: 768px) {
     .chat-layout {
-        display: flex;
-        flex-direction: column;
-        height: calc(100vh - 140px);
+        display: flex !important;
+        flex-direction: column !important;
+        grid-template-columns: unset !important;
+        height: calc(100dvh - 110px);
         gap: 0;
     }
-    .chat-main { flex: 1; min-height: 0; border-radius: 10px; }
+    .chat-main {
+        flex: 1;
+        min-height: 0;
+        border-radius: 10px;
+        order: 0;
+    }
     .chat-sidebar {
-        order: 1;
+        order: 2 !important;
         flex-direction: row;
         overflow-x: auto;
         overflow-y: hidden;
         gap: 8px;
         padding: 10px 0 4px;
+        flex-shrink: 0;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
     }
@@ -925,7 +954,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     .chat-messages { padding: 8px 10px; }
     .chat-date-sep { font-size: 12px; }
 
-    /* Admin panel responsive */
+    /* Admin */
+    .chat-admin-toggle { font-size: 12px; padding: 6px 12px; }
     .chat-admin-add-row { flex-wrap: wrap; }
     .chat-admin-add-row select { min-width: 100%; }
 }
