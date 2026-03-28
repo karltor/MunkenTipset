@@ -877,7 +877,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     .chat-layout {
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr;
-        height: 80vh;
+        height: calc(100vh - 160px);
+        gap: 8px;
     }
     .chat-sidebar {
         order: -1;
@@ -885,8 +886,49 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
         overflow-x: auto;
         overflow-y: hidden;
         gap: 8px;
-        padding-bottom: 4px;
+        padding: 0 0 6px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
     }
+    .chat-sidebar::-webkit-scrollbar { display: none; }
     .chat-sidebar-title { display: none; }
-    .chat-match-card { min-width: 200px; flex: 0 0 auto; }
+    .chat-match-card {
+        min-width: 160px;
+        max-width: 180px;
+        flex: 0 0 auto;
+        padding: 8px 10px;
+    }
+    .chat-match-teams { font-size: 11px; }
+    .chat-match-stage { font-size: 9px; }
+    .chat-tip-bar-labels { font-size: 8px; }
+
+    /* Messages: compact layout */
+    .chat-msg {
+        flex-wrap: wrap;
+        gap: 4px 6px;
+        padding: 4px 6px;
+        font-size: 13px;
+    }
+    .chat-msg-time { font-size: 10px; min-width: 32px; }
+    .chat-msg-name { font-size: 13px; }
+    .chat-msg-text { flex-basis: 100%; order: 1; padding-left: 38px; font-size: 13px; }
+    .chat-msg-tips {
+        order: 2;
+        flex-basis: 100%;
+        padding-left: 38px;
+        flex-wrap: wrap;
+    }
+    .chat-tip-badge { font-size: 9px; padding: 1px 3px; }
+    .chat-tip-badge img { width: 12px; height: 9px; }
+
+    /* Input */
+    .chat-input-row { padding: 8px; gap: 6px; }
+    .chat-input { padding: 8px 10px; font-size: 14px; }
+    .chat-send-btn { padding: 8px 14px; font-size: 13px; }
+
+    .chat-messages { padding: 8px; }
+
+    /* Admin panel responsive */
+    .chat-admin-add-row { flex-wrap: wrap; }
+    .chat-admin-add-row select { min-width: 100%; }
 }
