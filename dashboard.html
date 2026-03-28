@@ -69,6 +69,7 @@
             <button class="tab-btn" data-target="wizard-tab" style="border-color: #28a745; color: #1a1a1a;">🎯 Tippa Gruppspel</button>
             <button class="tab-btn" data-target="bracket-tab" id="bracket-tab-btn" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
             <button class="tab-btn" data-target="results-tab">Matchresultat</button>
+            <button class="tab-btn" data-target="chat-tab" style="border-color: #17a2b8; color: #1a1a1a;">💬 Chatt</button>
         </div>
 
         <!-- START TAB -->
@@ -151,6 +152,28 @@
             </div>
             <div id="results-groups" class="results-sub-content active"></div>
             <div id="results-knockout" class="results-sub-content"></div>
+        </div>
+
+        <!-- CHAT TAB -->
+        <div id="chat-tab" class="tab-content">
+            <div class="chat-layout">
+                <div class="chat-main">
+                    <div class="chat-messages" id="chat-messages">
+                        <p class="chat-empty">Laddar chatt...</p>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" id="chat-input" class="chat-input" placeholder="Skriv ett meddelande..." maxlength="500" autocomplete="off">
+                        <button id="chat-send" class="btn chat-send-btn">Skicka</button>
+                    </div>
+                    <div id="chat-muted-notice" class="chat-muted-notice" style="display:none;">Du kan inte skriva i chatten just nu.</div>
+                </div>
+                <div class="chat-sidebar" id="chat-sidebar">
+                    <h4 class="chat-sidebar-title">Matcher</h4>
+                    <div id="chat-match-cards"></div>
+                </div>
+            </div>
+            <button id="chat-admin-btn" class="btn chat-admin-toggle" style="display:none;">🛡 Moderering</button>
+            <div id="chat-admin-panel" class="chat-admin-panel" style="display:none;"></div>
         </div>
 
         <!-- SETTINGS TAB -->

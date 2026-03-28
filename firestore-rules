@@ -36,5 +36,11 @@ service cloud.firestore {
       allow write: if (isValidUser() && request.auth.uid == userId) || isAdmin();
     }
 
+    // Livechatt — alla kan läsa, alla kan skriva meddelanden, bara admins kan skriva _meta
+    match /chat/{docId} {
+      allow read: if isValidUser();
+      allow write: if docId == '_meta' ? isAdmin() : isValidUser();
+    }
+
   }
 }
