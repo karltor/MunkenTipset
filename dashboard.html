@@ -181,25 +181,49 @@
             <div id="admin-email" class="admin-sub-content">
                 <div class="admin-card">
                     <h3 style="margin-top:0;">Generera mejlutkast</h3>
-                    <p style="color:#666; font-size:13px; margin:0 0 16px;">Skapa ett snyggt formaterat mejlutkast med senaste resultat, leaderboard och spännande händelser att skicka till kollegorna.</p>
-                    <div class="admin-top-grid">
-                        <div class="admin-section">
-                            <h4 style="margin:0 0 10px; font-size:14px;">Inkludera i mejlet:</h4>
-                            <label class="admin-email-option"><input type="checkbox" id="email-opt-leaderboard" checked> Leaderboard (topp 10)</label>
-                            <label class="admin-email-option"><input type="checkbox" id="email-opt-results" checked> Senaste matchresultat</label>
-                            <label class="admin-email-option"><input type="checkbox" id="email-opt-highlights" checked> Höjdpunkter (exakta tips, serier)</label>
-                            <label class="admin-email-option"><input type="checkbox" id="email-opt-upcoming" checked> Kommande matcher</label>
-                            <label class="admin-email-option"><input type="checkbox" id="email-opt-champion" checked> VM-mästare-tippningar</label>
-                        </div>
-                        <div class="admin-section">
-                            <h4 style="margin:0 0 10px; font-size:14px;">Sedan senast:</h4>
-                            <p style="font-size:12px; color:#888; margin:0 0 8px;" id="email-last-generated">Aldrig genererat</p>
-                            <label style="font-size:13px; display:block; margin-bottom:6px;">Eller välj datum:</label>
-                            <input type="date" id="email-since-date" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; width:100%;">
-                            <button class="btn" id="email-reset-since" style="margin-top:8px; background:#6c757d; font-size:12px; width:100%;">Visa allt (ingen datumfiltrering)</button>
+                    <p style="color:#666; font-size:13px; margin:0 0 16px;">Skapa ett snyggt formaterat mejlutkast att skicka till kollegorna. Välj exakt vad som ska inkluderas.</p>
+
+                    <div class="admin-section" style="margin-bottom:12px;">
+                        <h4 style="margin:0 0 8px; font-size:14px;">Datumfilter</h4>
+                        <p style="font-size:12px; color:#888; margin:0 0 6px;" id="email-last-generated">Aldrig genererat</p>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label style="font-size:13px;">Visa resultat sedan:</label>
+                            <input type="date" id="email-since-date" style="padding:5px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+                            <button class="btn" id="email-reset-since" style="background:#6c757d; font-size:12px;">Visa allt</button>
                         </div>
                     </div>
-                    <button class="btn" id="admin-generate-email" style="margin-top:16px; width:100%; background:#ffc107; color:#000; font-size:15px; padding:12px;">Generera mejlutkast</button>
+
+                    <div class="admin-top-grid" style="margin-bottom:12px;">
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-leaderboard" checked> <strong>Leaderboard</strong></label>
+                            <div class="email-sub-option">Antal platser: <input type="number" id="email-opt-lb-count" value="10" min="3" max="50" style="width:50px; padding:3px; border:1px solid #ddd; border-radius:4px; text-align:center;"></div>
+                        </div>
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-results" checked> <strong>Senaste matchresultat</strong></label>
+                            <div class="email-sub-option">Max antal: <input type="number" id="email-opt-results-count" value="10" min="1" max="100" style="width:50px; padding:3px; border:1px solid #ddd; border-radius:4px; text-align:center;"></div>
+                        </div>
+                    </div>
+                    <div class="admin-top-grid" style="margin-bottom:12px;">
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-upcoming" checked> <strong>Kommande matcher</strong></label>
+                            <div class="email-sub-option">Antal: <input type="number" id="email-opt-upcoming-count" value="6" min="1" max="20" style="width:50px; padding:3px; border:1px solid #ddd; border-radius:4px; text-align:center;"></div>
+                        </div>
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-champion" checked> <strong>VM-mästare-tippningar</strong></label>
+                        </div>
+                    </div>
+                    <div class="admin-top-grid" style="margin-bottom:12px;">
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-highlights" checked> <strong>Höjdpunkter</strong></label>
+                            <p style="font-size:11px; color:#888; margin:4px 0 0;">Gruppöverraskningar, perfekta slutspelsomgångar, målkalas</p>
+                        </div>
+                        <div class="admin-section">
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-kuriosa" checked> <strong>Kuriosa</strong></label>
+                            <p style="font-size:11px; color:#888; margin:4px 0 0;">Bäst på 1X2, flest exakta resultat, landskoll</p>
+                        </div>
+                    </div>
+
+                    <button class="btn" id="admin-generate-email" style="margin-top:8px; width:100%; background:#ffc107; color:#000; font-size:15px; padding:12px;">Generera mejlutkast</button>
                 </div>
                 <div id="admin-email-output" style="display:none; margin-top:16px;">
                     <div class="admin-card" style="position:relative;">
