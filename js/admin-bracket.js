@@ -39,7 +39,7 @@ function getAllTeamsForAutocomplete() {
     return Array.from(teams).sort();
 }
 
-const MONTHS = ['juni', 'juli', 'augusti'];
+const MONTHS = ['juni', 'juli'];
 
 function parseDateStr(dateStr) {
     if (!dateStr) return { day: '', month: '', time: '' };
@@ -52,7 +52,9 @@ function buildDateStr(round, matchIdx) {
     const prefix = `[data-round="${round}"][data-match="${matchIdx}"]`;
     const day = document.querySelector(`.abt-date-day${prefix}`)?.value || '';
     const month = document.querySelector(`.abt-date-month${prefix}`)?.value || '';
-    const time = document.querySelector(`.abt-date-time${prefix}`)?.value || '';
+    const timeSelect = document.querySelector(`.abt-date-time${prefix}`)?.value || '';
+    const timeCustom = document.querySelector(`.abt-date-time-custom${prefix}`)?.value || '';
+    const time = timeSelect === 'custom' ? timeCustom : timeSelect;
     if (!day || !month || !time) return '';
     return `${day} ${month} ${time}`;
 }
@@ -66,9 +68,11 @@ function renderMatchCard(round, matchIdx, match, side) {
     const monthOpts = '<option value="">--</option>' + MONTHS.map(m =>
         `<option value="${m}"${m === month ? ' selected' : ''}>${m}</option>`
     ).join('');
-    const timeOpts = '<option value="">--:--</option>' + [
-        '15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','03:00','04:00'
-    ].map(t => `<option value="${t}"${t === time ? ' selected' : ''}>${t}</option>`).join('');
+    const standardTimes = ['15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','03:00','04:00'];
+    const isCustomTime = time && !standardTimes.includes(time);
+    const timeOpts = '<option value="">--:--</option>' + standardTimes
+        .map(t => `<option value="${t}"${t === time ? ' selected' : ''}>${t}</option>`).join('')
+        + `<option value="custom"${isCustomTime ? ' selected' : ''}>Annan…</option>`;
 
     return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
         <div class="abt-team-row">
@@ -83,6 +87,7 @@ function renderMatchCard(round, matchIdx, match, side) {
             <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
             <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:1;">${monthOpts}</select>
             <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
+            <input type="text" class="abt-date-time-custom" data-round="${round}" data-match="${matchIdx}" placeholder="HH:MM" value="${isCustomTime ? time : ''}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 50px; display:${isCustomTime ? 'block' : 'none'};">
         </div>
     </div>`;
 }
@@ -100,15 +105,7 @@ export async function renderAdminBracket() {
     const hasStandings = Object.keys(standings).length > 0;
     if (hasStandings) {
         html += `<div style="margin-bottom:15px;">`;
-        html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Kvalificerade lag från gruppspelet</h4>`;
-        html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px; font-size:12px; margin-bottom:10px;">`;
-        GROUP_LETTERS.forEach(letter => {
-            const s = standings[letter];
-            if (!s || s.length < 2) return;
-            html += `<div><strong>Grupp ${letter}:</strong> ${f(s[0].name)}${s[0].name} · ${f(s[1].name)}${s[1].name}</div>`;
-        });
-        html += `</div>`;
-        html += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8; margin-bottom:10px;">Autofyll R32 från gruppresultat</button>`;
+        html += `<button class="btn" id="admin-autofill-r32" style="background:#17a2b8;">Autofyll R32 från gruppresultat</button>`;
         html += `</div>`;
     }
 
@@ -184,6 +181,18 @@ export async function renderAdminBracket() {
     document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
     container.querySelectorAll('.abt-score').forEach(input => {
         input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
+    });
+
+    // Toggle custom time input when "Annan…" is selected
+    container.querySelectorAll('.abt-date-time').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const r = sel.dataset.round, m = sel.dataset.match;
+            const customInput = container.querySelector(`.abt-date-time-custom[data-round="${r}"][data-match="${m}"]`);
+            if (customInput) {
+                customInput.style.display = sel.value === 'custom' ? 'block' : 'none';
+                if (sel.value === 'custom') customInput.focus();
+            }
+        });
     });
 }
 
