@@ -12,7 +12,7 @@ let adminMode = false;       // admin moderation mode active
 let msgs = [];               // current messages array
 let initialized = false;
 let replyingToMsg = null;    // state for active reply
-const TRIM_THRESHOLD = 5000; // trim array when it exceeds this
+const TRIM_THRESHOLD = 2000; // trim array when it exceeds this
 
 /* ── public api ────────────────────────────────────── */
 
@@ -140,7 +140,7 @@ function renderReplyPreview() {
 
     if (replyingToMsg) {
         const name = resolveName(replyingToMsg);
-        const snippet = truncateWords(replyingToMsg.text, 3);
+        const snippet = truncateWords(replyingToMsg.text, 8);
         previewEl.innerHTML = `<span style="color:#555;">Svarar <b>${escapeHtml(name)}</b>: <i>"${escapeHtml(snippet)}"</i></span> <button id="cancel-reply-btn" title="Avbryt svar" style="background:none;border:none;cursor:pointer;font-weight:bold;font-size:16px;color:#888;">&times;</button>`;
         previewEl.style.display = 'flex';
         
@@ -217,7 +217,7 @@ async function sendMessage() {
             const currentMsgs = snap.data().msgs || [];
             if (currentMsgs.length > TRIM_THRESHOLD) {
                 // Trim old messages to keep document size manageable
-                const trimmed = currentMsgs.slice(-3000);
+                const trimmed = currentMsgs.slice(-500);
                 trimmed.push(msg);
                 await setDoc(msgRef, { msgs: trimmed });
             } else {
