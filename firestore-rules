@@ -12,7 +12,8 @@ service cloud.firestore {
     function isValidUser() {
       return request.auth != null &&
         request.auth.token.email.matches('.*@nyamunken[.]se') &&
-        !request.auth.token.email.matches('qq.*');
+        !request.auth.token.email.matches('qq.*') &&
+        !request.auth.token.email.matches('.*[0-9]{3}.*@.*');
     }
 
     // Officiella matcher + admin-inställningar (Karl & Jonas får skriva)
