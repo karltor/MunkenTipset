@@ -11,6 +11,7 @@ let isAdmin = false;
 let adminMode = false;       // admin moderation mode active
 let msgs = [];               // current messages array
 let initialized = false;
+let replyingToMsg = null;    // state for active reply
 const TRIM_THRESHOLD = 5000; // trim array when it exceeds this
 
 /* ── public api ────────────────────────────────────── */
@@ -19,6 +20,20 @@ export function setChatAdmin(val) { isAdmin = val; }
 
 export async function initChat() {
     if (unsubMessages) return; // already listening
+
+    // Inject dynamic CSS for the highlight animation if it doesn't exist
+    if (!document.getElementById('chat-dynamic-styles')) {
+        const style = document.createElement('style');
+        style.id = 'chat-dynamic-styles';
+        style.innerHTML = `
+            .chat-msg-highlight { animation: chatHighlight 2s ease-out; }
+            @keyframes chatHighlight {
+                0% { background-color: rgba(255, 193, 7, 0.4); }
+                100% { background-color: transparent; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
 
     const container = document.getElementById('chat-messages');
     container.innerHTML = '<p class="chat-empty">Laddar chatt...</p>';
@@ -69,6 +84,8 @@ export function destroyChat() {
         unsubMessages = null;
     }
     adminMode = false;
+    replyingToMsg = null;
+    renderReplyPreview();
 }
 
 export function setAdminMode(val) {
@@ -102,6 +119,58 @@ function updateMuteState() {
     if (notice) notice.style.display = muted ? 'block' : 'none';
 }
 
+function truncateWords(str, num) {
+    const words = str.split(/\s+/);
+    if (words.length <= num) return str;
+    return words.slice(0, num).join(' ') + '...';
+}
+
+function renderReplyPreview() {
+    let previewEl = document.getElementById('chat-reply-preview-bar');
+    
+    // Create the preview bar element if it doesn't exist
+    if (!previewEl) {
+        const inputRow = document.querySelector('.chat-input-row');
+        previewEl = document.createElement('div');
+        previewEl.id = 'chat-reply-preview-bar';
+        // Add styling for the preview bar directly here so you don't need CSS changes
+        previewEl.style.cssText = 'display: none; background: #f1f3f5; padding: 6px 12px; font-size: 12px; border-radius: 6px 6px 0 0; border-bottom: 1px solid #ddd; justify-content: space-between; align-items: center; margin-bottom: -1px;';
+        inputRow.parentNode.insertBefore(previewEl, inputRow);
+    }
+
+    if (replyingToMsg) {
+        const name = resolveName(replyingToMsg);
+        const snippet = truncateWords(replyingToMsg.text, 3);
+        previewEl.innerHTML = `<span style="color:#555;">Svarar <b>${escapeHtml(name)}</b>: <i>"${escapeHtml(snippet)}"</i></span> <button id="cancel-reply-btn" title="Avbryt svar" style="background:none;border:none;cursor:pointer;font-weight:bold;font-size:16px;color:#888;">&times;</button>`;
+        previewEl.style.display = 'flex';
+        
+        document.getElementById('cancel-reply-btn').onclick = () => {
+            replyingToMsg = null;
+            renderReplyPreview();
+        };
+    } else {
+        previewEl.style.display = 'none';
+    }
+}
+
+function initiateReply(msg) {
+    replyingToMsg = msg;
+    renderReplyPreview();
+    document.getElementById('chat-input').focus();
+}
+
+function scrollToMessage(id) {
+    const container = document.getElementById('chat-messages');
+    const el = container.querySelector(`[data-msg-id="${id}"]`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Add highlight class (animation defined in initChat)
+        el.classList.add('chat-msg-highlight');
+        // Remove class after animation finishes so it can be re-triggered later
+        setTimeout(() => el.classList.remove('chat-msg-highlight'), 2000);
+    }
+}
+
 async function sendMessage() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
@@ -123,6 +192,17 @@ async function sendMessage() {
         text,
         ts: Date.now()
     };
+
+    // Append reply metadata if active
+    if (replyingToMsg) {
+        msg.replyToId = replyingToMsg.id;
+        msg.replyToName = resolveName(replyingToMsg);
+        msg.replyToText = truncateWords(replyingToMsg.text, 3);
+        
+        // Reset state after capturing
+        replyingToMsg = null;
+        renderReplyPreview();
+    }
 
     input.value = '';
     input.focus();
@@ -161,7 +241,7 @@ function renderMessages() {
     });
 
     if (visible.length === 0) {
-        container.innerHTML = '<p class="chat-empty">Inga meddelanden i chatten. Var forst att skriva!</p>';
+        container.innerHTML = '<p class="chat-empty">Inga meddelanden i chatten. Var först att skriva!</p>';
         return;
     }
 
@@ -191,7 +271,7 @@ function renderMessages() {
 
         // Date separator
         if (dateStr !== lastDateStr) {
-            const label = isToday(d) ? 'Idag' : (isYesterday(d) ? 'Igar' : dateStr);
+            const label = isToday(d) ? 'Idag' : (isYesterday(d) ? 'Igår' : dateStr);
             html += `<div class="chat-date-sep">${label}</div>`;
             lastDateStr = dateStr;
         }
@@ -227,13 +307,25 @@ function renderMessages() {
             ? `<span class="chat-msg-name" style="cursor:pointer; text-decoration:underline dotted;" data-uid="${m.uid}" data-action="user-menu">${safeDisplayName}</span>`
             : `<span class="chat-msg-name">${safeDisplayName}</span>`;
 
-        html += `<div class="${classes.join(' ')}" data-msg-id="${m.id}">
+        // Reply snippet HTML
+        let replyHtml = '';
+        if (m.replyToId) {
+            const safeReplyName = escapeHtml(m.replyToName || 'Någon');
+            const safeReplyText = escapeHtml(m.replyToText || '');
+            replyHtml = `
+                <div class="chat-reply-link" data-target="${m.replyToId}" style="font-size: 11px; color: #666; background: rgba(0,0,0,0.04); padding: 4px 8px; border-radius: 4px; margin-bottom: 6px; cursor: pointer; border-left: 3px solid rgba(0,0,0,0.2);">
+                    <span style="opacity: 0.7;">↩ Svar till <b>${safeReplyName}</b>: <i>"${safeReplyText}"</i></span>
+                </div>`;
+        }
+
+        html += `<div class="${classes.join(' ')}" data-msg-id="${m.id}" style="cursor: pointer;" title="Klicka för att svara">
             <div class="chat-msg-header">
                 <span class="chat-msg-time">${time}</span>
                 ${nameHtml}
                 ${badges ? `<span class="chat-msg-tips">${badges}</span>` : ''}
                 ${adminX}
             </div>
+            ${replyHtml}
             <span class="chat-msg-text">${escapeHtml(m.text)}</span>
         </div>`;
     });
@@ -243,11 +335,35 @@ function renderMessages() {
     // Auto-scroll to bottom
     container.scrollTop = container.scrollHeight;
 
-    // Wire admin delete buttons
+    // --- Wiring Event Listeners ---
+
+    // 1. Click on message to reply
+    container.querySelectorAll('.chat-msg').forEach(msgEl => {
+        msgEl.addEventListener('click', (e) => {
+            // Do not trigger reply if clicking admin elements or a reply link
+            if (e.target.closest('.chat-msg-admin-x') || e.target.closest('.chat-msg-name[data-action]') || e.target.closest('.chat-reply-link')) {
+                return;
+            }
+            const msgId = msgEl.dataset.msgId;
+            const msg = msgs.find(m => m.id === msgId);
+            if (msg) initiateReply(msg);
+        });
+    });
+
+    // 2. Click on reply snippet to scroll to original message
+    container.querySelectorAll('.chat-reply-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevents triggering a reply
+            const targetId = link.dataset.target;
+            scrollToMessage(targetId);
+        });
+    });
+
+    // 3. Admin delete buttons
     if (adminMode) {
         container.querySelectorAll('.chat-msg-admin-x').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                e.stopPropagation();
+                e.stopPropagation(); // Prevents triggering a reply
                 const msgId = btn.dataset.msgId;
                 const msg = msgs.find(m => m.id === msgId);
                 if (msg) deleteMessage(msg);
