@@ -40,10 +40,10 @@ export function initChatAdmin() {
     }
 
     // ── Add user to lists ──
-    html += `<h4>Lagg till</h4>`;
+    html += `<h4>Lägg till</h4>`;
     html += `<div class="chat-admin-add-row">`;
     html += `<select id="chat-admin-user-select">`;
-    html += `<option value="">Valj användare...</option>`;
+    html += `<option value="">Välj användare...</option>`;
     users.forEach(u => {
         html += `<option value="${u.uid}">${u.name}</option>`;
     });
