@@ -116,10 +116,7 @@ export function toggleChatAdminPanel() {
         setAdminMode(false);
     } else {
         panel.style.display = 'block';
- claude/fix-background-image-KM2uX
-
         btn.textContent = '🛡 Stäng moderering';
- main
         setAdminMode(true);
         initChatAdmin();
     }
