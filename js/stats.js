@@ -169,93 +169,143 @@ export async function loadCommunityStats(prefetchedSettings) {
     const qualifiedForKnockout = new Set(bracket?.teams || []);
 
     const me = users.find(u => u.userId === currentUserId);
-    if (me && me.groupPicks) {
-        html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
-        html += `<div class="stat-card"><table class="my-tips-table">`;
-        GROUP_LETTERS.forEach(letter => {
-            const pick = me.groupPicks[letter];
-            if (!pick) return;
-            const official = officialGroupStandings[letter];
-            let firstColor = '', secondColor = '';
-            if (official && official.complete) {
-                firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
-                secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
-            }
-            html += `<tr>
-                <td class="mtt-label">Grupp ${letter}</td>
-                <td class="mtt-team" style="${firstColor}">${f(pick.first)}${pick.first}</td>
-                <td class="mtt-sep">·</td>
-                <td class="mtt-team" style="${secondColor}">${f(pick.second)}${pick.second}</td>
-            </tr>`;
-        });
-        html += `</table>`;
+if (me && me.groupPicks) {
+        html += `<h3 style="margin-top:20px;">Min tipsrad</h3>`;
+        html += `<div class="stat-card">`;
+        
+        // --- 1. GRUPPSPELSTABELLEN MED RUBRIKER ---
+        html += `<table class="my-tips-table" style="width:100%; border-collapse:collapse; text-align:left;">`;
+        html += `<thead>
+            <tr>
+                <th style="padding-bottom:10px; font-size:11px; color:#888; text-transform:uppercase; font-weight:700;">Tippad</th>
+                <th style="padding-bottom:10px; font-size:11px; color:#888; text-transform:uppercase; font-weight:700;">Gruppetta</th>
+                <th style="padding-bottom:10px; font-size:11px; color:#888; text-transform:uppercase; font-weight:700;">Grupptvåa</th>
+            </tr>
+        </thead><tbody>`;
+        
+        GROUP_LETTERS.forEach(letter => {
+            const pick = me.groupPicks[letter];
+            if (!pick) return;
+            const official = officialGroupStandings[letter];
+            let firstColor = '', secondColor = '';
+            if (official && official.complete) {
+                firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
+                secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
+            }
+            html += `<tr style="border-top:1px solid #f1f1f1;">
+                <td class="mtt-label" style="padding:10px 0; font-weight:700; color:#555;">Grupp ${letter}</td>
+                <td class="mtt-team" style="padding:10px 0; ${firstColor}">${f(pick.first)} ${pick.first}</td>
+                <td class="mtt-team" style="padding:10px 0; ${secondColor}">${f(pick.second)} ${pick.second}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
 
-        // Show knockout picks summary with color-coding
-        if (me.knockoutPicks) {
-            const ko = me.knockoutPicks;
-            const koRounds = [
-                { key: 'r32', label: 'Sextondelsfinal' },
-                { key: 'r16', label: 'Åttondelsfinal' },
-                { key: 'qf', label: 'Kvartsfinal' },
-                { key: 'sf', label: 'Semifinal' }
-            ];
+        // --- 2. SLUTSPELSTIPS (KORT-LAYOUT) ---
+        if (me.knockoutPicks) {
+            const ko = me.knockoutPicks;
+            const finalPick = ko.final || null;
+            const sfPicks = ko.sf || [];
+            const qfPicks = ko.qf || [];
+            const r16Picks = ko.r16 || [];
+            const r32Picks = ko.r32 || [];
 
-            html += `<div style="margin-top:12px; padding-top:10px; border-top:1px solid #eee;">`;
-            html += `<h4 style="margin:0 0 8px; font-size:14px; color:#555;">Slutspelstips</h4>`;
+            // Filtrera fram vilka som åkte ut var
+            const gold = finalPick;
+            const silver = sfPicks.find(t => t !== gold) || null;
+            const bronze = qfPicks.filter(t => !sfPicks.includes(t));
+            const quarters = r16Picks.filter(t => !qfPicks.includes(t));
+            const eights = r32Picks.filter(t => !r16Picks.includes(t));
 
-            koRounds.forEach(round => {
-                const picks = ko[round.key];
-                if (!picks || picks.length === 0) return;
-                const winners = officialKoWinners[round.key] || [];
-                // A team is wrong if it was eliminated in a previous round (never reached this round)
-                // Collect all teams eliminated before this round
-                const roundOrder = ['r32', 'r16', 'qf', 'sf', 'final'];
-                const thisIdx = roundOrder.indexOf(round.key);
-                const eliminatedBefore = new Set();
-                for (let ri = 0; ri < thisIdx; ri++) {
-                    (eliminatedInRound[roundOrder[ri]] || []).forEach(t => eliminatedBefore.add(t));
-                }
+            // Hjälpfunktion för att behålla grön/röd färgkodning på lagtexten baserat på officiella resultat
+            const getStatusColor = (team, roundKey) => {
+                let color = '';
+                if (!team) return color;
+                const winners = officialKoWinners[roundKey] || [];
+                const roundOrder = ['r32', 'r16', 'qf', 'sf', 'final'];
+                const thisIdx = roundOrder.indexOf(roundKey);
+                const eliminatedBefore = new Set();
+                for (let ri = 0; ri < thisIdx; ri++) {
+                    (eliminatedInRound[roundOrder[ri]] || []).forEach(t => eliminatedBefore.add(t));
+                }
+                const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
+                if (eliminatedInGroups) { color = 'color:#dc3545;'; }
+                else if (winners.length > 0 && winners.includes(team)) { color = 'color:#28a745;'; }
+                else if (eliminatedBefore.has(team)) { color = 'color:#dc3545;'; }
+                else if (winners.length > 0 && !winners.includes(team)) {
+                    if ((eliminatedInRound[roundKey] || []).includes(team)) { color = 'color:#dc3545;'; }
+                }
+                return color;
+            };
 
-                html += `<div style="margin-bottom:8px;">`;
-                html += `<div style="font-size:11px; font-weight:700; color:#888; margin-bottom:4px;">Vidare till ${round.label} (${picks.length} lag)</div>`;
-                html += `<div style="display:flex; flex-wrap:wrap; gap:4px;">`;
-                picks.forEach(team => {
-                    let color = '';
-                    // Check if team was eliminated in group stage (didn't qualify for knockout at all)
-                    const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
-                    if (eliminatedInGroups) {
-                        color = 'color:#dc3545; border-color:#dc3545;'; // didn't qualify from groups
-                    } else if (winners.length > 0 && winners.includes(team)) {
-                        color = 'color:#28a745; border-color:#28a745;'; // correct - advanced
-                    } else if (eliminatedBefore.has(team)) {
-                        color = 'color:#dc3545; border-color:#dc3545;'; // eliminated before reaching this round
-                    } else if (winners.length > 0 && !winners.includes(team)) {
-                        if ((eliminatedInRound[round.key] || []).includes(team)) {
-                            color = 'color:#dc3545; border-color:#dc3545;';
-                        }
-                    }
-                    html += `<span style="font-size:12px; background:#f4f7f6; padding:2px 8px; border-radius:4px; border:1px solid #e0e0e0; white-space:nowrap; ${color}">${f(team)}${team}</span>`;
-                });
-                html += `</div></div>`;
-            });
+            html += `<div style="margin-top:24px; padding-top:20px; border-top:2px dashed #f1f1f1;">`;
+            html += `<h4 style="margin:0 0 15px; font-size:16px; color:#111;">Slutspelstips</h4>`;
 
-            if (ko.final) {
-                const finalWinners = officialKoWinners['final'] || [];
-                const champEliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(ko.final);
-                let champStyle = 'background:linear-gradient(135deg, #fffdf5, #fff8e1); border:1px solid #ffc107;';
-                if (champEliminatedInGroups) {
-                    champStyle = 'background:linear-gradient(135deg, #fce8e6, #f8d7da); border:2px solid #dc3545; color:#dc3545;';
-                } else if (finalWinners.length > 0) {
-                    champStyle = finalWinners.includes(ko.final)
-                        ? 'background:linear-gradient(135deg, #e8f5e9, #c8e6c9); border:2px solid #28a745; color:#28a745;'
-                        : 'background:linear-gradient(135deg, #fce8e6, #f8d7da); border:2px solid #dc3545; color:#dc3545;';
-                }
-                html += `<div style="margin-top:10px; padding:10px; border-radius:8px; text-align:center; font-size:15px; font-weight:700; ${champStyle}">🏆 VM-mästare: ${f(ko.final)}${ko.final}</div>`;
-            }
-            html += `</div>`;
-        }
-        html += `</div>`;
-    }
+            // Guld & Silver
+            html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">`;
+            if (gold) {
+                const c = getStatusColor(gold, 'final');
+                html += `<div style="background:#f1c40f; border-radius:6px; padding:15px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="font-size:10px; font-weight:800; color:#a67c00; letter-spacing:1px; margin-bottom:8px;">GULD</div>
+                    <div style="font-size:18px; margin-bottom:4px;">${f(gold)}</div>
+                    <div style="font-size:14px; font-weight:800; color:#333; ${c}">${gold}</div>
+                </div>`;
+            }
+            if (silver) {
+                const c = getStatusColor(silver, 'sf');
+                html += `<div style="background:#d1d8e0; border-radius:6px; padding:15px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="font-size:10px; font-weight:800; color:#6b7c93; letter-spacing:1px; margin-bottom:8px;">SILVER</div>
+                    <div style="font-size:18px; margin-bottom:4px;">${f(silver)}</div>
+                    <div style="font-size:14px; font-weight:800; color:#333; ${c}">${silver}</div>
+                </div>`;
+            }
+            html += `</div>`;
+
+            // Utslagna i Semifinal
+            if (bronze.length > 0) {
+                html += `<div style="font-size:10px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:20px 0 10px;">UTSLAGNA I SEMIFINAL</div>`;
+                html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">`;
+                bronze.forEach(team => {
+                    const c = getStatusColor(team, 'qf');
+                    html += `<div style="background:#fdebd0; border:1px solid #fad7a1; border-radius:6px; padding:8px 10px; display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:14px;">${f(team)}</span>
+                        <span style="font-size:13px; font-weight:700; color:#444; ${c}">${team}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Utslagna i Kvartsfinal
+            if (quarters.length > 0) {
+                html += `<div style="font-size:10px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:20px 0 10px;">UTSLAGNA I KVARTSFINAL</div>`;
+                html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">`;
+                quarters.forEach(team => {
+                    const c = getStatusColor(team, 'r16');
+                    html += `<div style="background:#f4f6f9; border:1px solid #e1e5eb; border-radius:6px; padding:6px 10px; display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:12px;">${f(team)}</span>
+                        <span style="font-size:12px; color:#444; ${c}">${team}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Utslagna i Åttondelsfinal
+            if (eights.length > 0) {
+                html += `<div style="font-size:10px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:20px 0 10px;">UTSLAGNA I ÅTTONDELSFINAL</div>`;
+                html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">`;
+                eights.forEach(team => {
+                    const c = getStatusColor(team, 'r32');
+                    html += `<div style="background:#fff; border:1px solid #eee; border-radius:6px; padding:6px 10px; display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:11px;">${f(team)}</span>
+                        <span style="font-size:11px; color:#555; ${c}">${team}</span>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
 
     html += `</div>`; // end dashboard-left
 
