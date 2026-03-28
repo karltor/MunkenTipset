@@ -39,30 +39,28 @@ function h2(text) {
 function matchRow(home, away, homeScore, awayScore, meta) {
     const hw = homeScore > awayScore ? 'font-weight:700;' : '';
     const aw = awayScore > homeScore ? 'font-weight:700;' : '';
-    let html = `<div style="padding:4px 0; font-size:14px;">`;
-    html += `<div style="display:flex; align-items:center;">`;
-    html += `<span style="flex:1; text-align:right; ${hw}">${home}</span>`;
-    html += `<span style="font-weight:800; padding:0 12px; min-width:50px; text-align:center;">${homeScore} - ${awayScore}</span>`;
-    html += `<span style="flex:1; text-align:left; ${aw}">${away}</span>`;
-    html += `</div>`;
+    let html = `<table style="width:100%; border-collapse:collapse; font-size:14px; margin:4px 0;"><tr>`;
+    html += `<td style="width:40%; text-align:right; padding:4px 0; ${hw}">${home}</td>`;
+    html += `<td style="width:20%; text-align:center; font-weight:800; padding:4px 0;">${homeScore} - ${awayScore}</td>`;
+    html += `<td style="width:40%; text-align:left; padding:4px 0; ${aw}">${away}</td>`;
+    html += `</tr>`;
     if (meta) {
-        html += `<div style="text-align:center; font-size:11px; color:#aaa; margin-top:1px;">${meta}</div>`;
+        html += `<tr><td colspan="3" style="text-align:center; font-size:11px; color:#aaa; padding:0 0 4px;">${meta}</td></tr>`;
     }
-    html += `</div>`;
+    html += `</table>`;
     return html;
 }
 
 function upcomingRow(home, away, meta) {
-    let html = `<div style="padding:4px 0; font-size:14px;">`;
-    html += `<div style="display:flex; align-items:center;">`;
-    html += `<span style="flex:1; text-align:right; font-weight:600;">${home}</span>`;
-    html += `<span style="padding:0 12px; color:#999; min-width:50px; text-align:center;">vs</span>`;
-    html += `<span style="flex:1; text-align:left; font-weight:600;">${away}</span>`;
-    html += `</div>`;
+    let html = `<table style="width:100%; border-collapse:collapse; font-size:14px; margin:4px 0;"><tr>`;
+    html += `<td style="width:40%; text-align:right; padding:4px 0; font-weight:600;">${home}</td>`;
+    html += `<td style="width:20%; text-align:center; color:#999; padding:4px 0;">vs</td>`;
+    html += `<td style="width:40%; text-align:left; padding:4px 0; font-weight:600;">${away}</td>`;
+    html += `</tr>`;
     if (meta) {
-        html += `<div style="text-align:center; font-size:11px; color:#aaa; margin-top:1px;">${meta}</div>`;
+        html += `<tr><td colspan="3" style="text-align:center; font-size:11px; color:#aaa; padding:0 0 4px;">${meta}</td></tr>`;
     }
-    html += `</div>`;
+    html += `</table>`;
     return html;
 }
 
@@ -465,9 +463,6 @@ async function generateEmailDraft() {
         if (opts.kuriosa) email += buildKuriosaSection(users, results, matchDocs);
         if (opts.upcoming) email += buildUpcomingSection(allUpcoming, opts.upcomingCount);
         if (opts.champion) email += buildChampionSection(users);
-
-        email += `<hr style="border:none; border-top:1px solid #eee; margin:20px 0;">`;
-        email += `<p style="font-size:12px; color:#aaa; text-align:center;">Genererat av MunkenTipset 2026</p>`;
 
         document.getElementById('admin-email-preview').innerHTML = email;
         document.getElementById('admin-email-output').style.display = 'block';
