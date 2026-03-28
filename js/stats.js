@@ -163,6 +163,8 @@ export async function loadCommunityStats(prefetchedSettings) {
             });
         });
     }
+    // Teams that qualified for R32 (from admin bracket) — used to detect group-stage elimination
+    const qualifiedForKnockout = new Set(bracket?.teams || []);
 
     const me = users.find(u => u.userId === currentUserId);
     if (me && me.groupPicks) {
@@ -217,13 +219,15 @@ export async function loadCommunityStats(prefetchedSettings) {
                 html += `<div style="display:flex; flex-wrap:wrap; gap:4px;">`;
                 picks.forEach(team => {
                     let color = '';
-                    if (winners.length > 0 && winners.includes(team)) {
+                    // Check if team was eliminated in group stage (didn't qualify for knockout at all)
+                    const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
+                    if (eliminatedInGroups) {
+                        color = 'color:#dc3545; border-color:#dc3545;'; // didn't qualify from groups
+                    } else if (winners.length > 0 && winners.includes(team)) {
                         color = 'color:#28a745; border-color:#28a745;'; // correct - advanced
                     } else if (eliminatedBefore.has(team)) {
                         color = 'color:#dc3545; border-color:#dc3545;'; // eliminated before reaching this round
                     } else if (winners.length > 0 && !winners.includes(team)) {
-                        // Round has results but team not in winners — could still be pending if not all matches played
-                        // Check if team was eliminated in this round
                         if ((eliminatedInRound[round.key] || []).includes(team)) {
                             color = 'color:#dc3545; border-color:#dc3545;';
                         }
@@ -235,8 +239,11 @@ export async function loadCommunityStats(prefetchedSettings) {
 
             if (ko.final) {
                 const finalWinners = officialKoWinners['final'] || [];
+                const champEliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(ko.final);
                 let champStyle = 'background:linear-gradient(135deg, #fffdf5, #fff8e1); border:1px solid #ffc107;';
-                if (finalWinners.length > 0) {
+                if (champEliminatedInGroups) {
+                    champStyle = 'background:linear-gradient(135deg, #fce8e6, #f8d7da); border:2px solid #dc3545; color:#dc3545;';
+                } else if (finalWinners.length > 0) {
                     champStyle = finalWinners.includes(ko.final)
                         ? 'background:linear-gradient(135deg, #e8f5e9, #c8e6c9); border:2px solid #28a745; color:#28a745;'
                         : 'background:linear-gradient(135deg, #fce8e6, #f8d7da); border:2px solid #dc3545; color:#dc3545;';
