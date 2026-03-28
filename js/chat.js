@@ -197,7 +197,7 @@ async function sendMessage() {
     if (replyingToMsg) {
         msg.replyToId = replyingToMsg.id;
         msg.replyToName = resolveName(replyingToMsg);
-        msg.replyToText = truncateWords(replyingToMsg.text, 3);
+        msg.replyToText = truncateWords(replyingToMsg.text, 8);
         
         // Reset state after capturing
         replyingToMsg = null;
