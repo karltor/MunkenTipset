@@ -324,32 +324,47 @@ function buildMatchSidebar() {
     const users = window._cachedUsers || [];
 
     if (activeMatches.length === 0) {
-        container.innerHTML = '<p style="color:#999; font-size:12px; text-align:center;">Inga aktiva matcher just nu.</p>';
+        container.innerHTML = '';
         return;
     }
 
     let html = '';
-    activeMatches.forEach(match => {
+    activeMatches.forEach((match, i) => {
         const isKnockout = match.stage && !match.stage.startsWith('Grupp');
-
-        // Compute tip distribution
         const dist = computeTipDistribution(match, users);
-
         const timeStr = match.date || '';
         const stageStr = match.stage || '';
 
-        html += `<div class="chat-match-card">
-            <div class="chat-match-stage">${stageStr}${timeStr ? ' · ' + timeStr : ''}</div>
+        html += `<div class="chat-match-card" data-card-idx="${i}">
             <div class="chat-match-teams">
                 <span>${f(match.homeTeam)}${match.homeTeam}</span>
-                <span class="chat-match-vs">vs</span>
+                <span class="chat-match-vs">v</span>
                 <span>${match.awayTeam}${f(match.awayTeam)}</span>
             </div>
-            ${renderTipBar(dist, isKnockout)}
+            <div class="chat-match-popup">
+                <div class="chat-match-stage">${stageStr}${timeStr ? ' · ' + timeStr : ''}</div>
+                ${renderTipBar(dist, isKnockout)}
+            </div>
         </div>`;
     });
 
     container.innerHTML = html;
+
+    // Wire click-to-expand
+    container.querySelectorAll('.chat-match-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasExpanded = card.classList.contains('expanded');
+            // Close all
+            container.querySelectorAll('.chat-match-card').forEach(c => c.classList.remove('expanded'));
+            if (!wasExpanded) card.classList.add('expanded');
+        });
+    });
+
+    // Close popup when clicking elsewhere
+    document.addEventListener('click', () => {
+        container.querySelectorAll('.chat-match-card').forEach(c => c.classList.remove('expanded'));
+    }, { once: false });
 }
 
 function computeTipDistribution(match, users) {

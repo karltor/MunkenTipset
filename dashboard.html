@@ -157,22 +157,25 @@
         <!-- CHAT TAB -->
         <div id="chat-tab" class="tab-content">
             <div class="chat-layout">
+                <div class="chat-top-bar">
+                    <div class="chat-match-grid" id="chat-match-cards"></div>
+                    <button id="chat-admin-btn" class="chat-admin-fab" style="display:none;">🛡</button>
+                </div>
                 <div class="chat-main">
                     <div class="chat-messages" id="chat-messages">
                         <p class="chat-empty">Laddar chatt...</p>
                     </div>
-                    <div class="chat-input-row">
-                        <input type="text" id="chat-input" class="chat-input" placeholder="Skriv ett meddelande..." maxlength="500" autocomplete="off">
-                        <button id="chat-send" class="btn chat-send-btn">Skicka</button>
-                    </div>
-                    <div id="chat-muted-notice" class="chat-muted-notice" style="display:none;">Du kan inte skriva i chatten just nu.</div>
                 </div>
-                <div class="chat-sidebar" id="chat-sidebar">
+                <div class="chat-input-row">
+                    <input type="text" id="chat-input" class="chat-input" placeholder="Skriv ett meddelande..." maxlength="500" autocomplete="off">
+                    <button id="chat-send" class="btn chat-send-btn">Skicka</button>
+                </div>
+                <div id="chat-muted-notice" class="chat-muted-notice" style="display:none;">Du kan inte skriva i chatten just nu.</div>
+                <div class="chat-sidebar" id="chat-sidebar" style="display:none;">
                     <h4 class="chat-sidebar-title">Matcher</h4>
-                    <div id="chat-match-cards"></div>
+                    <div id="chat-sidebar-cards"></div>
                 </div>
             </div>
-            <button id="chat-admin-btn" class="btn chat-admin-toggle" style="display:none;">🛡 Moderering</button>
             <div id="chat-admin-panel" class="chat-admin-panel" style="display:none;"></div>
         </div>
 
