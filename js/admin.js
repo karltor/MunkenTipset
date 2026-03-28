@@ -4,6 +4,7 @@ import { f, flags } from './wizard.js';
 import { DEFAULT_SCORING } from './stats.js';
 import { renderAdminBracket } from './admin-bracket.js';
 import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
+import { initEmailDraft } from './admin-email.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 export let allMatches = [];
@@ -36,10 +37,24 @@ export async function initAdmin(matchesData) {
     renderMatchManager();
 
     if (!initDone) {
+        // Admin sub-tab navigation
+        document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.admin-sub-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(btn.dataset.adminTab).classList.add('active');
+            });
+        });
+
         document.getElementById('admin-lock-tips').addEventListener('click', () => toggleLock(true));
         document.getElementById('admin-unlock-tips').addEventListener('click', () => toggleLock(false));
         document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
         document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
+
+        // Email draft
+        initEmailDraft();
+
         // Test tools
         document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
         document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);

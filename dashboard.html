@@ -129,88 +129,137 @@
 
         <!-- ADMIN TAB -->
         <div id="admin-tab" class="tab-content">
-            <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-                <h2 style="margin-top:0;">Admin-panel</h2>
-                <!-- Top row: Lock + Results + Rename side by side -->
-                <div class="admin-top-grid">
-                    <div class="admin-section">
-                        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                            <button class="btn" id="admin-lock-tips" style="background: #dc3545; font-size:13px;">🔒 Lås tipsrader</button>
-                            <button class="btn" id="admin-unlock-tips" style="font-size:13px;">🔓 Lås upp</button>
-                            <button class="btn" id="admin-toggle-tips-visible" style="background: #17a2b8; font-size:13px;">Dölj/Visa andras tips</button>
-                        </div>
-                        <div id="admin-lock-status" style="margin-bottom: 12px; padding: 8px; border-radius: 6px; font-size: 13px;"></div>
-                        <h4 style="margin:0 0 8px; font-size:15px;">Registrera resultat</h4>
-                        <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;"></div>
-                        <div id="admin-matches"></div>
-                        <button class="btn" id="admin-save-results" style="margin-top: 10px; width: 100%;">Spara resultat</button>
+            <h2 style="margin-top:0; margin-bottom:12px;">Admin-panel</h2>
+            <div class="admin-nav">
+                <button class="admin-nav-btn active" data-admin-tab="admin-results">Resultat</button>
+                <button class="admin-nav-btn" data-admin-tab="admin-settings">Inställningar</button>
+                <button class="admin-nav-btn" data-admin-tab="admin-email">Mejlutkast</button>
+                <button class="admin-nav-btn" data-admin-tab="admin-matches-db">Matcher</button>
+                <button class="admin-nav-btn" data-admin-tab="admin-testtools">Testverktyg</button>
+            </div>
+
+            <!-- ADMIN SUB: Resultat -->
+            <div id="admin-results" class="admin-sub-content active">
+                <div class="admin-card">
+                    <h3 style="margin-top:0;">Registrera gruppspelsresultat</h3>
+                    <div id="admin-group-select" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;"></div>
+                    <div id="admin-matches"></div>
+                    <button class="btn" id="admin-save-results" style="margin-top: 10px; width: 100%;">Spara resultat</button>
+                </div>
+                <div class="admin-bracket-fullwidth">
+                    <h3 style="margin:0 0 8px;">Slutspel — Bracket</h3>
+                    <p style="color:#666; font-size: 13px; margin:0 0 12px;">Fyll i de 32 kvalificerade lagen. Autocomplete från gruppspelet. Registrera resultat match för match.</p>
+                    <div id="admin-bracket"></div>
+                </div>
+            </div>
+
+            <!-- ADMIN SUB: Inställningar -->
+            <div id="admin-settings" class="admin-sub-content">
+                <div class="admin-card">
+                    <h3 style="margin-top:0;">Tipsinställningar</h3>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                        <button class="btn" id="admin-lock-tips" style="background: #dc3545; font-size:13px;">🔒 Lås tipsrader</button>
+                        <button class="btn" id="admin-unlock-tips" style="font-size:13px;">🔓 Lås upp</button>
+                        <button class="btn" id="admin-toggle-tips-visible" style="background: #17a2b8; font-size:13px;">Dölj/Visa andras tips</button>
                     </div>
-                    <div>
+                    <div id="admin-lock-status" style="margin-bottom: 12px; padding: 8px; border-radius: 6px; font-size: 13px;"></div>
+                </div>
+                <div class="admin-top-grid" style="margin-top:16px;">
+                    <div class="admin-card">
+                        <h3 style="margin-top:0;">Byt lagnamn</h3>
+                        <p style="color:#666; font-size: 12px; margin:0 0 8px;">Lag med oklar kvalificering kan döpas om här.</p>
+                        <div id="admin-team-rename"></div>
+                    </div>
+                    <div class="admin-card">
+                        <h3 style="margin-top:0;">Poänginställningar</h3>
+                        <div id="admin-scoring"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMIN SUB: Mejlutkast -->
+            <div id="admin-email" class="admin-sub-content">
+                <div class="admin-card">
+                    <h3 style="margin-top:0;">Generera mejlutkast</h3>
+                    <p style="color:#666; font-size:13px; margin:0 0 16px;">Skapa ett snyggt formaterat mejlutkast med senaste resultat, leaderboard och spännande händelser att skicka till kollegorna.</p>
+                    <div class="admin-top-grid">
                         <div class="admin-section">
-                            <h4 style="margin:0 0 8px; font-size:15px;">Byt lagnamn</h4>
-                            <p style="color:#666; font-size: 12px; margin:0 0 8px;">Lag med oklar kvalificering kan döpas om här.</p>
-                            <div id="admin-team-rename"></div>
+                            <h4 style="margin:0 0 10px; font-size:14px;">Inkludera i mejlet:</h4>
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-leaderboard" checked> Leaderboard (topp 10)</label>
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-results" checked> Senaste matchresultat</label>
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-highlights" checked> Höjdpunkter (exakta tips, serier)</label>
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-upcoming" checked> Kommande matcher</label>
+                            <label class="admin-email-option"><input type="checkbox" id="email-opt-champion" checked> VM-mästare-tippningar</label>
                         </div>
-                        <div class="admin-section" style="margin-top:12px;">
-                            <h4 style="margin:0 0 8px; font-size:15px;">Poänginställningar</h4>
-                            <div id="admin-scoring"></div>
+                        <div class="admin-section">
+                            <h4 style="margin:0 0 10px; font-size:14px;">Sedan senast:</h4>
+                            <p style="font-size:12px; color:#888; margin:0 0 8px;" id="email-last-generated">Aldrig genererat</p>
+                            <label style="font-size:13px; display:block; margin-bottom:6px;">Eller välj datum:</label>
+                            <input type="date" id="email-since-date" style="padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; width:100%;">
+                            <button class="btn" id="email-reset-since" style="margin-top:8px; background:#6c757d; font-size:12px; width:100%;">Visa allt (ingen datumfiltrering)</button>
+                        </div>
+                    </div>
+                    <button class="btn" id="admin-generate-email" style="margin-top:16px; width:100%; background:#ffc107; color:#000; font-size:15px; padding:12px;">Generera mejlutkast</button>
+                </div>
+                <div id="admin-email-output" style="display:none; margin-top:16px;">
+                    <div class="admin-card" style="position:relative;">
+                        <button class="btn" id="admin-copy-email" style="position:absolute; top:12px; right:12px; background:#28a745; font-size:12px; padding:6px 14px;">Kopiera</button>
+                        <h3 style="margin-top:0;">Utkast</h3>
+                        <div id="admin-email-preview" style="font-size:14px; line-height:1.7;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMIN SUB: Matcher -->
+            <div id="admin-matches-db" class="admin-sub-content">
+                <div class="admin-card">
+                    <h3 style="margin-top:0;">Alla matcher i databasen</h3>
+                    <p style="color:#888; font-size:13px; margin-top:0;">Visa och ta bort matcher från Firestore.</p>
+                    <div id="admin-match-manager"></div>
+                </div>
+            </div>
+
+            <!-- ADMIN SUB: Testverktyg -->
+            <div id="admin-testtools" class="admin-sub-content">
+                <div class="admin-card" style="border: 2px dashed #ffc107;">
+                    <h3 style="margin-top:0; color:#dc3545;">Testverktyg</h3>
+                    <p style="color:#888; font-size:13px; margin-top:0;">Verktyg för att testa hemsidan med fejkdata. Alla fejkdata kan enkelt rensas.</p>
+                    <div class="admin-top-grid">
+                        <div class="admin-section">
+                            <h4 style="margin:0 0 8px; font-size:15px;">Fejk-lärare</h4>
+                            <p style="color:#666; font-size:12px; margin:0 0 8px;">Skapar fejkanvändare med slumpmässiga tips.</p>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button class="btn" id="admin-add-fake-teachers" style="background:#17a2b8; font-size:13px;">Lägg till 10 fejklärare</button>
+                                <button class="btn" id="admin-remove-fake-teachers" style="background:#dc3545; font-size:13px;">Ta bort alla fejklärare</button>
+                            </div>
+                            <div id="admin-fake-status" style="margin-top:8px; font-size:12px; color:#888;"></div>
+                        </div>
+                        <div class="admin-section">
+                            <h4 style="margin:0 0 8px; font-size:15px;">Gruppspelsresultat</h4>
+                            <p style="color:#666; font-size:12px; margin:0 0 8px;">Autofyll alla gruppmatcher med slumpmässiga resultat.</p>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button class="btn" id="admin-autofill-group-results" style="background:#28a745; font-size:13px;">Autofyll alla gruppresultat</button>
+                                <button class="btn" id="admin-clear-group-results" style="background:#dc3545; font-size:13px;">Rensa gruppresultat</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="admin-section" style="margin-top:12px;">
+                        <h4 style="margin:0 0 8px; font-size:15px;">Slutspel</h4>
+                        <p style="color:#666; font-size:12px; margin:0 0 8px;">Fyll i slutspelet en omgång i taget.</p>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="btn" id="admin-autofill-ko-r32" style="background:#17a2b8; font-size:13px;">R32</button>
+                            <button class="btn" id="admin-autofill-ko-r16" style="background:#17a2b8; font-size:13px;">R16</button>
+                            <button class="btn" id="admin-autofill-ko-qf" style="background:#17a2b8; font-size:13px;">KF</button>
+                            <button class="btn" id="admin-autofill-ko-sf" style="background:#17a2b8; font-size:13px;">SF</button>
+                            <button class="btn" id="admin-autofill-ko-final" style="background:#ffc107; color:#000; font-size:13px;">Final</button>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                            <button class="btn" id="admin-clear-ko-results" style="background:#dc3545; font-size:13px;">Rensa slutspelsresultat</button>
+                            <button class="btn" id="admin-clear-ko-teams" style="background:#dc3545; font-size:13px;">Rensa hela bracketen</button>
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- Bracket section: full width, outside container -->
-            <div class="admin-bracket-fullwidth">
-                <h3 style="margin:0 0 8px;">Slutspel — Bracket</h3>
-                <p style="color:#666; font-size: 13px; margin:0 0 12px;">Fyll i de 32 kvalificerade lagen. Autocomplete från gruppspelet. Registrera resultat match för match.</p>
-                <div id="admin-bracket"></div>
-            </div>
-        <!-- Match Manager -->
-        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: 16px;">
-            <h2 style="margin-top:0;">📋 Alla matcher i databasen</h2>
-            <p style="color:#888; font-size:13px; margin-top:0;">Visa och ta bort matcher från Firestore. Användbart för att rensa gamla slutspelsmatcher (W101 etc.).</p>
-            <div id="admin-match-manager"></div>
-        </div>
-
-        <!-- Test Tools Section -->
-        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: 16px; border: 2px dashed #ffc107;">
-            <h2 style="margin-top:0; color:#dc3545;">🧪 Testverktyg</h2>
-            <p style="color:#888; font-size:13px; margin-top:0;">Verktyg för att testa hemsidan med fejkdata. Alla fejkdata kan enkelt rensas.</p>
-            <div class="admin-top-grid">
-                <div class="admin-section">
-                    <h4 style="margin:0 0 8px; font-size:15px;">Fejk-lärare</h4>
-                    <p style="color:#666; font-size:12px; margin:0 0 8px;">Skapar fejkanvändare med slumpmässiga tips.</p>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="btn" id="admin-add-fake-teachers" style="background:#17a2b8; font-size:13px;">➕ Lägg till 10 fejklärare</button>
-                        <button class="btn" id="admin-remove-fake-teachers" style="background:#dc3545; font-size:13px;">🗑 Ta bort alla fejklärare</button>
-                    </div>
-                    <div id="admin-fake-status" style="margin-top:8px; font-size:12px; color:#888;"></div>
-                </div>
-                <div class="admin-section">
-                    <h4 style="margin:0 0 8px; font-size:15px;">Gruppspelsresultat</h4>
-                    <p style="color:#666; font-size:12px; margin:0 0 8px;">Autofyll alla gruppmatcher med slumpmässiga resultat.</p>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="btn" id="admin-autofill-group-results" style="background:#28a745; font-size:13px;">⚡ Autofyll alla gruppresultat</button>
-                        <button class="btn" id="admin-clear-group-results" style="background:#dc3545; font-size:13px;">🗑 Rensa gruppresultat</button>
-                    </div>
-                </div>
-            </div>
-            <div class="admin-section" style="margin-top:12px;">
-                <h4 style="margin:0 0 8px; font-size:15px;">Slutspel</h4>
-                <p style="color:#666; font-size:12px; margin:0 0 8px;">Fyll i slutspelet en omgång i taget. Varje knapp fyller i resultat och avancerar vinnare till nästa omgång.</p>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn" id="admin-autofill-ko-r32" style="background:#17a2b8; font-size:13px;">R32</button>
-                    <button class="btn" id="admin-autofill-ko-r16" style="background:#17a2b8; font-size:13px;">R16</button>
-                    <button class="btn" id="admin-autofill-ko-qf" style="background:#17a2b8; font-size:13px;">Kvartsfinal</button>
-                    <button class="btn" id="admin-autofill-ko-sf" style="background:#17a2b8; font-size:13px;">Semifinal</button>
-                    <button class="btn" id="admin-autofill-ko-final" style="background:#ffc107; color:#000; font-size:13px;">🏆 Final</button>
-                </div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-                    <button class="btn" id="admin-clear-ko-results" style="background:#dc3545; font-size:13px;">🗑 Rensa slutspelsresultat</button>
-                    <button class="btn" id="admin-clear-ko-teams" style="background:#dc3545; font-size:13px;">🗑 Rensa hela bracketen</button>
-                </div>
-            </div>
-        </div>
-
         </div>
     </div>
 
