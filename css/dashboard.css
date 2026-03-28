@@ -171,10 +171,23 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .user-tip-card h4 { margin: 0 0 8px; }
 .user-tip-card .tip-summary { font-size: 13px; color: #666; }
 
+/* Admin navigation */
+.admin-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; background: #f4f4f4; padding: 4px; border-radius: 10px; }
+.admin-nav-btn { padding: 8px 16px; border: none; border-radius: 8px; background: transparent; cursor: pointer; font-weight: 600; font-size: 13px; color: #666; transition: all 0.2s; }
+.admin-nav-btn:hover { background: #e9ecef; color: #333; }
+.admin-nav-btn.active { background: #1a1a1a; color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.admin-sub-content { display: none; }
+.admin-sub-content.active { display: block; }
+.admin-card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+
 /* Admin layout */
 .admin-top-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
 @media (min-width: 900px) { .admin-top-grid { grid-template-columns: 1fr 1fr; } }
 .admin-section { background: #f8f9fa; border-radius: 8px; padding: 12px; }
+
+/* Admin email options */
+.admin-email-option { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; cursor: pointer; }
+.admin-email-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: #1a1a1a; }
 
 /* Admin bracket full width */
 .admin-bracket-fullwidth {
