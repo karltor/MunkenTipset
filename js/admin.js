@@ -5,6 +5,7 @@ import { DEFAULT_SCORING } from './stats.js';
 import { renderAdminBracket } from './admin-bracket.js';
 import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
 import { initEmailDraft } from './admin-email.js';
+import { initThemeEditor } from './admin-theme.js';
 
 const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 export let allMatches = [];
@@ -54,6 +55,9 @@ export async function initAdmin(matchesData) {
 
         // Email draft
         initEmailDraft();
+
+        // Theme editor
+        initThemeEditor();
 
         // Test tools
         document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);

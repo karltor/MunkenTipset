@@ -6,6 +6,10 @@ import { initBracket } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
 import { loadResults } from './results.js';
+import { applyStoredTheme } from './admin-theme.js';
+
+// Apply saved theme immediately before anything renders
+applyStoredTheme();
 
 const ADMINS = ['karl.tornered@nyamunken.se', 'jonas.waltelius@nyamunken.se'];
 const MATCHES_CACHE_KEY = 'munkentipset_matches_cache_v1';
