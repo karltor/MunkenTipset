@@ -43,7 +43,7 @@ export function initChatAdmin() {
     html += `<h4>Lagg till</h4>`;
     html += `<div class="chat-admin-add-row">`;
     html += `<select id="chat-admin-user-select">`;
-    html += `<option value="">Valj anvandare...</option>`;
+    html += `<option value="">Valj användare...</option>`;
     users.forEach(u => {
         html += `<option value="${u.uid}">${u.name}</option>`;
     });
@@ -56,7 +56,7 @@ export function initChatAdmin() {
     html += `<h4>Byt chattnamn</h4>`;
     html += `<div class="chat-admin-add-row">`;
     html += `<select id="chat-admin-rename-select">`;
-    html += `<option value="">Valj anvandare...</option>`;
+    html += `<option value="">Valj användare...</option>`;
     users.forEach(u => {
         const current = meta.chatNames?.[u.uid];
         const label = current ? `${u.name} (visas som: ${current})` : u.name;
@@ -116,6 +116,10 @@ export function toggleChatAdminPanel() {
         setAdminMode(false);
     } else {
         panel.style.display = 'block';
+ claude/fix-background-image-KM2uX
+
+        btn.textContent = '🛡 Stäng moderering';
+ main
         setAdminMode(true);
         initChatAdmin();
     }
