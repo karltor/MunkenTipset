@@ -7,7 +7,7 @@ import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupRe
 import { initEmailDraft } from './admin-email.js';
 import { initThemeEditor } from './admin-theme.js';
 
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel } from './tournament-config.js';
 export let allMatches = [];
 export let currentAdminGroup = 'A';
 export let existingResults = {};
@@ -25,7 +25,7 @@ export async function initAdmin(matchesData) {
     const resultsSnap = await getDoc(doc(db, "matches", "_results"));
     existingResults = resultsSnap.exists() ? resultsSnap.data() : {};
 
-    currentAdminGroup = GROUP_LETTERS.find(letter => {
+    currentAdminGroup = getGroupLetters().find(letter => {
         const gm = allMatches.filter(m => m.stage === `Grupp ${letter}`);
         return gm.some(m => !existingResults[m.id]);
     }) || 'A';
@@ -64,11 +64,15 @@ export async function initAdmin(matchesData) {
         document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);
         document.getElementById('admin-autofill-group-results').addEventListener('click', autoFillGroupResults);
         document.getElementById('admin-clear-group-results').addEventListener('click', clearGroupResults);
-        document.getElementById('admin-autofill-ko-r32').addEventListener('click', () => autoFillKnockoutRound('R32'));
-        document.getElementById('admin-autofill-ko-r16').addEventListener('click', () => autoFillKnockoutRound('R16'));
-        document.getElementById('admin-autofill-ko-qf').addEventListener('click', () => autoFillKnockoutRound('KF'));
-        document.getElementById('admin-autofill-ko-sf').addEventListener('click', () => autoFillKnockoutRound('SF'));
-        document.getElementById('admin-autofill-ko-final').addEventListener('click', () => autoFillKnockoutRound('Final'));
+        const koRoundBtns = {
+            'admin-autofill-ko-r32': 'R32', 'admin-autofill-ko-r16': 'R16',
+            'admin-autofill-ko-qf': 'KF', 'admin-autofill-ko-sf': 'SF',
+            'admin-autofill-ko-final': 'Final'
+        };
+        Object.entries(koRoundBtns).forEach(([id, key]) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => autoFillKnockoutRound(key));
+        });
         document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
         document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
         initDone = true;
@@ -80,7 +84,7 @@ export function renderGroupButtons() {
     groupSelect.innerHTML = '';
     const now = Date.now();
 
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const gm = allMatches.filter(m => m.stage === `Grupp ${letter}`);
         const allDone = gm.every(m => existingResults[m.id]);
         const hasOverdue = gm.some(m => !existingResults[m.id] && isOverdue(m.date, now));
@@ -108,7 +112,7 @@ function parseMatchDate(dateStr) {
     const day = parseInt(parts[1]);
     const month = months[parts[2].toLowerCase()];
     if (month === undefined) return null;
-    return new Date(2026, month, day, parseInt(parts[3]), parseInt(parts[4]));
+    return new Date(getTournamentYear(), month, day, parseInt(parts[3]), parseInt(parts[4]));
 }
 
 function isOverdue(dateStr, now) {
@@ -272,9 +276,12 @@ async function renderScoringConfig() {
         matchResult: 'Rätt 1X2', matchHomeGoals: 'Rätt hemmalag mål',
         matchAwayGoals: 'Rätt bortalag mål', exactScore: 'Bonus exakt resultat',
         groupWinner: 'Rätt gruppetta', groupRunnerUp: 'Rätt grupptvåa', groupThird: 'Rätt grupptrea',
-        koR32: 'Rätt lag R32', koR16: 'Rätt lag R16', koQF: 'Rätt lag KF',
-        koSF: 'Rätt lag SF', koFinal: 'Rätt VM-mästare'
     };
+    const koRounds = getKnockoutRounds();
+    const finalRd = getFinalRound();
+    koRounds.forEach(r => {
+        labels[`ko_${r.key}`] = r === finalRd ? `Rätt ${getChampionLabel().replace(/^Ditt\s+/i, '')}` : `Rätt lag ${r.label}`;
+    });
     let html = '<div style="display:grid; grid-template-columns: 1fr 60px; gap:4px 12px; max-width:400px;">';
     Object.entries(labels).forEach(([key, label]) => {
         html += `<label style="font-size:13px; align-self:center;">${label}</label>`;

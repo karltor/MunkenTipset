@@ -1,28 +1,38 @@
 import { f } from './wizard.js';
+import { getGroupLetters, getKnockoutRounds, getGroupStageConfig, getRoundUserKey, getTournamentYear } from './tournament-config.js';
 
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+// Build default scoring dynamically from tournament config
+export function buildDefaultScoring() {
+    const groupStage = getGroupStageConfig();
+    const koRounds = getKnockoutRounds();
+    const scoring = {
+        matchResult: 1,
+        matchHomeGoals: 1,
+        matchAwayGoals: 1,
+        exactScore: 0,
+        groupWinner: 1,
+        groupRunnerUp: 1,
+        groupThird: 0,
+    };
+    if (groupStage?.scoring) {
+        Object.assign(scoring, groupStage.scoring);
+    }
+    koRounds.forEach(r => { scoring[`ko_${r.key}`] = r.points; });
+    return scoring;
+}
 
-// Default scoring config - admin can override via _settings.scoring
-export const DEFAULT_SCORING = {
-    matchResult: 1,   // Rätt 1X2
-    matchHomeGoals: 1, // Rätt hemmalag mål
-    matchAwayGoals: 1, // Rätt bortalag mål
-    groupWinner: 1,    // Rätt gruppetta
-    groupRunnerUp: 1,  // Rätt grupptvåa
-    koR32: 2,          // Rätt lag vidare R32
-    koR16: 2,          // Rätt lag vidare R16
-    koQF: 2,           // Rätt lag vidare KF
-    koSF: 5,           // Rätt lag vidare SF
-    koFinal: 10,       // Rätt VM-mästare
-    exactScore: 0,     // Bonus för exakt rätt resultat (alla 3 ovan)
-    groupThird: 0,     // Rätt grupptrea
-};
+export const DEFAULT_SCORING = buildDefaultScoring();
 
-// ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ──────────
+// ── BUILD OFFICIAL GROUP STANDINGS FROM RESULTS ────���─────
 export function buildOfficialGroupStandings(results, matchDocs) {
     const standings = {};
     const groupResults = {};
     const groupMatchCounts = {};
+    const groupStage = getGroupStageConfig();
+    const teamsPerGroup = groupStage?.groups?.teamsPerGroup || 4;
+    // Default matches per group: n*(n-1)/2 for round-robin
+    const defaultMatchesPerGroup = (teamsPerGroup * (teamsPerGroup - 1)) / 2;
+
     if (matchDocs) {
         matchDocs.forEach(m => {
             if (!m.stage || !m.stage.startsWith('Grupp ')) return;
@@ -52,7 +62,7 @@ export function buildOfficialGroupStandings(results, matchDocs) {
             else { teams[m.homeTeam].pts += 1; teams[m.awayTeam].pts += 1; }
         });
         const sorted = Object.entries(teams).sort((a, b) => b[1].pts - a[1].pts || b[1].gd - a[1].gd || b[1].gf - a[1].gf);
-        const totalExpected = groupMatchCounts[letter] || 6;
+        const totalExpected = groupMatchCounts[letter] || defaultMatchesPerGroup;
         standings[letter] = {
             first: sorted[0]?.[0] || null,
             second: sorted[1]?.[0] || null,
@@ -65,13 +75,16 @@ export function buildOfficialGroupStandings(results, matchDocs) {
 
 // ── SCORING (returns detailed breakdown) ──────────────
 export function calcLeaderboard(users, results, bracket, scoring, officialGroupStandings) {
+    const koRounds = getKnockoutRounds();
+    const groupLetters = getGroupLetters();
+
     const officialWinners = {};
     if (bracket?.rounds) {
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-            const key = round === 'KF' ? 'qf' : round.toLowerCase();
-            officialWinners[key] = [];
-            (bracket.rounds[round] || []).forEach(m => {
-                if (m.winner) officialWinners[key].push(m.winner);
+        koRounds.forEach(round => {
+            const adminKey = round.adminKey;
+            officialWinners[round.key] = [];
+            (bracket.rounds[adminKey] || []).forEach(m => {
+                if (m.winner) officialWinners[round.key].push(m.winner);
             });
         });
     }
@@ -96,7 +109,7 @@ export function calcLeaderboard(users, results, bracket, scoring, officialGroupS
 
         // Score group winner/runner-up predictions (only when all group matches are played)
         if (u.groupPicks) {
-            GROUP_LETTERS.forEach(letter => {
+            groupLetters.forEach(letter => {
                 const pick = u.groupPicks[letter];
                 const official = officialGroupStandings[letter];
                 if (!pick || !official || !official.complete) return;
@@ -107,16 +120,16 @@ export function calcLeaderboard(users, results, bracket, scoring, officialGroupS
         }
 
         let koPts = 0;
-        const koKeyMap = { r32: 'koR32', r16: 'koR16', qf: 'koQF', sf: 'koSF', final: 'koFinal' };
         if (u.knockoutPicks) {
-            Object.entries(koKeyMap).forEach(([round, scoreKey]) => {
-                const winners = officialWinners[round] || [];
+            koRounds.forEach(round => {
+                const winners = officialWinners[round.key] || [];
                 if (winners.length === 0) return;
-                const pts = scoring[scoreKey] || 0;
-                if (round === 'final') {
-                    if (u.knockoutPicks.final && winners.includes(u.knockoutPicks.final)) koPts += pts;
+                const pts = scoring[`ko_${round.key}`] || 0;
+                const finalRoundKey = koRounds.length > 0 ? koRounds[koRounds.length - 1].key : 'final';
+                if (round.key === finalRoundKey) {
+                    if (u.knockoutPicks[round.key] && winners.includes(u.knockoutPicks[round.key])) koPts += pts;
                 } else {
-                    const userPicks = u.knockoutPicks[round] || [];
+                    const userPicks = u.knockoutPicks[round.key] || [];
                     userPicks.forEach(team => { if (winners.includes(team)) koPts += pts; });
                 }
             });
@@ -128,7 +141,7 @@ export function calcLeaderboard(users, results, bracket, scoring, officialGroupS
 
 export function sign(n) { return n > 0 ? 1 : (n < 0 ? -1 : 0); }
 
-// Parse date like "18 juni 21:00" relative to 2026
+// Parse date like "18 juni 21:00" relative to tournament year
 export function parseMatchDate(dateStr) {
     if (!dateStr) return null;
     const months = { 'januari': 0, 'februari': 1, 'mars': 2, 'april': 3, 'maj': 4, 'juni': 5, 'juli': 6, 'augusti': 7, 'september': 8, 'oktober': 9, 'november': 10, 'december': 11 };
@@ -137,7 +150,7 @@ export function parseMatchDate(dateStr) {
     const day = parseInt(parts[1]);
     const month = months[parts[2].toLowerCase()];
     if (month === undefined) return null;
-    return new Date(2026, month, day, parseInt(parts[3]), parseInt(parts[4]));
+    return new Date(getTournamentYear(), month, day, parseInt(parts[3]), parseInt(parts[4]));
 }
 
 export function renderStatBar(team, pct) {

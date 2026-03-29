@@ -1,6 +1,7 @@
 import { auth, db } from './config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { collection, getDocs, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { loadTournamentConfig, getTournamentName, hasStageType } from './tournament-config.js';
 import { initWizard, getGroupPicks } from './wizard.js';
 import { initBracket } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
@@ -87,6 +88,27 @@ onAuthStateChanged(auth, async (user) => {
         return;
     }
     document.getElementById('user-name').textContent = user.displayName || user.email;
+
+    // Load tournament config before anything else
+    await loadTournamentConfig();
+
+    // Update branding from config
+    const tName = getTournamentName();
+    document.querySelector('.logo-text').textContent = tName;
+    document.title = tName;
+
+    // Show/hide tabs based on tournament stages
+    const hasGroups = hasStageType('round-robin-groups');
+    const hasKnockout = hasStageType('single-elimination');
+    const hasLeague = hasStageType('league');
+
+    const wizardBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
+    const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
+    if (wizardBtn) {
+        wizardBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
+        if (hasLeague && !hasGroups) wizardBtn.textContent = '🎯 Tippa Tabell';
+    }
+    if (bracketBtn) bracketBtn.style.display = hasKnockout ? '' : 'none';
 
     // Ensure user doc exists with email + display name (single write)
     await setDoc(doc(db, "users", user.uid), { email: user.email, name: user.displayName || user.email }, { merge: true });

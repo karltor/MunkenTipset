@@ -3,8 +3,7 @@ import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 
 import { f } from './wizard.js';
 import { bumpDataVersion, allMatches, existingResults, currentAdminGroup, renderGroupButtons, renderAdminMatches } from './admin.js';
 import { getGroupStandings, renderAdminBracket } from './admin-bracket.js';
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig } from './tournament-config.js';
 
 const FAKE_NAMES = [
     'Lure Drejeri', 'Bo Ring', 'Anna Conda', 'Sansen Dansen',
@@ -33,7 +32,7 @@ export async function addFakeTeachers() {
     statusEl.textContent = 'Skapar fejklärare...';
 
     const groupTeams = {};
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const teams = new Set();
         allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
             teams.add(m.homeTeam);
@@ -53,7 +52,7 @@ export async function addFakeTeachers() {
         const fakeId = `fake_${Date.now()}_${i}`;
 
         const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
-        GROUP_LETTERS.forEach(letter => {
+        getGroupLetters().forEach(letter => {
             const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
             groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
         });
@@ -69,13 +68,13 @@ export async function addFakeTeachers() {
         });
 
         const shuffled = [...allTeamsList].sort(() => Math.random() - 0.5);
-        const knockout = {
-            r32: shuffled.slice(0, 16),
-            r16: shuffled.slice(0, 8),
-            qf: shuffled.slice(0, 4),
-            sf: shuffled.slice(0, 2),
-            final: shuffled[0]
-        };
+        const knockout = {};
+        const koRounds = getKnockoutRounds();
+        const finalRd = getFinalRound();
+        koRounds.forEach(r => {
+            const pickCount = r.teams / 2;
+            knockout[r.key] = r === finalRd ? shuffled[0] : shuffled.slice(0, pickCount);
+        });
 
         await setDoc(doc(db, "users", fakeId), {
             email: `${fakeId}@fake.test`, name, groupPicks, matchTips, knockout
@@ -157,16 +156,19 @@ export async function autoFillKnockoutRound(targetRound) {
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
     if (!bracket.rounds) bracket.rounds = {};
 
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const matchCounts = { R32: 16, R16: 8, KF: 4, SF: 2, Final: 1 };
+    const koRounds = getKnockoutRounds();
+    const rounds = koRounds.map(r => r.adminKey);
+    const matchCounts = {};
+    koRounds.forEach(r => { matchCounts[r.adminKey] = r.teams / 2; });
 
-    if (targetRound === 'R32') {
-        if (!bracket.rounds.R32) bracket.rounds.R32 = [];
-        const hasTeams = bracket.rounds.R32.some(m => m?.team1);
+    const firstRoundKey = rounds[0];
+    if (targetRound === firstRoundKey) {
+        if (!bracket.rounds[firstRoundKey]) bracket.rounds[firstRoundKey] = [];
+        const hasTeams = bracket.rounds[firstRoundKey].some(m => m?.team1);
         if (!hasTeams) {
             const standings = getGroupStandings();
             const firsts = [], seconds = [], thirds = [];
-            GROUP_LETTERS.forEach(letter => {
+            getGroupLetters().forEach(letter => {
                 const s = standings[letter];
                 if (!s || s.length < 2) return;
                 firsts.push(s[0].name);
@@ -174,12 +176,14 @@ export async function autoFillKnockoutRound(targetRound) {
                 if (s.length >= 3) thirds.push(s[2]);
             });
             thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-            const qualifiedThirds = thirds.slice(0, 8).map(t => t.name);
+            const bestOfRest = getGroupStageConfig()?.qualification?.bestOfRest || 0;
+            const qualifiedThirds = thirds.slice(0, bestOfRest).map(t => t.name);
             const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
-            for (let i = 0; i < 16; i++) {
-                if (!bracket.rounds.R32[i]) bracket.rounds.R32[i] = {};
-                bracket.rounds.R32[i].team1 = allQualified[i] || '';
-                bracket.rounds.R32[i].team2 = allQualified[i + 16] || '';
+            const firstMatchCount = matchCounts[firstRoundKey];
+            for (let i = 0; i < firstMatchCount; i++) {
+                if (!bracket.rounds[firstRoundKey][i]) bracket.rounds[firstRoundKey][i] = {};
+                bracket.rounds[firstRoundKey][i].team1 = allQualified[i] || '';
+                bracket.rounds[firstRoundKey][i].team2 = allQualified[i + firstMatchCount] || '';
             }
         }
     } else {
@@ -241,7 +245,8 @@ export async function autoFillKnockoutRound(targetRound) {
         }
     }
 
-    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
+    const fKey = getKnockoutRounds()[0]?.adminKey || 'R32';
+    bracket.teams = (bracket.rounds[fKey] || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
     await setDoc(doc(db, "matches", "_bracket"), bracket);
     await bumpDataVersion();
     await renderAdminBracket();
@@ -252,13 +257,14 @@ export async function clearKnockoutResults() {
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
 
-    ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-        (bracket.rounds[round] || []).forEach(m => {
+    const koRounds = getKnockoutRounds();
+    koRounds.forEach(r => {
+        (bracket.rounds[r.adminKey] || []).forEach(m => {
             delete m.score1; delete m.score2; delete m.winner;
         });
     });
-    ['R16', 'KF', 'SF', 'Final'].forEach(round => {
-        (bracket.rounds[round] || []).forEach(m => {
+    koRounds.slice(1).forEach(r => {
+        (bracket.rounds[r.adminKey] || []).forEach(m => {
             m.team1 = ''; m.team2 = '';
         });
     });

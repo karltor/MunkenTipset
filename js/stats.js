@@ -1,16 +1,15 @@
 import { db, auth } from './config.js';
 import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { DEFAULT_SCORING, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate, renderStatBar, renderTippersSummary, renderTippersLine } from './scoring.js';
+import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate, renderStatBar, renderTippersSummary, renderTippersLine } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
+import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear } from './tournament-config.js';
 
 export { DEFAULT_SCORING };
 
 export function invalidateStatsCache() {
     try { localStorage.removeItem(STATS_CACHE_KEY); } catch { /* noop */ }
 }
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
 // ── localStorage cache helpers ─────────────────────────────────────────────
 const STATS_CACHE_KEY = 'munkentipset_stats_cache_v1';
@@ -143,21 +142,19 @@ export async function loadCommunityStats(prefetchedSettings) {
     // Build official knockout winners for color-coding
     const officialKoWinners = {};
     if (bracket?.rounds) {
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-            const key = round === 'KF' ? 'qf' : round.toLowerCase();
-            officialKoWinners[key] = [];
-            (bracket.rounds[round] || []).forEach(m => {
-                if (m.winner) officialKoWinners[key].push(m.winner);
+        getKnockoutRounds().forEach(rd => {
+            officialKoWinners[rd.key] = [];
+            (bracket.rounds[rd.adminKey] || []).forEach(m => {
+                if (m.winner) officialKoWinners[rd.key].push(m.winner);
             });
         });
     }
     // Build set of teams eliminated per round (lost in that round)
     const eliminatedInRound = {};
     if (bracket?.rounds) {
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-            const key = round === 'KF' ? 'qf' : round.toLowerCase();
-            eliminatedInRound[key] = [];
-            (bracket.rounds[round] || []).forEach(m => {
+        getKnockoutRounds().forEach(rd => {
+            eliminatedInRound[rd.key] = [];
+            (bracket.rounds[rd.adminKey] || []).forEach(m => {
                 if (m.winner && m.team1 && m.team2) {
                     const loser = m.winner === m.team1 ? m.team2 : m.team1;
                     eliminatedInRound[key].push(loser);
@@ -181,7 +178,7 @@ if (me && me.groupPicks) {
         html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Grupptvåa</th>';
         html += '</tr></thead><tbody>';
         
-        GROUP_LETTERS.forEach(letter => {
+        getGroupLetters().forEach(letter => {
             const pick = me.groupPicks[letter];
             if (!pick) return;
             const official = officialGroupStandings[letter];
@@ -217,7 +214,7 @@ if (me && me.groupPicks) {
                 let color = '';
                 if (!team) return color;
                 const winners = officialKoWinners[roundKey] || [];
-                const roundOrder = ['r32', 'r16', 'qf', 'sf', 'final'];
+                const roundOrder = getKnockoutRounds().map(r => r.key);
                 const thisIdx = roundOrder.indexOf(roundKey);
                 const eliminatedBefore = new Set();
                 for (let ri = 0; ri < thisIdx; ri++) {
@@ -302,7 +299,8 @@ if (me && me.groupPicks) {
     html += `<div class="dashboard-right">`;
 
     const now = new Date();
-    const roundNames = { 'R32': 'Sextondelsfinal', 'R16': 'Åttondelsfinal', 'KF': 'Kvartsfinal', 'SF': 'Semifinal', 'Final': 'Final' };
+    const roundNames = {};
+    getKnockoutRounds().forEach(r => { roundNames[r.adminKey] = r.label; });
 
     // ── Build combined played matches list ──────────
     const allPlayedMatches = [];
@@ -320,16 +318,16 @@ if (me && me.groupPicks) {
 
     // Knockout results from bracket
     if (bracket?.rounds) {
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
-            (bracket.rounds[round] || []).forEach((m, mi) => {
+        getKnockoutRounds().forEach((rd, ri) => {
+            (bracket.rounds[rd.adminKey] || []).forEach((m, mi) => {
                 if (m.winner && m.team1 && m.team2 && m.score1 !== undefined) {
                     allPlayedMatches.push({
-                        matchId: `ko_${round}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
+                        matchId: `ko_${rd.adminKey}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
                         homeScore: m.score1, awayScore: m.score2,
-                        stage: roundNames[round], date: m.date,
-                        _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
-                        _isKnockout: true, _koRound: round,
-                        _koRoundKey: round === 'KF' ? 'qf' : round.toLowerCase(),
+                        stage: rd.label, date: m.date,
+                        _parsed: m.date ? parseMatchDate(m.date) : new Date(getTournamentYear(), 6, 1 + ri, mi),
+                        _isKnockout: true, _koRound: rd.adminKey,
+                        _koRoundKey: rd.key,
                         _winner: m.winner
                     });
                 }
@@ -380,7 +378,7 @@ if (me && me.groupPicks) {
                     }
                 } else if (me.knockoutPicks) {
                     const roundKey = match._koRoundKey;
-                    const picks = roundKey === 'final' ? (me.knockoutPicks.final ? [me.knockoutPicks.final] : []) : (me.knockoutPicks[roundKey] || []);
+                    const picks = typeof me.knockoutPicks[roundKey] === 'string' ? [me.knockoutPicks[roundKey]] : (me.knockoutPicks[roundKey] || []);
                     const pickedHome = picks.includes(match.homeTeam);
                     const pickedAway = picks.includes(match.awayTeam);
                     if (pickedHome || pickedAway) {
@@ -409,7 +407,7 @@ if (me && me.groupPicks) {
                 users.forEach(u => {
                     if (u.userId === currentUserId) return;
                     if (!u.knockoutPicks) return;
-                    const picks = roundKey === 'final' ? (u.knockoutPicks.final ? [u.knockoutPicks.final] : []) : (u.knockoutPicks[roundKey] || []);
+                    const picks = typeof u.knockoutPicks[roundKey] === 'string' ? [u.knockoutPicks[roundKey]] : (u.knockoutPicks[roundKey] || []);
                     if (picks.includes(match._winner)) correctPickers.push(u.name);
                 });
                 if (correctPickers.length > 0) {
@@ -438,15 +436,15 @@ if (me && me.groupPicks) {
 
     // Unplayed knockout matches from bracket
     if (bracket?.rounds) {
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach((round, ri) => {
-            (bracket.rounds[round] || []).forEach((m, mi) => {
+        getKnockoutRounds().forEach((rd, ri) => {
+            (bracket.rounds[rd.adminKey] || []).forEach((m, mi) => {
                 if (m.team1 && m.team2 && !m.winner) {
                     allUpcoming.push({
-                        matchId: `ko_${round}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
-                        date: m.date, stage: roundNames[round],
-                        _parsed: m.date ? parseMatchDate(m.date) : new Date(2026, 6, 1 + ri, mi),
+                        matchId: `ko_${rd.adminKey}_${mi}`, homeTeam: m.team1, awayTeam: m.team2,
+                        date: m.date, stage: rd.label,
+                        _parsed: m.date ? parseMatchDate(m.date) : new Date(getTournamentYear(), 6, 1 + ri, mi),
                         _isKnockout: true,
-                        _koRoundKey: round === 'KF' ? 'qf' : round.toLowerCase()
+                        _koRoundKey: rd.key
                     });
                 }
             });
@@ -488,7 +486,7 @@ if (me && me.groupPicks) {
                     }
                 } else if (me.knockoutPicks) {
                     const roundKey = match._koRoundKey;
-                    const picks = roundKey === 'final' ? (me.knockoutPicks.final ? [me.knockoutPicks.final] : []) : (me.knockoutPicks[roundKey] || []);
+                    const picks = typeof me.knockoutPicks[roundKey] === 'string' ? [me.knockoutPicks[roundKey]] : (me.knockoutPicks[roundKey] || []);
                     const pickedHome = picks.includes(match.homeTeam);
                     const pickedAway = picks.includes(match.awayTeam);
                     if (pickedHome || pickedAway) {
@@ -520,9 +518,13 @@ if (me && me.groupPicks) {
 
     // Champion picks
     const champCounts = {};
-    users.forEach(u => { if (u.knockoutPicks?.final) champCounts[u.knockoutPicks.final] = (champCounts[u.knockoutPicks.final] || 0) + 1; });
+    const _finalKey = getKnockoutRounds().length > 0 ? getKnockoutRounds()[getKnockoutRounds().length - 1].key : 'final';
+    users.forEach(u => {
+        const pick = u.knockoutPicks?.[_finalKey];
+        if (pick) champCounts[pick] = (champCounts[pick] || 0) + 1;
+    });
     if (Object.keys(champCounts).length > 0) {
-        html += `<div class="stat-card" style="margin-top:10px;"><h3>🏆 Tippade VM-mästare</h3>`;
+        html += `<div class="stat-card" style="margin-top:10px;"><h3>🏆 Tippade mästare</h3>`;
         const totalC = Object.values(champCounts).reduce((a, b) => a + b, 0);
         Object.entries(champCounts).sort((a, b) => b[1] - a[1]).forEach(([team, count]) => {
             html += renderStatBar(team, Math.round((count / totalC) * 100));

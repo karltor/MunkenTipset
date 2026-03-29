@@ -2,9 +2,7 @@ import { db } from './config.js';
 import { doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { flags } from './wizard.js';
 import { DEFAULT_SCORING, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate } from './scoring.js';
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-const ROUND_NAMES = { 'R32': 'Sextondelsfinal', 'R16': 'Åttondelsfinal', 'KF': 'Kvartsfinal', 'SF': 'Semifinal', 'Final': 'Final' };
+import { getGroupLetters, getKnockoutRounds, getTournamentName, getFinalRound } from './tournament-config.js';
 
 export async function initEmailDraft() {
     const snap = await getDoc(doc(db, "matches", "_settings"));
@@ -124,15 +122,15 @@ function getAllPlayedMatches(results, matchDocs, bracket, sinceDate) {
     });
 
     if (bracket?.rounds) {
-        Object.entries(ROUND_NAMES).forEach(([round, label]) => {
-            (bracket.rounds[round] || []).forEach(m => {
+        getKnockoutRounds().forEach(rd => {
+            (bracket.rounds[rd.adminKey] || []).forEach(m => {
                 if (!m.winner || !m.team1 || !m.team2 || m.score1 === undefined) return;
                 const parsed = m.date ? parseMatchDate(m.date) : null;
                 if (sinceDate && parsed && parsed < sinceDate) return;
                 played.push({
-                    matchId: `ko_${round}`, homeTeam: m.team1, awayTeam: m.team2,
+                    matchId: `ko_${rd.adminKey}`, homeTeam: m.team1, awayTeam: m.team2,
                     homeScore: m.score1, awayScore: m.score2,
-                    stage: label, date: m.date, _parsed: parsed, _isKo: true
+                    stage: rd.label, date: m.date, _parsed: parsed, _isKo: true
                 });
             });
         });
@@ -154,12 +152,12 @@ function getAllUpcomingMatches(results, matchDocs, bracket) {
     });
 
     if (bracket?.rounds) {
-        Object.entries(ROUND_NAMES).forEach(([round, label]) => {
-            (bracket.rounds[round] || []).forEach(m => {
+        getKnockoutRounds().forEach(rd => {
+            (bracket.rounds[rd.adminKey] || []).forEach(m => {
                 if (!m.team1 || !m.team2 || m.winner) return;
                 const parsed = m.date ? parseMatchDate(m.date) : null;
                 if (parsed && parsed <= now) return;
-                upcoming.push({ homeTeam: m.team1, awayTeam: m.team2, date: m.date, stage: label, _parsed: parsed });
+                upcoming.push({ homeTeam: m.team1, awayTeam: m.team2, date: m.date, stage: rd.label, _parsed: parsed });
             });
         });
     }
@@ -241,15 +239,17 @@ function buildUpcomingSection(upcoming, maxCount) {
 
 function buildChampionSection(users) {
     const champCounts = {};
+    const _finalKey = getFinalRound()?.key || 'final';
     users.forEach(u => {
-        if (u.knockoutPicks?.final) champCounts[u.knockoutPicks.final] = (champCounts[u.knockoutPicks.final] || 0) + 1;
+        const champ = u.knockoutPicks?.[_finalKey];
+        if (champ) champCounts[champ] = (champCounts[champ] || 0) + 1;
     });
     if (Object.keys(champCounts).length === 0) return '';
 
     const sorted = Object.entries(champCounts).sort((a, b) => b[1] - a[1]);
     const total = sorted.reduce((s, [, c]) => s + c, 0);
 
-    let html = h2('Tippade VM-mästare');
+    let html = h2('Tippade mästare');
     html += `<table style="width:100%; max-width:400px; border-collapse:collapse; font-size:14px;">`;
     sorted.forEach(([team, count]) => {
         const pct = Math.round((count / total) * 100);
@@ -279,7 +279,7 @@ function buildHighlightsSection(users, allPlayed, bracket, officialGroupStanding
     }
 
     // Group surprises
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const og = officialGroupStandings[letter];
         if (!og || !og.complete) return;
         const total = users.filter(u => u.groupPicks?.[letter]).length;
@@ -296,18 +296,20 @@ function buildHighlightsSection(users, allPlayed, bracket, officialGroupStanding
 
     // Perfect knockout rounds
     if (bracket?.rounds) {
-        const roundLabels = { 'R32': 'sextondelsfinalen', 'R16': 'åttondelsfinalen', 'KF': 'kvartsfinalen', 'SF': 'semifinalen', 'Final': 'finalen' };
-        ['R32', 'R16', 'KF', 'SF', 'Final'].forEach(round => {
-            const matches = (bracket.rounds[round] || []).filter(m => m.winner);
+        const koRounds = getKnockoutRounds();
+        const finalKey = getFinalRound()?.key;
+        koRounds.forEach(rd => {
+            const matches = (bracket.rounds[rd.adminKey] || []).filter(m => m.winner);
             if (matches.length < 2) return;
-            const koKey = round === 'KF' ? 'qf' : round.toLowerCase();
             const winners = matches.map(m => m.winner);
             users.forEach(u => {
                 if (!u.knockoutPicks) return;
-                const picks = koKey === 'final' ? (u.knockoutPicks.final ? [u.knockoutPicks.final] : []) : (u.knockoutPicks[koKey] || []);
+                const picks = rd.key === finalKey
+                    ? (u.knockoutPicks[rd.key] ? [u.knockoutPicks[rd.key]] : [])
+                    : (u.knockoutPicks[rd.key] || []);
                 const correct = picks.filter(t => winners.includes(t)).length;
                 if (correct === winners.length) {
-                    highlights.push(`<strong>${u.name}</strong> tippade alla ${winners.length} rätt i ${roundLabels[round]}!`);
+                    highlights.push(`<strong>${u.name}</strong> tippade alla ${winners.length} rätt i ${rd.label.toLowerCase()}!`);
                 }
             });
         });
@@ -492,7 +494,7 @@ async function generateEmailDraft() {
 
         // Header
         email += `<div style="text-align:center; margin-bottom:24px;">`;
-        email += `<h1 style="font-size:24px; margin:0;">MunkenTipset 2026</h1>`;
+        email += `<h1 style="font-size:24px; margin:0;">${getTournamentName()}</h1>`;
         email += `<p style="color:#888; margin:4px 0 0;">${formatSwedishDate(new Date())}</p>`;
         email += `</div>`;
         email += `<p style="color:#666;">[Skriv din brödtext här...]</p>`;
