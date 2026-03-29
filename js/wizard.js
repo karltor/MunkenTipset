@@ -1,12 +1,11 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { invalidateStatsCache } from './stats.js';
+import { getGroupLetters } from './tournament-config.js';
 
 // Flagg-hjälpare
 export const flags = { "Mexiko": "mx", "Sydafrika": "za", "Sydkorea": "kr", "Kanada": "ca", "USA": "us", "Paraguay": "py", "Qatar": "qa", "Schweiz": "ch", "Brasilien": "br", "Marocko": "ma", "Haiti": "ht", "Skottland": "gb-sct", "Australien": "au", "Tyskland": "de", "Curaçao": "cw", "Nederländerna": "nl", "Japan": "jp", "Elfenbenskusten": "ci", "Ecuador": "ec", "Tunisien": "tn", "Spanien": "es", "Kap Verde": "cv", "Belgien": "be", "Egypten": "eg", "Saudiarabien": "sa", "Uruguay": "uy", "Iran": "ir", "Nya Zeeland": "nz", "Frankrike": "fr", "Senegal": "sn", "Norge": "no", "Argentina": "ar", "Algeriet": "dz", "Österrike": "at", "Jordanien": "jo", "Portugal": "pt", "England": "gb-eng", "Kroatien": "hr", "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co" };
 export const f = (t) => flags[t] ? `<img src="https://flagcdn.com/24x18/${flags[t]}.png" style="vertical-align:-4px; margin:0 6px; border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);" width="24" height="18" alt="">` : '🌍 ';
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 let currentIndex = 0;
 let currentTeams = [];
 let selFirst = null, selSecond = null;
@@ -100,7 +99,7 @@ function switchMode() {
 }
 
 function storeCurrentScores() {
-    const letter = GROUP_LETTERS[currentIndex];
+    const letter = getGroupLetters()[currentIndex];
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
     groupMatches.forEach(m => {
         const hEl = document.getElementById(`wizHome-${m.id}`);
@@ -113,10 +112,11 @@ function storeCurrentScores() {
 
 // ─── UNIFIED GROUP LOADER ────────────────────────────
 function loadGroup(index) {
-    const letter = GROUP_LETTERS[index];
+    const letter = getGroupLetters()[index];
     currentIndex = index;
     document.getElementById('wizard-title').textContent = `Grupp ${letter}`;
-    document.getElementById('wizard-progress').style.width = `${((index + 1) / 12) * 100}%`;
+    const letters = getGroupLetters();
+    document.getElementById('wizard-progress').style.width = `${((index + 1) / letters.length) * 100}%`;
 
     // Render group quick-jump nav
     renderGroupNav(index);
@@ -166,7 +166,7 @@ function renderGroupNav(activeIndex) {
         titleEl.parentNode.insertBefore(nav, titleEl);
     }
     nav.innerHTML = '';
-    GROUP_LETTERS.forEach((letter, i) => {
+    getGroupLetters().forEach((letter, i) => {
         const btn = document.createElement('button');
         const hasPick = existingGroupPicks && existingGroupPicks[letter];
         btn.style.cssText = `padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; border:2px solid ${i === activeIndex ? '#1a1a1a' : (hasPick ? '#28a745' : '#ddd')}; background:${i === activeIndex ? '#1a1a1a' : (hasPick ? 'rgba(40,167,69,0.08)' : '#fff')}; color:${i === activeIndex ? '#fff' : '#333'};`;
@@ -287,7 +287,7 @@ function generateAndFillScores(targetStandings) {
     const map = {};
     slots.forEach((s, i) => map[s.id] = targetStandings[i]);
 
-    const letter = GROUP_LETTERS[currentIndex];
+    const letter = getGroupLetters()[currentIndex];
     allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
         const sim = scores.find(s =>
             (map[s.hId] === m.homeTeam && map[s.aId] === m.awayTeam) ||
@@ -305,7 +305,7 @@ function generateAndFillScores(targetStandings) {
 
 // ─── LIVE TABLE ──────────────────────────────────────
 function updateWizardTable() {
-    const letter = GROUP_LETTERS[currentIndex];
+    const letter = getGroupLetters()[currentIndex];
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
     const tData = {};
     currentTeams.forEach(t => tData[t] = { name: t, pld: 0, pts: 0, gd: 0 });
@@ -354,7 +354,7 @@ function updateWizardTable() {
 // ─── SAVE ────────────────────────────────────────────
 async function saveAndNext() {
     if (tipsLocked) return showToast('Tipsraderna är låsta av admin.');
-    const letter = GROUP_LETTERS[currentIndex];
+    const letter = getGroupLetters()[currentIndex];
     const userId = auth.currentUser.uid;
     if (!selFirst || !selSecond) return showToast("Välj gruppetta och grupptvåa först!");
 
@@ -379,7 +379,7 @@ async function saveAndNext() {
         thirdPts: standings[2]?.pts || 0, thirdGd: standings[2]?.gd || 0, thirdGf: standings[2]?.gf || 0
     };
     existing.mode = currentMode;
-    if (currentIndex === 11) existing.completedAt = new Date().toISOString();
+    if (currentIndex === getGroupLetters().length - 1) existing.completedAt = new Date().toISOString();
     updates.groupPicks = existing;
 
     try {
@@ -391,7 +391,7 @@ async function saveAndNext() {
         return showToast("Kunde inte spara. Försök igen.");
     }
 
-    if (currentIndex < 11) {
+    if (currentIndex < getGroupLetters().length - 1) {
         storeCurrentScores();
         currentIndex++;
         loadGroup(currentIndex);

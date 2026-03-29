@@ -1,8 +1,7 @@
 import { db } from './config.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+import { getGroupLetters, getKnockoutRounds, getFinalRound } from './tournament-config.js';
 let subTabsWired = false;
 
 export async function loadResults(allMatches) {
@@ -53,7 +52,7 @@ function setActiveSubTab(which) {
 
 function renderGroupTables(allMatches, results) {
     let html = '<div class="tables-grid">';
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
         if (groupMatches.length === 0) return;
 
@@ -110,18 +109,15 @@ function renderGroupTables(allMatches, results) {
 function renderOfficialBracket(bracket) {
     const rd = bracket.rounds || {};
 
-    const leftRounds = [
-        { key: 'R32', label: 'Sextondelsfinal', start: 0, count: 8 },
-        { key: 'R16', label: 'Åttondelsfinal', start: 0, count: 4 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
-        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
-    ];
-    const rightRounds = [
-        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
-        { key: 'R16', label: 'Åttondelsfinal', start: 4, count: 4 },
-        { key: 'R32', label: 'Sextondelsfinal', start: 8, count: 8 },
-    ];
+    const koRounds = getKnockoutRounds();
+    const finalRound = getFinalRound();
+    const nonFinal = koRounds.filter(r => r !== finalRound);
+    const leftRounds = nonFinal.map(r => ({
+        key: r.adminKey, label: r.label, start: 0, count: r.teams / 4
+    }));
+    const rightRounds = [...nonFinal].reverse().map(r => ({
+        key: r.adminKey, label: r.label, start: r.teams / 4, count: r.teams / 4
+    }));
 
     let html = `<div style="background: linear-gradient(135deg, #1f1f3a, #2b2b52); border-radius: 16px; padding: 20px; overflow-x: auto;">`;
     html += `<div class="br-tree">`;
@@ -136,16 +132,17 @@ function renderOfficialBracket(bracket) {
     });
 
     // Final (center)
-    const finalMatch = (rd['Final'] || [])[0] || {};
+    const finalAdminKey = finalRound?.adminKey || 'Final';
+    const finalMatch = (rd[finalAdminKey] || [])[0] || {};
     html += `<div class="br-round br-final-round">`;
-    html += `<div class="br-round-label br-final-label">FINAL</div>`;
+    html += `<div class="br-round-label br-final-label">${(finalRound?.label || 'FINAL').toUpperCase()}</div>`;
     html += `<div class="br-round-matches">`;
     html += `<div class="br-slot">${renderBracketMatch(finalMatch, true)}</div>`;
     html += `</div></div>`;
 
     // Right half (mirrored)
     rightRounds.forEach((round, ri) => {
-        const depth = 3 - ri;
+        const depth = nonFinal.length - 1 - ri;
         html += `<div class="br-round br-right">`;
         html += `<div class="br-round-label">${round.label}</div>`;
         html += `<div class="br-round-matches">`;

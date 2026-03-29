@@ -2,12 +2,11 @@ import { db } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
 import { bumpDataVersion, allMatches, existingResults } from './admin.js';
-
-const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig } from './tournament-config.js';
 
 export function getGroupStandings() {
     const standings = {};
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
         if (groupMatches.length === 0) return;
         const teams = {};
@@ -39,7 +38,7 @@ function getAllTeamsForAutocomplete() {
     return Array.from(teams).sort();
 }
 
-const MONTHS = ['juni', 'juli'];
+const MONTHS = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
 
 function parseDateStr(dateStr) {
     if (!dateStr) return { day: '', month: '', time: '' };
@@ -113,18 +112,15 @@ export async function renderAdminBracket() {
     allTeams.forEach(t => { html += `<option value="${t}">`; });
     html += `</datalist>`;
 
-    const leftRounds = [
-        { key: 'R32', label: 'Sextondelsfinal', start: 0, count: 8 },
-        { key: 'R16', label: 'Åttondelsfinal', start: 0, count: 4 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 0, count: 2 },
-        { key: 'SF',  label: 'Semifinal', start: 0, count: 1 },
-    ];
-    const rightRounds = [
-        { key: 'SF',  label: 'Semifinal', start: 1, count: 1 },
-        { key: 'KF',  label: 'Kvartsfinal', start: 2, count: 2 },
-        { key: 'R16', label: 'Åttondelsfinal', start: 4, count: 4 },
-        { key: 'R32', label: 'Sextondelsfinal', start: 8, count: 8 },
-    ];
+    const koRounds = getKnockoutRounds();
+    const finalRound = getFinalRound();
+    const nonFinal = koRounds.filter(r => r !== finalRound);
+    const leftRounds = nonFinal.map(r => ({
+        key: r.adminKey, label: r.label, start: 0, count: r.teams / 4
+    }));
+    const rightRounds = [...nonFinal].reverse().map(r => ({
+        key: r.adminKey, label: r.label, start: r.teams / 4, count: r.teams / 4
+    }));
 
     html += `<div class="abt-tree">`;
 
@@ -142,17 +138,18 @@ export async function renderAdminBracket() {
         html += `</div></div>`;
     });
 
-    const finalMatch = (rd['Final'] || [])[0] || {};
+    const finalAdminKey = finalRound?.adminKey || 'Final';
+    const finalMatch = (rd[finalAdminKey] || [])[0] || {};
     html += `<div class="abt-round abt-round-final">`;
-    html += `<div class="abt-round-label abt-final-label">FINAL</div>`;
+    html += `<div class="abt-round-label abt-final-label">${(finalRound?.label || 'FINAL').toUpperCase()}</div>`;
     html += `<div class="abt-round-matches">`;
     html += `<div class="abt-match-wrapper abt-mw-final">`;
-    html += renderMatchCard('Final', 0, finalMatch, 'center');
+    html += renderMatchCard(finalAdminKey, 0, finalMatch, 'center');
     html += `</div>`;
     html += `</div></div>`;
 
     rightRounds.forEach((round, ri) => {
-        const depth = 3 - ri;
+        const depth = nonFinal.length - 1 - ri;
         html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
         html += `<div class="abt-round-label">${round.label}</div>`;
         html += `<div class="abt-round-matches">`;
@@ -176,8 +173,8 @@ export async function renderAdminBracket() {
         autofillBtn.addEventListener('click', () => autofillR32(standings));
     }
 
-    const rounds = ['R32', 'R16', 'KF', 'SF', 'Final'];
-    const matchCounts = [16, 8, 4, 2, 1];
+    const rounds = koRounds.map(r => r.adminKey);
+    const matchCounts = koRounds.map(r => r.teams / 2);
     document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
     container.querySelectorAll('.abt-score').forEach(input => {
         input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
@@ -197,8 +194,14 @@ export async function renderAdminBracket() {
 }
 
 function autofillR32(standings) {
+    const groupCfg = getGroupStageConfig();
+    const bestOfRest = groupCfg?.qualification?.bestOfRest || 0;
+    const firstRound = getKnockoutRounds()[0];
+    const firstRoundKey = firstRound?.adminKey || 'R32';
+    const matchCount = (firstRound?.teams || 32) / 2;
+
     const firsts = [], seconds = [], thirds = [];
-    GROUP_LETTERS.forEach(letter => {
+    getGroupLetters().forEach(letter => {
         const s = standings[letter];
         if (!s || s.length < 2) return;
         firsts.push({ name: s[0].name, group: letter });
@@ -206,14 +209,14 @@ function autofillR32(standings) {
         if (s.length >= 3) thirds.push({ ...s[2], group: letter });
     });
     thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-    const qualifiedThirds = thirds.slice(0, 8);
+    const qualifiedThirds = thirds.slice(0, bestOfRest);
     const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
 
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < matchCount; i++) {
         const t1 = allQualified[i]?.name || '';
-        const t2 = allQualified[i + 16]?.name || '';
-        const el1 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="1"]`);
-        const el2 = document.querySelector(`.admin-bracket-team[data-round="R32"][data-match="${i}"][data-side="2"]`);
+        const t2 = allQualified[i + matchCount]?.name || '';
+        const el1 = document.querySelector(`.admin-bracket-team[data-round="${firstRoundKey}"][data-match="${i}"][data-side="1"]`);
+        const el2 = document.querySelector(`.admin-bracket-team[data-round="${firstRoundKey}"][data-match="${i}"][data-side="2"]`);
         if (el1) el1.value = t1;
         if (el2) el2.value = t2;
     }
@@ -256,7 +259,8 @@ async function saveAdminBracket(rounds, matchCounts) {
             bracket.rounds[round].push(match);
         }
     });
-    bracket.teams = (bracket.rounds.R32 || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
+    const firstRoundKey = getKnockoutRounds()[0]?.adminKey || 'R32';
+    bracket.teams = (bracket.rounds[firstRoundKey] || []).flatMap(m => [m.team1, m.team2].filter(Boolean));
     await setDoc(doc(db, "matches", "_bracket"), bracket, { merge: true });
     await bumpDataVersion();
     const btn = document.getElementById('admin-save-bracket');
