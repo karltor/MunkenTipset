@@ -2,7 +2,7 @@ import { db } from './config.js';
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch, updateDoc }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { bumpDataVersion } from './admin.js';
-import { loadTournamentConfig, getConfig, getGroupLetters } from './tournament-config.js';
+import { loadTournamentConfig, getConfig, getGroupLetters, hasStageType } from './tournament-config.js';
 
 // ── Tournament Presets ─────────────────────────────────────────────
 const PRESETS = {
@@ -93,47 +93,64 @@ function showToast(msg) {
 function renderTournamentTab() {
     const container = document.getElementById('admin-tournament-content');
     const cfg = getConfig();
-
-    // Current tournament info
     const stages = cfg.stages || [];
-    const stageLabels = stages.map(s => {
-        if (s.type === 'round-robin-groups') return `Gruppspel (${s.groups?.letters?.length || '?'} grupper)`;
-        if (s.type === 'single-elimination') {
-            const rounds = s.rounds?.map(r => r.label).join(', ') || '';
-            const tl = s.twoLegged ? ' (dubbelmöten)' : '';
-            return `Slutspel${tl}: ${rounds}`;
-        }
-        return s.label || s.type;
-    }).join('<br>');
+
+    const activeHasGroups = stages.some(s => s.type === 'round-robin-groups');
+    const activeHasKnockout = stages.some(s => s.type === 'single-elimination');
+    const koStage = stages.find(s => s.type === 'single-elimination');
+    const groupStage = stages.find(s => s.type === 'round-robin-groups');
 
     let html = '';
 
-    // Active tournament display
+    // ─── Active tournament card ───
     html += `<div class="admin-card" style="border-left: 4px solid #28a745; margin-bottom:16px;">`;
     html += `<h3 style="margin-top:0;">Aktiv turnering: ${cfg.name || 'Okänd'}</h3>`;
-    html += `<p style="color:#666; font-size:13px; margin:0;">${stageLabels}</p>`;
-    html += `</div>`;
+    html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">`;
+    if (activeHasGroups) {
+        const letters = groupStage.groups?.letters || [];
+        html += `<span style="background:#28a745; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600;">Gruppspel (${letters.length} grupper)</span>`;
+    }
+    if (activeHasKnockout) {
+        const rounds = koStage.rounds?.map(r => r.label).join(', ') || '';
+        const tl = koStage.twoLegged ? ' — dubbelmöten' : '';
+        html += `<span style="background:#17a2b8; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600;">Slutspel: ${rounds}${tl}</span>`;
+    }
+    html += `</div></div>`;
 
-    // Preset selector
+    // ─── Preset cards ───
     html += `<div class="admin-card" style="margin-bottom:16px;">`;
     html += `<h3 style="margin-top:0;">Byt turnering</h3>`;
-    html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Välj en fördefinierad turnering eller skapa en anpassad. <strong style="color:#dc3545;">OBS: Detta rensar alla matcher, resultat, bracket och användartips!</strong></p>`;
-    html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">`;
+    html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Välj en fördefinierad turnering. <strong style="color:#dc3545;">Rensar alla matcher, resultat, bracket och tips!</strong></p>`;
+    html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">`;
     for (const [key, preset] of Object.entries(PRESETS)) {
         const isActive = cfg.name === preset.name;
-        const bg = isActive ? '#6c757d' : '#17a2b8';
-        html += `<button class="btn preset-btn" data-preset="${key}" style="background:${bg}; font-size:13px;">${preset.name}${isActive ? ' (aktiv)' : ''}</button>`;
+        const pStages = preset.stages || [];
+        const pHasGroups = pStages.some(s => s.type === 'round-robin-groups');
+        const pHasKO = pStages.some(s => s.type === 'single-elimination');
+        const pKO = pStages.find(s => s.type === 'single-elimination');
+        const roundNames = pKO?.rounds?.map(r => r.label).join(', ') || '';
+        const twoLeg = pKO?.twoLegged ? 'Dubbelmöten' : 'Enkelmöten';
+
+        html += `<div class="preset-card${isActive ? ' preset-active' : ''}" data-preset="${key}" style="
+            background: ${isActive ? '#f8f9fa' : 'white'}; border: 2px solid ${isActive ? '#28a745' : '#ddd'};
+            border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.15s;">
+            <div style="font-weight:700; font-size:14px; margin-bottom:6px;">${preset.name}${isActive ? ' ✓' : ''}</div>
+            <div style="font-size:11px; color:#666;">
+                ${pHasGroups ? '<div>📋 Gruppspel</div>' : ''}
+                ${pHasKO ? `<div>🏆 ${roundNames}</div>` : ''}
+                ${pHasKO ? `<div style="color:#888;">${twoLeg}</div>` : ''}
+            </div>
+        </div>`;
     }
     html += `</div>`;
     html += `<div id="tournament-switch-status" style="font-size:12px; color:#888;"></div>`;
     html += `</div>`;
 
-    // Add group match form (only show if current tournament has groups)
-    const hasGroups = stages.some(s => s.type === 'round-robin-groups');
+    // ─── Add match form ───
     html += `<div class="admin-card" style="margin-bottom:16px;">`;
     html += `<h3 style="margin-top:0;">Lägg till match</h3>`;
     html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Lägg till en enskild match i databasen.</p>`;
-    if (hasGroups) {
+    if (activeHasGroups) {
         const letters = getGroupLetters();
         const groupOpts = letters.map(l => `<option value="Grupp ${l}">Grupp ${l}</option>`).join('');
         html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:400px;">`;
@@ -154,7 +171,7 @@ function renderTournamentTab() {
     html += `<div id="add-match-status" style="margin-top:6px; font-size:12px; color:#888;"></div>`;
     html += `</div>`;
 
-    // Bulk add matches
+    // ─── Bulk add matches ───
     html += `<div class="admin-card" style="margin-bottom:16px;">`;
     html += `<h3 style="margin-top:0;">Lägg till flera matcher</h3>`;
     html += `<p style="color:#888; font-size:12px; margin:0 0 8px;">Klistra in matcher i formatet: <code>Hemmalag - Bortalag, Grupp X, 14 juni 21:00</code> (en per rad)</p>`;
@@ -163,7 +180,7 @@ function renderTournamentTab() {
     html += `<div id="bulk-match-status" style="margin-top:6px; font-size:12px; color:#888;"></div>`;
     html += `</div>`;
 
-    // Danger zone: clear all
+    // ─── Danger zone ───
     html += `<div class="admin-card" style="border: 2px dashed #dc3545;">`;
     html += `<h3 style="margin-top:0; color:#dc3545;">Rensa all data</h3>`;
     html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Tar bort alla matcher, resultat, bracket och användartips. Turneringskonfigurationen behålls.</p>`;
@@ -174,8 +191,8 @@ function renderTournamentTab() {
     container.innerHTML = html;
 
     // Attach listeners
-    container.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchTournament(btn.dataset.preset));
+    container.querySelectorAll('.preset-card').forEach(card => {
+        card.addEventListener('click', () => switchTournament(card.dataset.preset));
     });
     document.getElementById('add-match-btn').addEventListener('click', addSingleMatch);
     document.getElementById('bulk-match-btn').addEventListener('click', addBulkMatches);
@@ -205,11 +222,9 @@ async function switchTournament(presetKey) {
     try {
         await clearAllDataInternal(statusEl);
 
-        // Write new tournament config
         statusEl.textContent = 'Skriver turneringskonfiguration...';
         await setDoc(doc(db, "matches", "_tournament"), preset);
 
-        // Reset settings
         await setDoc(doc(db, "matches", "_settings"), {
             tipsLocked: false,
             tipsVisible: true,
@@ -255,7 +270,6 @@ async function clearAllData() {
 }
 
 async function clearAllDataInternal(statusEl) {
-    // 1. Delete all match documents (not _ prefixed system docs)
     statusEl.textContent = 'Tar bort matcher...';
     const matchSnap = await getDocs(collection(db, "matches"));
     const matchDocs = matchSnap.docs.filter(d => !d.id.startsWith('_'));
@@ -265,12 +279,10 @@ async function clearAllDataInternal(statusEl) {
         await batch.commit();
     }
 
-    // 2. Clear results and bracket
     statusEl.textContent = 'Rensar resultat och bracket...';
     await setDoc(doc(db, "matches", "_results"), {});
     await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
 
-    // 3. Clear all user tips
     statusEl.textContent = 'Rensar användartips...';
     const userSnap = await getDocs(collection(db, "users"));
     const userDocs = userSnap.docs;
@@ -378,8 +390,6 @@ async function addBulkMatches() {
 }
 
 function parseBulkLine(line) {
-    // Format: "Hemmalag - Bortalag, Grupp A, 14 juni 21:00"
-    // or:     "Hemmalag - Bortalag, 14 juni 21:00"  (no stage)
     const parts = line.split(',').map(s => s.trim());
     if (parts.length < 2) return null;
 
