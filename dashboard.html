@@ -340,6 +340,18 @@
 
             <!-- ADMIN SUB: Matcher -->
             <div id="admin-matches-db" class="admin-sub-content">
+                <div class="admin-card" style="margin-bottom:16px; border: 2px solid #17a2b8;">
+                    <h3 style="margin-top:0;">Säkerhetskopia</h3>
+                    <p style="color:#888; font-size:13px; margin-top:0;">Exportera all matchdata som JSON eller importera en tidigare backup.</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn" id="admin-export-backup" style="background:#17a2b8; font-size:13px;">Exportera matchdata</button>
+                        <label class="btn" style="background:#ffc107; color:#000; font-size:13px; cursor:pointer; margin:0;">
+                            Importera matchdata
+                            <input type="file" id="admin-import-backup" accept=".json" style="display:none;">
+                        </label>
+                    </div>
+                    <div id="admin-backup-status" style="margin-top:8px; font-size:12px; color:#888;"></div>
+                </div>
                 <div class="admin-card">
                     <h3 style="margin-top:0;">Alla matcher i databasen</h3>
                     <p style="color:#888; font-size:13px; margin-top:0;">Visa och ta bort matcher från Firestore.</p>

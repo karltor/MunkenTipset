@@ -6,6 +6,7 @@ import { renderAdminBracket } from './admin-bracket.js';
 import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
 import { initEmailDraft } from './admin-email.js';
 import { initThemeEditor } from './admin-theme.js';
+import { initBackup } from './admin-backup.js';
 
 import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel } from './tournament-config.js';
 export let allMatches = [];
@@ -58,6 +59,9 @@ export async function initAdmin(matchesData) {
 
         // Theme editor
         initThemeEditor();
+
+        // Backup/restore
+        initBackup();
 
         // Test tools
         document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
