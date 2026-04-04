@@ -50,10 +50,10 @@ export async function initAdmin(matchesData) {
             });
         });
 
-        document.getElementById('admin-lock-tips').addEventListener('click', () => toggleLock(true));
-        document.getElementById('admin-unlock-tips').addEventListener('click', () => toggleLock(false));
-        document.getElementById('admin-toggle-tips-visible').addEventListener('click', toggleTipsVisible);
-        document.getElementById('admin-save-results').addEventListener('click', saveAdminResults);
+        document.getElementById('admin-lock-tips')?.addEventListener('click', () => toggleLock(true));
+        document.getElementById('admin-unlock-tips')?.addEventListener('click', () => toggleLock(false));
+        document.getElementById('admin-toggle-tips-visible')?.addEventListener('click', toggleTipsVisible);
+        document.getElementById('admin-save-results')?.addEventListener('click', saveAdminResults);
 
         // Email draft
         initEmailDraft();
@@ -68,10 +68,10 @@ export async function initAdmin(matchesData) {
         initTournament();
 
         // Test tools
-        document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
-        document.getElementById('admin-remove-fake-teachers').addEventListener('click', removeFakeTeachers);
-        document.getElementById('admin-autofill-group-results').addEventListener('click', autoFillGroupResults);
-        document.getElementById('admin-clear-group-results').addEventListener('click', clearGroupResults);
+        document.getElementById('admin-add-fake-teachers')?.addEventListener('click', addFakeTeachers);
+        document.getElementById('admin-remove-fake-teachers')?.addEventListener('click', removeFakeTeachers);
+        document.getElementById('admin-autofill-group-results')?.addEventListener('click', autoFillGroupResults);
+        document.getElementById('admin-clear-group-results')?.addEventListener('click', clearGroupResults);
         const koRoundBtns = {
             'admin-autofill-ko-r32': 'R32', 'admin-autofill-ko-r16': 'R16',
             'admin-autofill-ko-qf': 'KF', 'admin-autofill-ko-sf': 'SF',
@@ -81,8 +81,8 @@ export async function initAdmin(matchesData) {
             const el = document.getElementById(id);
             if (el) el.addEventListener('click', () => autoFillKnockoutRound(key));
         });
-        document.getElementById('admin-clear-ko-results').addEventListener('click', clearKnockoutResults);
-        document.getElementById('admin-clear-ko-teams').addEventListener('click', clearKnockoutTeams);
+        document.getElementById('admin-clear-ko-results')?.addEventListener('click', clearKnockoutResults);
+        document.getElementById('admin-clear-ko-teams')?.addEventListener('click', clearKnockoutTeams);
         initDone = true;
     }
 }
@@ -134,8 +134,8 @@ async function refreshLockStatus() {
     const settings = snap.exists() ? snap.data() : {};
     const lockBtn = document.getElementById('admin-lock-tips');
     const unlockBtn = document.getElementById('admin-unlock-tips');
-    lockBtn.style.display = settings.tipsLocked ? 'none' : 'inline-block';
-    unlockBtn.style.display = settings.tipsLocked ? 'inline-block' : 'none';
+    if (lockBtn) lockBtn.style.display = settings.tipsLocked ? 'none' : 'inline-block';
+    if (unlockBtn) unlockBtn.style.display = settings.tipsLocked ? 'inline-block' : 'none';
 }
 
 async function toggleLock(lock) {

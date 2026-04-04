@@ -59,7 +59,6 @@ document.getElementById('admin-btn').addEventListener('click', () => {
         document.getElementById('start-tab').classList.add('active');
     } else {
         adminTab.classList.add('active');
-        if (allMatchesData.length > 0) initAdmin(allMatchesData);
     }
 });
 
@@ -162,6 +161,8 @@ onAuthStateChanged(auth, async (user) => {
     if (allMatchesData.length > 0) {
         initWizard(allMatchesData, onGroupsComplete, locked);
     }
+
+    if (isAdmin) initAdmin(allMatchesData);
 
     loadCommunityStats(settings);
 
