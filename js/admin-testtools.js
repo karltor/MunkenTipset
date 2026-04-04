@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 
 import { f } from './wizard.js';
 import { bumpDataVersion, allMatches, existingResults, currentAdminGroup, renderGroupButtons, renderAdminMatches } from './admin.js';
 import { getGroupStandings, renderAdminBracket } from './admin-bracket.js';
-import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig, hasStageType } from './tournament-config.js';
 
 const FAKE_NAMES = [
     'Lure Drejeri', 'Bo Ring', 'Anna Conda', 'Sansen Dansen',
@@ -31,17 +31,47 @@ export async function addFakeTeachers() {
     const statusEl = document.getElementById('admin-fake-status');
     statusEl.textContent = 'Skapar fejklärare...';
 
+    const hasGroups = hasStageType('round-robin-groups');
+
+    // Get teams from groups or from bracket
+    let allTeamsList = [];
     const groupTeams = {};
-    getGroupLetters().forEach(letter => {
-        const teams = new Set();
-        allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
-            teams.add(m.homeTeam);
-            teams.add(m.awayTeam);
-        });
-        groupTeams[letter] = Array.from(teams);
-    });
-    const allTeamsList = [...new Set(allMatches.filter(m => m.stage?.startsWith('Grupp')).flatMap(m => [m.homeTeam, m.awayTeam]))];
     const groupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
+
+    if (hasGroups) {
+        getGroupLetters().forEach(letter => {
+            const teams = new Set();
+            allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
+                teams.add(m.homeTeam);
+                teams.add(m.awayTeam);
+            });
+            groupTeams[letter] = Array.from(teams);
+        });
+        allTeamsList = [...new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam]))];
+    } else {
+        // Knockout-only: get teams from bracket
+        const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+        const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
+        allTeamsList = bracket.teams || [];
+        if (allTeamsList.length === 0) {
+            // Fallback: extract from first round matchups
+            const koRounds = getKnockoutRounds();
+            if (koRounds.length > 0) {
+                const firstRound = bracket.rounds?.[koRounds[0].adminKey] || [];
+                firstRound.forEach(m => {
+                    if (m.team1) allTeamsList.push(m.team1);
+                    if (m.team2) allTeamsList.push(m.team2);
+                });
+            }
+        }
+    }
+
+    if (allTeamsList.length === 0) {
+        statusEl.textContent = 'Inga lag hittades. Skapa en bracket eller lägg till matcher först.';
+        statusEl.style.color = '#dc3545';
+        setTimeout(() => { statusEl.textContent = ''; }, 4000);
+        return;
+    }
 
     const usersSnap = await getDocs(collection(db, "users"));
     const existingFakeCount = usersSnap.docs.filter(d => d.id.startsWith('fake_')).length;
@@ -51,22 +81,30 @@ export async function addFakeTeachers() {
         const name = FAKE_NAMES[(fakeNameIdx + i) % FAKE_NAMES.length];
         const fakeId = `fake_${Date.now()}_${i}`;
 
-        const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
-        getGroupLetters().forEach(letter => {
-            const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
-            groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
-        });
+        const userData = { email: `${fakeId}@fake.test`, name };
 
-        const matchTips = {};
-        groupMatches.forEach(m => {
-            matchTips[String(m.id)] = {
-                homeScore: Math.floor(Math.random() * 4),
-                awayScore: Math.floor(Math.random() * 4),
-                homeTeam: m.homeTeam, awayTeam: m.awayTeam,
-                stage: m.stage
-            };
-        });
+        // Group picks (only if groups exist)
+        if (hasGroups) {
+            const groupPicks = { mode: 'detailed', completedAt: new Date().toISOString() };
+            getGroupLetters().forEach(letter => {
+                const teams = [...(groupTeams[letter] || [])].sort(() => Math.random() - 0.5);
+                groupPicks[letter] = { first: teams[0], second: teams[1], third: teams[2], fourth: teams[3] };
+            });
+            userData.groupPicks = groupPicks;
 
+            const matchTips = {};
+            groupMatches.forEach(m => {
+                matchTips[String(m.id)] = {
+                    homeScore: Math.floor(Math.random() * 4),
+                    awayScore: Math.floor(Math.random() * 4),
+                    homeTeam: m.homeTeam, awayTeam: m.awayTeam,
+                    stage: m.stage
+                };
+            });
+            userData.matchTips = matchTips;
+        }
+
+        // Knockout picks
         const shuffled = [...allTeamsList].sort(() => Math.random() - 0.5);
         const knockout = {};
         const koRounds = getKnockoutRounds();
@@ -75,10 +113,9 @@ export async function addFakeTeachers() {
             const pickCount = r.teams / 2;
             knockout[r.key] = r === finalRd ? shuffled[0] : shuffled.slice(0, pickCount);
         });
+        userData.knockout = knockout;
 
-        await setDoc(doc(db, "users", fakeId), {
-            email: `${fakeId}@fake.test`, name, groupPicks, matchTips, knockout
-        });
+        await setDoc(doc(db, "users", fakeId), userData);
     }
 
     fakeNameIdx += 10;
@@ -166,25 +203,29 @@ export async function autoFillKnockoutRound(targetRound) {
         if (!bracket.rounds[firstRoundKey]) bracket.rounds[firstRoundKey] = [];
         const hasTeams = bracket.rounds[firstRoundKey].some(m => m?.team1);
         if (!hasTeams) {
-            const standings = getGroupStandings();
-            const firsts = [], seconds = [], thirds = [];
-            getGroupLetters().forEach(letter => {
-                const s = standings[letter];
-                if (!s || s.length < 2) return;
-                firsts.push(s[0].name);
-                seconds.push(s[1].name);
-                if (s.length >= 3) thirds.push(s[2]);
-            });
-            thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-            const bestOfRest = getGroupStageConfig()?.qualification?.bestOfRest || 0;
-            const qualifiedThirds = thirds.slice(0, bestOfRest).map(t => t.name);
-            const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
-            const firstMatchCount = matchCounts[firstRoundKey];
-            for (let i = 0; i < firstMatchCount; i++) {
-                if (!bracket.rounds[firstRoundKey][i]) bracket.rounds[firstRoundKey][i] = {};
-                bracket.rounds[firstRoundKey][i].team1 = allQualified[i] || '';
-                bracket.rounds[firstRoundKey][i].team2 = allQualified[i + firstMatchCount] || '';
+            if (hasStageType('round-robin-groups')) {
+                // Build from group standings
+                const standings = getGroupStandings();
+                const firsts = [], seconds = [], thirds = [];
+                getGroupLetters().forEach(letter => {
+                    const s = standings[letter];
+                    if (!s || s.length < 2) return;
+                    firsts.push(s[0].name);
+                    seconds.push(s[1].name);
+                    if (s.length >= 3) thirds.push(s[2]);
+                });
+                thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+                const bestOfRest = getGroupStageConfig()?.qualification?.bestOfRest || 0;
+                const qualifiedThirds = thirds.slice(0, bestOfRest).map(t => t.name);
+                const allQualified = [...firsts, ...seconds, ...qualifiedThirds];
+                const firstMatchCount = matchCounts[firstRoundKey];
+                for (let i = 0; i < firstMatchCount; i++) {
+                    if (!bracket.rounds[firstRoundKey][i]) bracket.rounds[firstRoundKey][i] = {};
+                    bracket.rounds[firstRoundKey][i].team1 = allQualified[i] || '';
+                    bracket.rounds[firstRoundKey][i].team2 = allQualified[i + firstMatchCount] || '';
+                }
             }
+            // For knockout-only: teams are already set from bracket builder, nothing to populate
         }
     } else {
         const prevRoundIdx = rounds.indexOf(targetRound) - 1;

@@ -9,7 +9,7 @@ import { initThemeEditor } from './admin-theme.js';
 import { initBackup } from './admin-backup.js';
 import { initTournament } from './admin-tournament.js';
 
-import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel, hasStageType } from './tournament-config.js';
 export let allMatches = [];
 export let currentAdminGroup = 'A';
 export let existingResults = {};
@@ -31,6 +31,11 @@ export async function initAdmin(matchesData) {
         const gm = allMatches.filter(m => m.stage === `Grupp ${letter}`);
         return gm.some(m => !existingResults[m.id]);
     }) || 'A';
+
+    // Hide group results card when no group stage
+    const hasGroups = hasStageType('round-robin-groups');
+    const groupResultsCard = document.querySelector('#admin-results > .admin-card');
+    if (groupResultsCard) groupResultsCard.style.display = hasGroups ? '' : 'none';
 
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);

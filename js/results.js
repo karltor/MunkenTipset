@@ -1,7 +1,7 @@
 import { db } from './config.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { getGroupLetters, getKnockoutRounds, getFinalRound } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getFinalRound, hasStageType } from './tournament-config.js';
 let subTabsWired = false;
 
 export async function loadResults(allMatches) {
@@ -26,13 +26,22 @@ export async function loadResults(allMatches) {
         knockoutContainer.innerHTML = '<div style="background:white; padding: 2rem; border-radius: 12px; text-align: center; color: #999;">Slutspelet har inte startats ännu.</div>';
     }
 
-    // Auto-select sub-tab: show knockout if all group matches are played
-    const allGroupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
-    const allGroupsDone = allGroupMatches.length > 0 && allGroupMatches.every(m => results[m.id]);
-    if (allGroupsDone && bracket?.teams?.length > 0) {
+    // Hide groups sub-tab when no group stage exists
+    const hasGroups = hasStageType('round-robin-groups');
+    const groupsBtn = document.querySelector('.results-sub-btn[data-sub="groups"]');
+    if (groupsBtn) groupsBtn.style.display = hasGroups ? '' : 'none';
+
+    // Auto-select sub-tab: show knockout if no groups or all group matches are played
+    if (!hasGroups) {
         setActiveSubTab('knockout');
     } else {
-        setActiveSubTab('groups');
+        const allGroupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
+        const allGroupsDone = allGroupMatches.length > 0 && allGroupMatches.every(m => results[m.id]);
+        if (allGroupsDone && bracket?.teams?.length > 0) {
+            setActiveSubTab('knockout');
+        } else {
+            setActiveSubTab('groups');
+        }
     }
 
     // Wire sub-tab buttons once
