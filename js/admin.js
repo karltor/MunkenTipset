@@ -7,6 +7,7 @@ import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupRe
 import { initEmailDraft } from './admin-email.js';
 import { initThemeEditor } from './admin-theme.js';
 import { initBackup } from './admin-backup.js';
+import { initTournament } from './admin-tournament.js';
 
 import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel } from './tournament-config.js';
 export let allMatches = [];
@@ -62,6 +63,9 @@ export async function initAdmin(matchesData) {
 
         // Backup/restore
         initBackup();
+
+        // Tournament management
+        initTournament();
 
         // Test tools
         document.getElementById('admin-add-fake-teachers').addEventListener('click', addFakeTeachers);
