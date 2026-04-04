@@ -2,7 +2,7 @@ import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
 import { invalidateStatsCache } from './stats.js';
-import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound } from './tournament-config.js';
+import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound, hasStageType, isTwoLegged, getRoundAdminKey } from './tournament-config.js';
 
 function _rounds() { return getKnockoutRounds().map(r => r.key); }
 function _roundLabel(key) {
@@ -12,7 +12,7 @@ function _roundLabel(key) {
     const finalKey = rounds.length > 0 ? rounds[rounds.length - 1].key : 'final';
     if (key === finalKey) return `Vilket lag vinner ${getTournamentName()}?`;
     const nextRound = idx < rounds.length - 1 ? rounds[idx + 1] : null;
-    return `Välj ${round.teams / 2} lag som går vidare till ${nextRound?.label?.toLowerCase() || 'nästa omgång'}`;
+    return `Välj vinnare i varje möte — de går vidare till ${nextRound?.label?.toLowerCase() || 'nästa omgång'}`;
 }
 function _roundPickCount(key) {
     const round = getKnockoutRounds().find(r => r.key === key);
@@ -29,18 +29,32 @@ let allTeamsInRound = [];
 let selectedTeams = new Set();
 let listenersAttached = false;
 let bracketLocked = false;
+let adminBracket = null;
+let knockoutOnly = false;
 
 export async function initBracket(groupPicks, tipsLocked) {
     bracketLocked = tipsLocked || false;
-    if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
+    knockoutOnly = !hasStageType('round-robin-groups');
+
+    if (knockoutOnly) {
+        // Load bracket from admin — teams/matchups defined there
+        const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+        adminBracket = bracketSnap.exists() ? bracketSnap.data() : null;
+        if (!adminBracket || !adminBracket.teams || adminBracket.teams.length === 0) {
+            showNoBracket();
+            return;
+        }
+    } else {
+        // Group-stage tournaments: require group picks
+        if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
+        allTeamsInRound = buildQualifiedTeams(groupPicks);
+    }
 
     const userId = auth.currentUser.uid;
     const userSnap = await getDoc(doc(db, "users", userId));
     knockoutData = userSnap.exists() ? (userSnap.data().knockout || {}) : {};
 
-    allTeamsInRound = buildQualifiedTeams(groupPicks);
-
-    // Attach listeners early — must happen before any early return
+    // Attach listeners early
     if (!listenersAttached) {
         document.getElementById('btn-bracket-save').addEventListener('click', saveBracketRound);
         document.getElementById('btn-bracket-prev').addEventListener('click', () => {
@@ -52,9 +66,9 @@ export async function initBracket(groupPicks, tipsLocked) {
     const rounds = _rounds();
     const finalRoundKey = rounds.length > 0 ? rounds[rounds.length - 1] : 'final';
     if (knockoutData[finalRoundKey] && typeof knockoutData[finalRoundKey] === 'string') { showChampion(knockoutData[finalRoundKey]); return; }
-    // Also handle the final as an array-picked single item
     if (knockoutData[finalRoundKey]) { showChampion(knockoutData[finalRoundKey]); return; }
 
+    // Find furthest completed round
     currentRound = 0;
     const koRounds = getKnockoutRounds();
     for (let i = 0; i < koRounds.length - 1; i++) {
@@ -73,6 +87,17 @@ function showLocked() {
     document.getElementById('bracket-champion').style.display = 'none';
     document.getElementById('btn-go-to-groups').onclick = () =>
         document.querySelector('.tab-btn[data-target="wizard-tab"]').click();
+}
+
+function showNoBracket() {
+    const lockedDiv = document.getElementById('bracket-locked');
+    lockedDiv.style.display = 'block';
+    document.getElementById('bracket-content').style.display = 'none';
+    document.getElementById('bracket-champion').style.display = 'none';
+    lockedDiv.innerHTML = `<div style="background: white; padding: 3rem 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;">
+        <h2 style="color: #999;">Slutspelet är inte klart ännu</h2>
+        <p>Admin har inte satt upp slutspelsmatcherna ännu. Kom tillbaka snart!</p>
+    </div>`;
 }
 
 function showBracketContent() {
@@ -99,34 +124,134 @@ function buildQualifiedTeams(picks) {
     return [...firsts, ...seconds, ...thirds.slice(0, bestOfRest)];
 }
 
+// ── Get matchups for a round in knockout-only mode ──────────────────
+function getMatchupsForRound(roundIndex) {
+    const rounds = _rounds();
+    const roundKey = rounds[roundIndex];
+    const adminKey = getRoundAdminKey(roundKey);
+    const adminRound = adminBracket?.rounds?.[adminKey] || [];
+
+    if (roundIndex === 0) {
+        // First round: matchups directly from admin bracket
+        return adminRound.map(m => ({
+            team1: m.team1 || '',
+            team2: m.team2 || '',
+            date: m.date || ''
+        }));
+    }
+
+    // Subsequent rounds: pair up winners from previous round
+    const prevKey = rounds[roundIndex - 1];
+    const prevPicks = knockoutData[prevKey] || [];
+    const matchups = [];
+    for (let i = 0; i < prevPicks.length; i += 2) {
+        matchups.push({
+            team1: prevPicks[i] || '',
+            team2: prevPicks[i + 1] || '',
+            date: ''
+        });
+    }
+    return matchups;
+}
+
 function loadRound(roundIndex) {
     const roundKey = _rounds()[roundIndex];
     selectedTeams = new Set();
 
-    let teamsForRound;
-    if (roundIndex === 0) {
-        teamsForRound = allTeamsInRound;
-    } else {
-        const prevKey = _rounds()[roundIndex - 1];
-        const prev = knockoutData[prevKey] || [];
-        teamsForRound = prev.map(name => ({ name, seed: '', group: '' }));
-    }
-
-    // Pre-select previously saved picks, but only if they're still available in this round
-    const availableNames = new Set(teamsForRound.map(t => t.name));
+    // Pre-select previously saved picks
     if (knockoutData[roundKey]) {
         const picks = _isFinalRound(roundKey) ? [knockoutData[roundKey]] : knockoutData[roundKey];
-        picks.forEach(t => { if (availableNames.has(t)) selectedTeams.add(t); });
+        picks.forEach(t => selectedTeams.add(t));
     }
 
     document.getElementById('bracket-round-info').innerHTML =
-        `<p style="font-size: 1.1rem;">${_roundLabel(roundKey)}</p>
-         <p style="font-size: 0.85rem; color: #888;">Välj <strong>${_roundPickCount(roundKey)}</strong> lag</p>`;
+        `<p style="font-size: 1.1rem;">${_roundLabel(roundKey)}</p>`;
 
-    renderTeams(teamsForRound, roundKey);
+    if (knockoutOnly) {
+        renderMatchups(roundIndex, roundKey);
+    } else {
+        // Original flat-grid mode for group-stage tournaments
+        let teamsForRound;
+        if (roundIndex === 0) {
+            teamsForRound = allTeamsInRound;
+        } else {
+            const prevKey = _rounds()[roundIndex - 1];
+            const prev = knockoutData[prevKey] || [];
+            teamsForRound = prev.map(name => ({ name, seed: '', group: '' }));
+        }
+        document.getElementById('bracket-round-info').innerHTML +=
+            `<p style="font-size: 0.85rem; color: #888;">Välj <strong>${_roundPickCount(roundKey)}</strong> lag</p>`;
+        renderTeams(teamsForRound, roundKey);
+    }
     updateSaveBtn(roundKey);
 }
 
+// ── Matchup-based rendering (knockout-only mode) ────────────────────
+function renderMatchups(roundIndex, roundKey) {
+    const container = document.getElementById('bracket-container');
+    const matchups = getMatchupsForRound(roundIndex);
+    const twoLeg = isTwoLegged(roundKey);
+
+    if (_isFinalRound(roundKey)) {
+        const finalRound = getFinalRound();
+        let html = `<div style="text-align: center; padding: 40px 0;">`;
+        html += `<h3 style="font-family: 'Playfair Display', serif; color: #ffc107; font-size: 1.8rem; margin-bottom: 24px;">${(finalRound?.label || 'FINAL').toUpperCase()}</h3>`;
+        if (matchups.length > 0 && matchups[0].team1 && matchups[0].team2) {
+            const m = matchups[0];
+            html += renderMatchupCard(m, roundKey, true);
+        } else {
+            // Just show the two teams from prev round
+            const prevKey = _rounds()[roundIndex - 1];
+            const prevPicks = knockoutData[prevKey] || [];
+            html += `<div class="bracket-team-grid" style="justify-content: center; gap: 20px;">`;
+            prevPicks.forEach(t => {
+                const sel = selectedTeams.has(t) ? 'selected' : '';
+                html += `<div class="bracket-team ${sel}" style="font-size: 1.2rem; padding: 16px 24px;" onclick="window.toggleBracketTeam('${t}')">${fLarge(t)}${t}</div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+        container.innerHTML = html;
+        return;
+    }
+
+    let html = `<div class="bracket-matchups">`;
+    matchups.forEach(m => {
+        html += renderMatchupCard(m, roundKey, false, twoLeg);
+    });
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+function renderMatchupCard(matchup, roundKey, isFinal, twoLeg) {
+    const { team1, team2, date } = matchup;
+    if (!team1 && !team2) return '';
+
+    const sel1 = selectedTeams.has(team1) ? 'selected' : '';
+    const sel2 = selectedTeams.has(team2) ? 'selected' : '';
+    const style = isFinal ? 'font-size: 1.2rem; padding: 16px 24px;' : '';
+
+    let html = `<div class="bracket-matchup-card">`;
+    if (date) html += `<div class="bracket-matchup-date">${date}</div>`;
+    if (twoLeg) html += `<div class="bracket-matchup-tag">Dubbelmöte</div>`;
+
+    html += `<div class="bracket-matchup-teams">`;
+    html += `<div class="bracket-team ${sel1}" style="${style}" onclick="window.toggleBracketTeam('${team1}')">${f(team1)}${team1}</div>`;
+    html += `<div class="bracket-matchup-vs">vs</div>`;
+    html += `<div class="bracket-team ${sel2}" style="${style}" onclick="window.toggleBracketTeam('${team2}')">${f(team2)}${team2}</div>`;
+    html += `</div>`;
+
+    if (twoLeg) {
+        html += `<div class="bracket-matchup-leg2">`;
+        html += `<span style="font-size:11px; color:#888;">Retur:</span> ${f(team2)}${team2} vs ${f(team1)}${team1}`;
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+// ── Original flat-grid rendering (group-stage tournaments) ──────────
 function renderTeams(teams, roundKey) {
     const container = document.getElementById('bracket-container');
 
@@ -182,19 +307,35 @@ function fLarge(t) {
 window.toggleBracketTeam = function (team) {
     if (bracketLocked) return;
     const roundKey = _rounds()[currentRound];
-    const required = _roundPickCount(roundKey);
 
-    if (selectedTeams.has(team)) {
-        selectedTeams.delete(team);
+    if (knockoutOnly) {
+        // Matchup mode: selecting a team deselects its opponent
+        const matchups = getMatchupsForRound(currentRound);
+        const matchup = matchups.find(m => m.team1 === team || m.team2 === team);
+        if (matchup) {
+            const opponent = matchup.team1 === team ? matchup.team2 : matchup.team1;
+            if (selectedTeams.has(team)) {
+                selectedTeams.delete(team);
+            } else {
+                selectedTeams.delete(opponent); // deselect opponent
+                selectedTeams.add(team);
+            }
+        }
+        renderMatchups(currentRound, roundKey);
     } else {
-        if (_isFinalRound(roundKey)) selectedTeams.clear();
-        else if (selectedTeams.size >= required) return;
-        selectedTeams.add(team);
+        // Original flat-grid mode
+        const required = _roundPickCount(roundKey);
+        if (selectedTeams.has(team)) {
+            selectedTeams.delete(team);
+        } else {
+            if (_isFinalRound(roundKey)) selectedTeams.clear();
+            else if (selectedTeams.size >= required) return;
+            selectedTeams.add(team);
+        }
+        const prevKey = currentRound === 0 ? null : _rounds()[currentRound - 1];
+        const teams = currentRound === 0 ? allTeamsInRound : (knockoutData[prevKey] || []).map(n => ({ name: n, seed: '', group: '' }));
+        renderTeams(teams, roundKey);
     }
-
-    const prevKey = currentRound === 0 ? null : _rounds()[currentRound - 1];
-    const teams = currentRound === 0 ? allTeamsInRound : (knockoutData[prevKey] || []).map(n => ({ name: n, seed: '', group: '' }));
-    renderTeams(teams, roundKey);
     updateSaveBtn(roundKey);
 };
 
@@ -260,7 +401,6 @@ function showChampion(team) {
     document.getElementById('btn-edit-bracket').addEventListener('click', () => {
         champ.style.display = 'none';
         showBracketContent();
-        // Start from R32 with all picks pre-filled
         currentRound = 0;
         loadRound(currentRound);
     });

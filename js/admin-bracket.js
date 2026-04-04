@@ -2,7 +2,7 @@ import { db } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
 import { bumpDataVersion, allMatches, existingResults } from './admin.js';
-import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig, isTwoLegged, getRoundUserKey } from './tournament-config.js';
 
 export function getGroupStandings() {
     const standings = {};
@@ -47,8 +47,9 @@ function parseDateStr(dateStr) {
     return { day: '', month: '', time: '' };
 }
 
-function buildDateStr(round, matchIdx) {
-    const prefix = `[data-round="${round}"][data-match="${matchIdx}"]`;
+function buildDateStr(round, matchIdx, legSuffix) {
+    const suffix = legSuffix || '';
+    const prefix = `[data-round="${round}"][data-match="${matchIdx}"]${suffix}`;
     const day = document.querySelector(`.abt-date-day${prefix}`)?.value || '';
     const month = document.querySelector(`.abt-date-month${prefix}`)?.value || '';
     const timeSelect = document.querySelector(`.abt-date-time${prefix}`)?.value || '';
@@ -58,8 +59,9 @@ function buildDateStr(round, matchIdx) {
     return `${day} ${month} ${time}`;
 }
 
-function renderMatchCard(round, matchIdx, match, side) {
-    const { day, month, time } = parseDateStr(match.date || '');
+function dateSelectors(round, matchIdx, dateStr, legSuffix) {
+    const { day, month, time } = parseDateStr(dateStr);
+    const suffix = legSuffix || '';
     const dayOpts = '<option value="">--</option>' + Array.from({ length: 31 }, (_, i) => {
         const d = String(i + 1);
         return `<option value="${d}"${d === day ? ' selected' : ''}>${d}</option>`;
@@ -73,26 +75,55 @@ function renderMatchCard(round, matchIdx, match, side) {
         .map(t => `<option value="${t}"${t === time ? ' selected' : ''}>${t}</option>`).join('')
         + `<option value="custom"${isCustomTime ? ' selected' : ''}>Annan…</option>`;
 
-    return `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">
-        <div class="abt-team-row">
-            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
-            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
-        </div>
-        <div class="abt-team-row">
-            <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
-            <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
-        </div>
-        <div class="abt-date-row" style="display:flex; gap:3px; margin-top:3px;">
-            <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
-            <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:1;">${monthOpts}</select>
-            <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
-            <input type="text" class="abt-date-time-custom" data-round="${round}" data-match="${matchIdx}" placeholder="HH:MM" value="${isCustomTime ? time : ''}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 50px; display:${isCustomTime ? 'block' : 'none'};">
-        </div>
+    return `<div class="abt-date-row" style="display:flex; gap:3px; margin-top:3px;">
+        <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
+        <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:1;">${monthOpts}</select>
+        <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
+        <input type="text" class="abt-date-time-custom" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} placeholder="HH:MM" value="${isCustomTime ? time : ''}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 50px; display:${isCustomTime ? 'block' : 'none'};">
     </div>`;
+}
+
+function renderMatchCard(round, matchIdx, match, side, twoLeg) {
+    let html = `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">`;
+
+    // Leg 1 (or only leg)
+    if (twoLeg) html += `<div style="font-size:10px; color:#17a2b8; font-weight:600; margin-bottom:2px;">MATCH 1</div>`;
+    html += `<div class="abt-team-row">
+        <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
+        <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
+    </div>
+    <div class="abt-team-row">
+        <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.team2 || ''}" placeholder="Lag 2" list="team-autocomplete">
+        <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2 ?? ''}" placeholder="-">
+    </div>`;
+    html += dateSelectors(round, matchIdx, match.date || '');
+
+    // Leg 2 (auto-filled: teams swapped, only date + scores editable)
+    if (twoLeg) {
+        const t2 = match.team2 || 'Lag 2';
+        const t1 = match.team1 || 'Lag 1';
+        html += `<div style="font-size:10px; color:#ffc107; font-weight:600; margin-top:8px; margin-bottom:2px; border-top:1px dashed #ddd; padding-top:6px;">MATCH 2 (retur)</div>`;
+        html += `<div class="abt-team-row">
+            <span class="abt-input" style="flex:1; padding:4px 8px; color:#888; font-size:12px;">${f(t2)}${t2}</span>
+            <input type="number" class="admin-bracket-score-leg2 abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1_leg2 ?? ''}" placeholder="-">
+        </div>
+        <div class="abt-team-row">
+            <span class="abt-input" style="flex:1; padding:4px 8px; color:#888; font-size:12px;">${f(t1)}${t1}</span>
+            <input type="number" class="admin-bracket-score-leg2 abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2_leg2 ?? ''}" placeholder="-">
+        </div>`;
+        html += dateSelectors(round, matchIdx, match.date_leg2 || '', '[data-leg="2"]');
+
+        // Aggregate display
+        html += `<div class="abt-aggregate" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; color:#888; margin-top:6px; text-align:center;"></div>`;
+    }
+
+    html += `</div>`;
+    return html;
 }
 
 export async function renderAdminBracket() {
     const container = document.getElementById('admin-bracket');
+    if (!container) return;
     const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
     const bracket = bracketSnap.exists() ? bracketSnap.data() : { teams: [], rounds: {} };
     const rd = bracket.rounds || {};
@@ -110,54 +141,60 @@ export async function renderAdminBracket() {
 
     html += `<datalist id="team-autocomplete">`;
     allTeams.forEach(t => { html += `<option value="${t}">`; });
+    // Also add teams from bracket if no group stage
+    (bracket.teams || []).forEach(t => { html += `<option value="${t}">`; });
     html += `</datalist>`;
 
     const koRounds = getKnockoutRounds();
     const finalRound = getFinalRound();
     const nonFinal = koRounds.filter(r => r !== finalRound);
     const leftRounds = nonFinal.map(r => ({
-        key: r.adminKey, label: r.label, start: 0, count: r.teams / 4
+        key: r.adminKey, userKey: r.key, label: r.label, start: 0, count: r.teams / 4
     }));
     const rightRounds = [...nonFinal].reverse().map(r => ({
-        key: r.adminKey, label: r.label, start: r.teams / 4, count: r.teams / 4
+        key: r.adminKey, userKey: r.key, label: r.label, start: r.teams / 4, count: r.teams / 4
     }));
 
     html += `<div class="abt-tree">`;
 
     leftRounds.forEach((round, ri) => {
+        const twoLeg = isTwoLegged(round.userKey);
         html += `<div class="abt-round abt-round-left abt-depth-${ri}">`;
-        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-label">${round.label}${twoLeg ? ' <span style="font-size:9px; color:#ffc107;">(2 möten)</span>' : ''}</div>`;
         html += `<div class="abt-round-matches">`;
         for (let i = 0; i < round.count; i++) {
             const matchIdx = round.start + i;
             const match = (rd[round.key] || [])[matchIdx] || {};
             html += `<div class="abt-match-wrapper abt-mw-d${ri}">`;
-            html += renderMatchCard(round.key, matchIdx, match, 'left');
+            html += renderMatchCard(round.key, matchIdx, match, 'left', twoLeg);
             html += `</div>`;
         }
         html += `</div></div>`;
     });
 
     const finalAdminKey = finalRound?.adminKey || 'Final';
+    const finalUserKey = finalRound?.key || 'final';
     const finalMatch = (rd[finalAdminKey] || [])[0] || {};
+    const finalTwoLeg = isTwoLegged(finalUserKey);
     html += `<div class="abt-round abt-round-final">`;
     html += `<div class="abt-round-label abt-final-label">${(finalRound?.label || 'FINAL').toUpperCase()}</div>`;
     html += `<div class="abt-round-matches">`;
     html += `<div class="abt-match-wrapper abt-mw-final">`;
-    html += renderMatchCard(finalAdminKey, 0, finalMatch, 'center');
+    html += renderMatchCard(finalAdminKey, 0, finalMatch, 'center', finalTwoLeg);
     html += `</div>`;
     html += `</div></div>`;
 
     rightRounds.forEach((round, ri) => {
+        const twoLeg = isTwoLegged(round.userKey);
         const depth = nonFinal.length - 1 - ri;
         html += `<div class="abt-round abt-round-right abt-depth-${depth}">`;
-        html += `<div class="abt-round-label">${round.label}</div>`;
+        html += `<div class="abt-round-label">${round.label}${twoLeg ? ' <span style="font-size:9px; color:#ffc107;">(2 möten)</span>' : ''}</div>`;
         html += `<div class="abt-round-matches">`;
         for (let i = 0; i < round.count; i++) {
             const matchIdx = round.start + i;
             const match = (rd[round.key] || [])[matchIdx] || {};
             html += `<div class="abt-match-wrapper abt-mw-d${depth}">`;
-            html += renderMatchCard(round.key, matchIdx, match, 'right');
+            html += renderMatchCard(round.key, matchIdx, match, 'right', twoLeg);
             html += `</div>`;
         }
         html += `</div></div>`;
@@ -175,21 +212,57 @@ export async function renderAdminBracket() {
 
     const rounds = koRounds.map(r => r.adminKey);
     const matchCounts = koRounds.map(r => r.teams / 2);
-    document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts));
+    document.getElementById('admin-save-bracket').addEventListener('click', () => saveAdminBracket(rounds, matchCounts, koRounds));
+
+    // Auto-advance on score change (single-leg scores)
     container.querySelectorAll('.abt-score').forEach(input => {
-        input.addEventListener('change', () => autoAdvanceWinners(rounds, matchCounts));
+        input.addEventListener('change', () => {
+            autoAdvanceWinners(rounds, matchCounts, koRounds);
+            updateAggregates(container);
+        });
+    });
+    container.querySelectorAll('.admin-bracket-score-leg2').forEach(input => {
+        input.addEventListener('change', () => {
+            autoAdvanceWinners(rounds, matchCounts, koRounds);
+            updateAggregates(container);
+        });
     });
 
-    // Toggle custom time input when "Annan…" is selected
+    // Toggle custom time input
     container.querySelectorAll('.abt-date-time').forEach(sel => {
         sel.addEventListener('change', () => {
-            const r = sel.dataset.round, m = sel.dataset.match;
-            const customInput = container.querySelector(`.abt-date-time-custom[data-round="${r}"][data-match="${m}"]`);
+            const r = sel.dataset.round, m = sel.dataset.match, leg = sel.dataset.leg || '';
+            const legSel = leg ? `[data-leg="${leg}"]` : ':not([data-leg])';
+            const customInput = container.querySelector(`.abt-date-time-custom[data-round="${r}"][data-match="${m}"]${legSel}`);
             if (customInput) {
                 customInput.style.display = sel.value === 'custom' ? 'block' : 'none';
                 if (sel.value === 'custom') customInput.focus();
             }
         });
+    });
+
+    updateAggregates(container);
+}
+
+function updateAggregates(container) {
+    container.querySelectorAll('.abt-aggregate').forEach(el => {
+        const round = el.dataset.round, matchIdx = el.dataset.match;
+        const s1 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value;
+        const s2 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value;
+        const s1l2 = container.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value;
+        const s2l2 = container.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value;
+
+        if (s1 !== '' && s2 !== '' && s1l2 !== '' && s2l2 !== '' &&
+            s1 !== undefined && s2 !== undefined && s1l2 !== undefined && s2l2 !== undefined) {
+            const t1Total = parseInt(s1) + parseInt(s2l2); // team1 home + team1 away
+            const t2Total = parseInt(s2) + parseInt(s1l2); // team2 home + team2 away (remember: leg2 team order is swapped)
+            const t1name = container.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value || 'Lag 1';
+            const t2name = container.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value || 'Lag 2';
+            el.innerHTML = `<strong>Aggregerat:</strong> ${t1name} ${t1Total} – ${t2Total} ${t2name}` +
+                (t1Total === t2Total ? ' <span style="color:#ffc107;">(lika — välj vinnare manuellt)</span>' : '');
+        } else {
+            el.innerHTML = '';
+        }
     });
 }
 
@@ -222,17 +295,38 @@ function autofillR32(standings) {
     }
 }
 
-function autoAdvanceWinners(rounds, matchCounts) {
+function autoAdvanceWinners(rounds, matchCounts, koRounds) {
     for (let ri = 0; ri < rounds.length - 1; ri++) {
         const round = rounds[ri], nextRound = rounds[ri + 1], count = matchCounts[ri];
+        const userKey = koRounds[ri]?.key || '';
+        const twoLeg = isTwoLegged(userKey);
+
         for (let i = 0; i < count; i++) {
             const t1El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`);
             const t2El = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="2"]`);
-            const s1El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`);
-            const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
-            if (!t1El || !t2El || !s1El || !s2El || s1El.value === '' || s2El.value === '') continue;
-            const s1 = parseInt(s1El.value), s2 = parseInt(s2El.value);
-            const winner = s1 > s2 ? t1El.value : (s2 > s1 ? t2El.value : '');
+
+            let winner = '';
+            if (twoLeg) {
+                // Aggregate over both legs
+                const s1 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
+                const s2 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
+                const s1l2 = document.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
+                const s2l2 = document.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
+                if (s1 === '' || s2 === '' || s1l2 === '' || s2l2 === '' ||
+                    s1 === undefined || s2 === undefined || s1l2 === undefined || s2l2 === undefined) continue;
+                const t1Total = parseInt(s1) + parseInt(s2l2);
+                const t2Total = parseInt(s2) + parseInt(s1l2);
+                if (t1Total > t2Total) winner = t1El?.value || '';
+                else if (t2Total > t1Total) winner = t2El?.value || '';
+                // If tied, don't auto-advance (admin picks manually)
+            } else {
+                const s1El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`);
+                const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
+                if (!t1El || !t2El || !s1El || !s2El || s1El.value === '' || s2El.value === '') continue;
+                const s1 = parseInt(s1El.value), s2 = parseInt(s2El.value);
+                winner = s1 > s2 ? t1El.value : (s2 > s1 ? t2El.value : '');
+            }
+
             if (winner) {
                 const nextEl = document.querySelector(`.admin-bracket-team[data-round="${nextRound}"][data-match="${Math.floor(i / 2)}"][data-side="${(i % 2) + 1}"]`);
                 if (nextEl) nextEl.value = winner;
@@ -241,9 +335,22 @@ function autoAdvanceWinners(rounds, matchCounts) {
     }
 }
 
-async function saveAdminBracket(rounds, matchCounts) {
+function buildDateStrLeg2(round, matchIdx) {
+    const prefix = `[data-round="${round}"][data-match="${matchIdx}"][data-leg="2"]`;
+    const day = document.querySelector(`.abt-date-day${prefix}`)?.value || '';
+    const month = document.querySelector(`.abt-date-month${prefix}`)?.value || '';
+    const timeSelect = document.querySelector(`.abt-date-time${prefix}`)?.value || '';
+    const timeCustom = document.querySelector(`.abt-date-time-custom${prefix}`)?.value || '';
+    const time = timeSelect === 'custom' ? timeCustom : timeSelect;
+    if (!day || !month || !time) return '';
+    return `${day} ${month} ${time}`;
+}
+
+async function saveAdminBracket(rounds, matchCounts, koRounds) {
     const bracket = { rounds: {} };
     rounds.forEach((round, ri) => {
+        const userKey = koRounds[ri]?.key || '';
+        const twoLeg = isTwoLegged(userKey);
         bracket.rounds[round] = [];
         for (let i = 0; i < matchCounts[ri]; i++) {
             const t1 = document.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value || '';
@@ -252,10 +359,32 @@ async function saveAdminBracket(rounds, matchCounts) {
             const s2 = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
             const dateVal = buildDateStr(round, i);
             const match = { team1: t1, team2: t2, date: dateVal };
+
             if (s1 !== '' && s2 !== '' && s1 !== undefined && s2 !== undefined) {
                 match.score1 = parseInt(s1); match.score2 = parseInt(s2);
-                match.winner = match.score1 > match.score2 ? t1 : (match.score2 > match.score1 ? t2 : '');
             }
+
+            if (twoLeg) {
+                const s1l2 = document.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${i}"][data-side="1"]`)?.value;
+                const s2l2 = document.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${i}"][data-side="2"]`)?.value;
+                match.date_leg2 = buildDateStrLeg2(round, i);
+                if (s1l2 !== '' && s2l2 !== '' && s1l2 !== undefined && s2l2 !== undefined) {
+                    match.score1_leg2 = parseInt(s1l2);
+                    match.score2_leg2 = parseInt(s2l2);
+                }
+                // Determine winner by aggregate
+                if (match.score1 !== undefined && match.score2 !== undefined &&
+                    match.score1_leg2 !== undefined && match.score2_leg2 !== undefined) {
+                    const t1Total = match.score1 + match.score2_leg2;
+                    const t2Total = match.score2 + match.score1_leg2;
+                    match.winner = t1Total > t2Total ? t1 : (t2Total > t1Total ? t2 : '');
+                }
+            } else {
+                if (match.score1 !== undefined && match.score2 !== undefined) {
+                    match.winner = match.score1 > match.score2 ? t1 : (match.score2 > match.score1 ? t2 : '');
+                }
+            }
+
             bracket.rounds[round].push(match);
         }
     });
