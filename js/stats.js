@@ -3,7 +3,7 @@ import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/fireba
 import { f } from './wizard.js';
 import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate, renderStatBar, renderTippersSummary, renderTippersLine } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
-import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType } from './tournament-config.js';
 
 export { DEFAULT_SCORING };
 
@@ -76,7 +76,7 @@ export async function loadCommunityStats(prefetchedSettings) {
                 knockoutPicks: d.knockout || null,
                 matchTips: d.matchTips || {}
             };
-            if (u.groupPicks || Object.keys(u.matchTips).length > 0) users.push(u);
+            if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0) users.push(u);
         }
 
         _saveStatsCache(dataVersion, { results, bracket, users, matchDocs });
@@ -112,7 +112,8 @@ export async function loadCommunityStats(prefetchedSettings) {
 
     // ── LEADERBOARD (top 10 + show more) ──────────
     html += `<div class="stat-card leaderboard-card"><h3>Leaderboard</h3>`;
-    html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th><th>Grupp</th><th>Slutspel</th><th>Totalt</th></tr></thead><tbody>`;
+    const hasGroups = hasStageType('round-robin-groups');
+    html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th>${hasGroups ? '<th>Grupp</th>' : ''}<th>Slutspel</th><th>Totalt</th></tr></thead><tbody>`;
 
     const myRank = scores.findIndex(s => s.userId === currentUserId);
     const showTop = Math.min(scores.length, 10);
@@ -122,14 +123,14 @@ export async function loadCommunityStats(prefetchedSettings) {
         const isMe = s.userId === currentUserId;
         const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : ''));
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
-        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td><td>${s.groupPts}</td><td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
     }
 
     // If user is outside top 10, show separator + their row
     if (myRank >= 10) {
         const s = scores[myRank];
         html += `<tr style="border-top:2px dashed #ddd;"><td colspan="4" style="text-align:center; color:#999; font-size:11px; padding:4px;">···</td></tr>`;
-        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${s.name}</td><td>${s.groupPts}</td><td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
     }
 
     html += `</tbody></table>`;
@@ -157,7 +158,7 @@ export async function loadCommunityStats(prefetchedSettings) {
             (bracket.rounds[rd.adminKey] || []).forEach(m => {
                 if (m.winner && m.team1 && m.team2) {
                     const loser = m.winner === m.team1 ? m.team2 : m.team1;
-                    eliminatedInRound[key].push(loser);
+                    eliminatedInRound[rd.key].push(loser);
                 }
             });
         });
@@ -166,18 +167,19 @@ export async function loadCommunityStats(prefetchedSettings) {
     const qualifiedForKnockout = new Set(bracket?.teams || []);
 
     const me = users.find(u => u.userId === currentUserId);
-if (me && me.groupPicks) {
+if (me && (me.groupPicks || me.knockoutPicks)) {
         html += '<h3 style="margin-top:0; margin-bottom:10px;">Min tipsrad</h3>';
         html += '<div class="stat-card">';
-        
+
         // --- 1. GRUPPSPELSTABELLEN MED RUBRIKER (TIGHT) ---
+        if (me.groupPicks && hasGroups) {
         html += '<table class="my-tips-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">';
         html += '<thead><tr>';
         html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Tippad</th>';
         html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Gruppetta</th>';
         html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Grupptvåa</th>';
         html += '</tr></thead><tbody>';
-        
+
         getGroupLetters().forEach(letter => {
             const pick = me.groupPicks[letter];
             if (!pick) return;
@@ -194,6 +196,7 @@ if (me && me.groupPicks) {
             html += '</tr>';
         });
         html += '</tbody></table>';
+        }
 
         // --- 2. SLUTSPELSTIPS (KOMPAKT KORT-LAYOUT) ---
         if (me.knockoutPicks) {
