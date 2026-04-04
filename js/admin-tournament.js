@@ -1,276 +1,369 @@
 import { db } from './config.js';
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch, updateDoc }
+import { collection, getDocs, doc, setDoc, writeBatch }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { bumpDataVersion } from './admin.js';
-import { loadTournamentConfig, getConfig, getGroupLetters, hasStageType } from './tournament-config.js';
+import { getConfig, getGroupLetters, hasStageType } from './tournament-config.js';
+import { renderBracketBuilder, saveBracketFromBuilder } from './admin-tournament-bracket.js';
+import { renderGroupBuilder } from './admin-tournament-groups.js';
 
-// ── Tournament Presets ─────────────────────────────────────────────
+// ── All possible knockout rounds ───────────────────────────────────
+const ALL_KO_ROUNDS = [
+    { key: "r32", label: "Sextondelsfinal", adminKey: "R32", teams: 32 },
+    { key: "r16", label: "Åttondelsfinal",  adminKey: "R16", teams: 16 },
+    { key: "qf",  label: "Kvartsfinal",      adminKey: "KF",  teams: 8  },
+    { key: "sf",  label: "Semifinal",         adminKey: "SF",  teams: 4  },
+    { key: "final", label: "Final",           adminKey: "Final", teams: 2 },
+];
+
 const PRESETS = {
-    wc2026: {
-        name: "VM 2026",
-        championLabel: "Ditt VM-Guld 2026",
-        year: 2026,
-        stages: [
-            {
-                id: "groups",
-                type: "round-robin-groups",
-                label: "Gruppspel",
-                groups: { letters: ['A','B','C','D','E','F','G','H','I','J','K','L'], teamsPerGroup: 4 },
-                qualification: { perGroup: 2, bestOfRest: 8 },
-                scoring: { matchResult: 1, matchHomeGoals: 1, matchAwayGoals: 1, exactScore: 0, groupWinner: 1, groupRunnerUp: 1, groupThird: 0 },
-            },
-            {
-                id: "knockout",
-                type: "single-elimination",
-                label: "Slutspel",
-                twoLegged: false,
-                rounds: [
-                    { key: "r32", label: "Sextondelsfinal", adminKey: "R32", teams: 32, points: 2 },
-                    { key: "r16", label: "Åttondelsfinal",  adminKey: "R16", teams: 16, points: 2 },
-                    { key: "qf",  label: "Kvartsfinal",      adminKey: "KF",  teams: 8,  points: 2 },
-                    { key: "sf",  label: "Semifinal",         adminKey: "SF",  teams: 4,  points: 5 },
-                    { key: "final", label: "Final",           adminKey: "Final", teams: 2, points: 10 },
-                ],
-            },
-        ],
-    },
-    cl_slutspel: {
-        name: "Champions League Slutspel",
-        championLabel: "Ditt CL-Guld",
-        year: 2026,
-        stages: [
-            {
-                id: "knockout",
-                type: "single-elimination",
-                label: "Slutspel",
-                twoLegged: true,
-                rounds: [
-                    { key: "qf",  label: "Kvartsfinal", adminKey: "KF",  teams: 8,  points: 2, twoLegged: true },
-                    { key: "sf",  label: "Semifinal",    adminKey: "SF",  teams: 4,  points: 5, twoLegged: true },
-                    { key: "final", label: "Final",      adminKey: "Final", teams: 2, points: 10, twoLegged: false },
-                ],
-            },
-        ],
-    },
-    em2028: {
-        name: "EM 2028",
-        championLabel: "Ditt EM-Guld 2028",
-        year: 2028,
-        stages: [
-            {
-                id: "groups",
-                type: "round-robin-groups",
-                label: "Gruppspel",
-                groups: { letters: ['A','B','C','D','E','F'], teamsPerGroup: 4 },
-                qualification: { perGroup: 2, bestOfRest: 4 },
-                scoring: { matchResult: 1, matchHomeGoals: 1, matchAwayGoals: 1, exactScore: 0, groupWinner: 1, groupRunnerUp: 1, groupThird: 0 },
-            },
-            {
-                id: "knockout",
-                type: "single-elimination",
-                label: "Slutspel",
-                twoLegged: false,
-                rounds: [
-                    { key: "r16", label: "Åttondelsfinal",  adminKey: "R16", teams: 16, points: 2 },
-                    { key: "qf",  label: "Kvartsfinal",      adminKey: "KF",  teams: 8,  points: 2 },
-                    { key: "sf",  label: "Semifinal",         adminKey: "SF",  teams: 4,  points: 5 },
-                    { key: "final", label: "Final",           adminKey: "Final", teams: 2, points: 10 },
-                ],
-            },
-        ],
-    },
+    wc2026: { name: "VM 2026", championLabel: "Ditt VM-Guld 2026", year: 2026, groupLetters: 'A,B,C,D,E,F,G,H,I,J,K,L', teamsPerGroup: 4, perGroup: 2, bestOfRest: 8, koStart: 'r32', twoLegged: {}, scoring: { matchResult:1, matchHomeGoals:1, matchAwayGoals:1, exactScore:0, groupWinner:1, groupRunnerUp:1, groupThird:0 } },
+    cl_slutspel: { name: "Champions League Slutspel", championLabel: "Ditt CL-Guld", year: 2026, groupLetters: '', teamsPerGroup: 0, koStart: 'qf', twoLegged: { qf: true, sf: true } },
+    em2028: { name: "EM 2028", championLabel: "Ditt EM-Guld 2028", year: 2028, groupLetters: 'A,B,C,D,E,F', teamsPerGroup: 4, perGroup: 2, bestOfRest: 4, koStart: 'r16', twoLegged: {}, scoring: { matchResult:1, matchHomeGoals:1, matchAwayGoals:1, exactScore:0, groupWinner:1, groupRunnerUp:1, groupThird:0 } },
 };
 
-function showToast(msg) {
-    let t = document.querySelector('.toast');
-    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2500);
+// ── Editable state ─────────────────────────────────────────────────
+export let editState = {
+    name: '', championLabel: '', year: 2026,
+    hasGroups: false, hasKnockout: true,
+    groupLetters: [], teamsPerGroup: 4, perGroup: 2, bestOfRest: 0,
+    koStart: 'qf', twoLegged: {},
+    teams: [], // all team names
+    groupAssignments: {}, // { A: ['team1','team2'], B: [...] }
+    scoring: {},
+};
+
+function loadStateFromConfig() {
+    const cfg = getConfig();
+    const gs = cfg.stages?.find(s => s.type === 'round-robin-groups');
+    const ko = cfg.stages?.find(s => s.type === 'single-elimination');
+    editState.name = cfg.name || '';
+    editState.championLabel = cfg.championLabel || '';
+    editState.year = cfg.year || 2026;
+    editState.hasGroups = !!gs;
+    editState.hasKnockout = !!ko;
+    editState.groupLetters = gs?.groups?.letters || [];
+    editState.teamsPerGroup = gs?.groups?.teamsPerGroup || 4;
+    editState.perGroup = gs?.qualification?.perGroup || 2;
+    editState.bestOfRest = gs?.qualification?.bestOfRest || 0;
+    editState.scoring = gs?.scoring || {};
+    if (ko?.rounds?.length) {
+        editState.koStart = ko.rounds[0].key;
+        editState.twoLegged = {};
+        ko.rounds.forEach(r => { if (r.twoLegged) editState.twoLegged[r.key] = true; });
+    }
 }
 
-// ── Render Tournament Tab ──────────────────────────────────────────
-function renderTournamentTab() {
+function getActiveKoRounds() {
+    const startIdx = ALL_KO_ROUNDS.findIndex(r => r.key === editState.koStart);
+    if (startIdx < 0) return [ALL_KO_ROUNDS[ALL_KO_ROUNDS.length - 1]];
+    return ALL_KO_ROUNDS.slice(startIdx);
+}
+
+export function getTeamsNeeded() {
+    const rounds = getActiveKoRounds();
+    return rounds[0]?.teams || 2;
+}
+
+function buildTournamentConfig() {
+    const stages = [];
+    if (editState.hasGroups && editState.groupLetters.length > 0) {
+        stages.push({
+            id: "groups", type: "round-robin-groups", label: "Gruppspel",
+            groups: { letters: editState.groupLetters, teamsPerGroup: editState.teamsPerGroup },
+            qualification: { perGroup: editState.perGroup, bestOfRest: editState.bestOfRest },
+            scoring: editState.scoring,
+        });
+    }
+    if (editState.hasKnockout) {
+        const rounds = getActiveKoRounds().map(r => ({
+            ...r,
+            points: r.key === 'final' ? 10 : (r.key === 'sf' ? 5 : 2),
+            twoLegged: editState.twoLegged[r.key] || false,
+        }));
+        stages.push({
+            id: "knockout", type: "single-elimination", label: "Slutspel",
+            twoLegged: Object.values(editState.twoLegged).some(v => v),
+            rounds,
+        });
+    }
+    return { name: editState.name, championLabel: editState.championLabel, year: editState.year, stages };
+}
+
+// ── Render ──────────────────────────────────────────────────────────
+export function renderTournamentTab() {
     const container = document.getElementById('admin-tournament-content');
-    const cfg = getConfig();
-    const stages = cfg.stages || [];
-
-    const activeHasGroups = stages.some(s => s.type === 'round-robin-groups');
-    const activeHasKnockout = stages.some(s => s.type === 'single-elimination');
-    const koStage = stages.find(s => s.type === 'single-elimination');
-    const groupStage = stages.find(s => s.type === 'round-robin-groups');
-
+    loadStateFromConfig();
     let html = '';
-
-    // ─── Active tournament card ───
-    html += `<div class="admin-card" style="border-left: 4px solid #28a745; margin-bottom:16px;">`;
-    html += `<h3 style="margin-top:0;">Aktiv turnering: ${cfg.name || 'Okänd'}</h3>`;
-    html += `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">`;
-    if (activeHasGroups) {
-        const letters = groupStage.groups?.letters || [];
-        html += `<span style="background:#28a745; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600;">Gruppspel (${letters.length} grupper)</span>`;
-    }
-    if (activeHasKnockout) {
-        const rounds = koStage.rounds?.map(r => r.label).join(', ') || '';
-        const tl = koStage.twoLegged ? ' — dubbelmöten' : '';
-        html += `<span style="background:#17a2b8; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600;">Slutspel: ${rounds}${tl}</span>`;
-    }
-    html += `</div></div>`;
 
     // ─── Preset cards ───
     html += `<div class="admin-card" style="margin-bottom:16px;">`;
-    html += `<h3 style="margin-top:0;">Byt turnering</h3>`;
-    html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Välj en fördefinierad turnering. <strong style="color:#dc3545;">Rensar alla matcher, resultat, bracket och tips!</strong></p>`;
-    html += `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">`;
-    for (const [key, preset] of Object.entries(PRESETS)) {
-        const isActive = cfg.name === preset.name;
-        const pStages = preset.stages || [];
-        const pHasGroups = pStages.some(s => s.type === 'round-robin-groups');
-        const pHasKO = pStages.some(s => s.type === 'single-elimination');
-        const pKO = pStages.find(s => s.type === 'single-elimination');
-        const roundNames = pKO?.rounds?.map(r => r.label).join(', ') || '';
-        const twoLeg = pKO?.twoLegged ? 'Dubbelmöten' : 'Enkelmöten';
-
-        html += `<div class="preset-card${isActive ? ' preset-active' : ''}" data-preset="${key}" style="
-            background: ${isActive ? '#f8f9fa' : 'white'}; border: 2px solid ${isActive ? '#28a745' : '#ddd'};
-            border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.15s;">
-            <div style="font-weight:700; font-size:14px; margin-bottom:6px;">${preset.name}${isActive ? ' ✓' : ''}</div>
-            <div style="font-size:11px; color:#666;">
-                ${pHasGroups ? '<div>📋 Gruppspel</div>' : ''}
-                ${pHasKO ? `<div>🏆 ${roundNames}</div>` : ''}
-                ${pHasKO ? `<div style="color:#888;">${twoLeg}</div>` : ''}
-            </div>
-        </div>`;
+    html += `<h3 style="margin-top:0;">Välj turnering</h3>`;
+    html += `<p style="color:#dc3545; font-size:12px; margin:0 0 10px;">Att byta rensar alla matcher, resultat och tips!</p>`;
+    html += `<div style="display:flex; gap:8px; flex-wrap:wrap;">`;
+    for (const [key, p] of Object.entries(PRESETS)) {
+        const active = editState.name === p.name;
+        html += `<button class="btn preset-btn" data-preset="${key}" style="background:${active ? '#6c757d' : '#17a2b8'}; font-size:13px;">${p.name}${active ? ' ✓' : ''}</button>`;
     }
-    html += `</div>`;
-    html += `<div id="tournament-switch-status" style="font-size:12px; color:#888;"></div>`;
+    html += `</div><div id="tournament-switch-status" style="margin-top:8px; font-size:12px; color:#888;"></div></div>`;
+
+    // ─── Config editor ───
+    html += `<div class="admin-card" style="margin-bottom:16px;">`;
+    html += `<h3 style="margin-top:0;">Turneringsinställningar</h3>`;
+    html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:400px; margin-bottom:12px;">`;
+    html += `<label style="font-size:13px;">Namn</label><input id="tc-name" value="${editState.name}" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `<label style="font-size:13px;">Mästaretitel</label><input id="tc-champ" value="${editState.championLabel}" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `</div>`;
 
-    // ─── Add match form ───
-    html += `<div class="admin-card" style="margin-bottom:16px;">`;
-    html += `<h3 style="margin-top:0;">Lägg till match</h3>`;
-    html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Lägg till en enskild match i databasen.</p>`;
-    if (activeHasGroups) {
-        const letters = getGroupLetters();
-        const groupOpts = letters.map(l => `<option value="Grupp ${l}">Grupp ${l}</option>`).join('');
-        html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:400px;">`;
-        html += `<input type="text" id="add-match-home" placeholder="Hemmalag" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `<input type="text" id="add-match-away" placeholder="Bortalag" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `<select id="add-match-stage" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">${groupOpts}</select>`;
-        html += `<input type="text" id="add-match-date" placeholder="t.ex. 14 juni 21:00" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `</div>`;
-    } else {
-        html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:400px;">`;
-        html += `<input type="text" id="add-match-home" placeholder="Hemmalag" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `<input type="text" id="add-match-away" placeholder="Bortalag" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `<input type="text" id="add-match-stage" placeholder="t.ex. Kvartsfinal" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `<input type="text" id="add-match-date" placeholder="t.ex. 8 april 21:00" style="padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-        html += `</div>`;
-    }
-    html += `<button class="btn" id="add-match-btn" style="margin-top:10px; background:#28a745; font-size:13px;">Lägg till match</button>`;
-    html += `<div id="add-match-status" style="margin-top:6px; font-size:12px; color:#888;"></div>`;
+    // Format toggles
+    html += `<div style="display:flex; gap:16px; margin-bottom:12px;">`;
+    html += `<label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="tc-groups" ${editState.hasGroups ? 'checked' : ''}> Gruppspel</label>`;
+    html += `<label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="tc-knockout" ${editState.hasKnockout ? 'checked' : ''}> Slutspel</label>`;
     html += `</div>`;
 
-    // ─── Bulk add matches ───
-    html += `<div class="admin-card" style="margin-bottom:16px;">`;
-    html += `<h3 style="margin-top:0;">Lägg till flera matcher</h3>`;
-    html += `<p style="color:#888; font-size:12px; margin:0 0 8px;">Klistra in matcher i formatet: <code>Hemmalag - Bortalag, Grupp X, 14 juni 21:00</code> (en per rad)</p>`;
-    html += `<textarea id="bulk-match-input" rows="6" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:12px; font-family:monospace; box-sizing:border-box;" placeholder="Sverige - Norge, Grupp A, 14 juni 21:00&#10;Danmark - Finland, Grupp A, 14 juni 18:00"></textarea>`;
-    html += `<button class="btn" id="bulk-match-btn" style="margin-top:8px; background:#28a745; font-size:13px;">Lägg till alla</button>`;
-    html += `<div id="bulk-match-status" style="margin-top:6px; font-size:12px; color:#888;"></div>`;
+    // Knockout config
+    html += `<div id="tc-ko-config" style="display:${editState.hasKnockout ? 'block' : 'none'}; background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:12px;">`;
+    html += `<label style="font-size:13px; font-weight:600;">Slutspelet startar från:</label>`;
+    html += `<select id="tc-ko-start" style="margin-left:8px; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    ALL_KO_ROUNDS.filter(r => r.key !== 'final').forEach(r => {
+        html += `<option value="${r.key}" ${r.key === editState.koStart ? 'selected' : ''}>${r.label} (${r.teams} lag)</option>`;
+    });
+    html += `</select>`;
+    html += `<div style="margin-top:8px;"><span style="font-size:13px; font-weight:600;">Dubbelmöten:</span></div>`;
+    html += `<div id="tc-twolegged" style="display:flex; gap:12px; margin-top:4px; flex-wrap:wrap;"></div>`;
     html += `</div>`;
+
+    // Group config
+    html += `<div id="tc-group-config" style="display:${editState.hasGroups ? 'block' : 'none'}; background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:12px;">`;
+    html += `<div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">`;
+    html += `<label style="font-size:13px;">Antal grupper:</label><input type="number" id="tc-num-groups" min="1" max="26" value="${editState.groupLetters.length || 4}" style="width:60px; padding:4px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `<label style="font-size:13px;">Lag per grupp:</label><input type="number" id="tc-teams-per-group" min="2" max="8" value="${editState.teamsPerGroup}" style="width:60px; padding:4px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `</div></div>`;
+
+    html += `<button class="btn" id="tc-save-config" style="background:#ffc107; color:#000; font-size:13px;">Spara inställningar</button>`;
+    html += `<span id="tc-config-status" style="margin-left:8px; font-size:12px; color:#888;"></span>`;
+    html += `</div>`;
+
+    // ─── Team roster ───
+    html += `<div class="admin-card" style="margin-bottom:16px;">`;
+    html += `<h3 style="margin-top:0;">Lag <span id="team-count-badge" style="font-size:12px; font-weight:400; color:#888;"></span></h3>`;
+    html += `<div style="display:flex; gap:8px; margin-bottom:10px;">`;
+    html += `<input type="text" id="add-team-input" placeholder="Lagnamn" style="flex:1; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `<button class="btn" id="add-team-btn" style="background:#28a745; font-size:13px;">+</button>`;
+    html += `</div>`;
+    html += `<details style="margin-bottom:10px;"><summary style="font-size:12px; color:#888; cursor:pointer;">Lägg till flera (ett per rad)</summary>`;
+    html += `<textarea id="bulk-team-input" rows="4" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px; font-size:12px; font-family:monospace; box-sizing:border-box; margin-top:6px;" placeholder="Arsenal&#10;Barcelona&#10;Bayern München"></textarea>`;
+    html += `<button class="btn" id="bulk-team-btn" style="background:#28a745; font-size:12px; margin-top:4px;">Lägg till alla</button>`;
+    html += `</details>`;
+    html += `<div id="team-roster" style="display:flex; flex-wrap:wrap; gap:6px;"></div>`;
+    html += `</div>`;
+
+    // ─── Bracket builder (knockout) or Group builder (groups) ───
+    html += `<div id="bracket-builder-section"></div>`;
+    html += `<div id="group-builder-section"></div>`;
 
     // ─── Danger zone ───
-    html += `<div class="admin-card" style="border: 2px dashed #dc3545;">`;
+    html += `<div class="admin-card" style="border:2px dashed #dc3545; margin-top:16px;">`;
     html += `<h3 style="margin-top:0; color:#dc3545;">Rensa all data</h3>`;
-    html += `<p style="color:#888; font-size:12px; margin:0 0 12px;">Tar bort alla matcher, resultat, bracket och användartips. Turneringskonfigurationen behålls.</p>`;
+    html += `<p style="color:#888; font-size:12px; margin:0 0 8px;">Tar bort matcher, resultat, bracket och tips. Turneringskonfigurationen behålls.</p>`;
     html += `<button class="btn" id="clear-all-btn" style="background:#dc3545; font-size:13px;">Rensa allt</button>`;
-    html += `<div id="clear-all-status" style="margin-top:6px; font-size:12px; color:#888;"></div>`;
+    html += `<span id="clear-all-status" style="margin-left:8px; font-size:12px;"></span>`;
     html += `</div>`;
 
     container.innerHTML = html;
+    attachListeners(container);
+    loadTeamsFromBracket();
+    renderTwoLeggedCheckboxes();
+    renderTeamRoster();
+}
 
-    // Attach listeners
-    container.querySelectorAll('.preset-card').forEach(card => {
-        card.addEventListener('click', () => switchTournament(card.dataset.preset));
+function renderTwoLeggedCheckboxes() {
+    const el = document.getElementById('tc-twolegged');
+    if (!el) return;
+    const rounds = getActiveKoRounds().filter(r => r.key !== 'final');
+    el.innerHTML = rounds.map(r =>
+        `<label style="font-size:12px; cursor:pointer;"><input type="checkbox" class="tc-tl-cb" data-round="${r.key}" ${editState.twoLegged[r.key] ? 'checked' : ''}> ${r.label}</label>`
+    ).join('');
+}
+
+async function loadTeamsFromBracket() {
+    try {
+        const { getDoc, doc: fbDoc } = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
+        const snap = await getDoc(fbDoc(db, "matches", "_bracket"));
+        const bracket = snap.exists() ? snap.data() : {};
+        if (bracket.teams?.length) {
+            editState.teams = [...new Set([...editState.teams, ...bracket.teams])];
+            renderTeamRoster();
+        }
+        // Load group assignments from existing matches
+        if (editState.hasGroups) {
+            const matchSnap = await getDocs(collection(db, "matches"));
+            editState.groupAssignments = {};
+            editState.groupLetters.forEach(l => { editState.groupAssignments[l] = []; });
+            const seen = new Set();
+            matchSnap.docs.filter(d => !d.id.startsWith('_')).forEach(d => {
+                const m = d.data();
+                if (m.stage?.startsWith('Grupp ')) {
+                    const letter = m.stage.replace('Grupp ', '');
+                    if (!editState.groupAssignments[letter]) editState.groupAssignments[letter] = [];
+                    [m.homeTeam, m.awayTeam].forEach(t => {
+                        if (t && !seen.has(t)) { seen.add(t); editState.groupAssignments[letter].push(t); if (!editState.teams.includes(t)) editState.teams.push(t); }
+                    });
+                }
+            });
+            renderTeamRoster();
+        }
+        renderBuilders();
+    } catch { renderBuilders(); }
+}
+
+function renderBuilders() {
+    if (editState.hasKnockout) renderBracketBuilder();
+    if (editState.hasGroups) renderGroupBuilder();
+}
+
+export function renderTeamRoster() {
+    const el = document.getElementById('team-roster');
+    const badge = document.getElementById('team-count-badge');
+    if (!el) return;
+    const needed = editState.hasKnockout ? getTeamsNeeded() : editState.groupLetters.length * editState.teamsPerGroup;
+    if (badge) badge.textContent = `(${editState.teams.length}${needed ? ' / ' + needed + ' behövs' : ''})`;
+    el.innerHTML = editState.teams.map(t =>
+        `<span class="team-tag" draggable="true" data-team="${t}">${t} <span class="team-tag-x" data-team="${t}">&times;</span></span>`
+    ).join('') || '<span style="color:#999; font-size:12px;">Inga lag tillagda ännu</span>';
+    // Remove buttons
+    el.querySelectorAll('.team-tag-x').forEach(x => {
+        x.addEventListener('click', e => { e.stopPropagation(); removeTeam(x.dataset.team); });
     });
-    document.getElementById('add-match-btn').addEventListener('click', addSingleMatch);
-    document.getElementById('bulk-match-btn').addEventListener('click', addBulkMatches);
+    // Drag start for group builder
+    el.querySelectorAll('.team-tag').forEach(tag => {
+        tag.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('text/plain', tag.dataset.team);
+            tag.classList.add('dragging');
+        });
+        tag.addEventListener('dragend', () => tag.classList.remove('dragging'));
+    });
+}
+
+function addTeam(name) {
+    name = name.trim();
+    if (!name || editState.teams.includes(name)) return;
+    editState.teams.push(name);
+    renderTeamRoster();
+    renderBuilders();
+}
+
+function removeTeam(name) {
+    editState.teams = editState.teams.filter(t => t !== name);
+    // Also remove from group assignments
+    Object.values(editState.groupAssignments).forEach(arr => {
+        const i = arr.indexOf(name);
+        if (i >= 0) arr.splice(i, 1);
+    });
+    renderTeamRoster();
+    renderBuilders();
+}
+
+function attachListeners(container) {
+    // Presets
+    container.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTournament(btn.dataset.preset));
+    });
+    // Add team
+    document.getElementById('add-team-btn').addEventListener('click', () => {
+        const input = document.getElementById('add-team-input');
+        addTeam(input.value); input.value = ''; input.focus();
+    });
+    document.getElementById('add-team-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { addTeam(e.target.value); e.target.value = ''; }
+    });
+    // Bulk add
+    document.getElementById('bulk-team-btn').addEventListener('click', () => {
+        const ta = document.getElementById('bulk-team-input');
+        ta.value.split('\n').map(s => s.trim()).filter(Boolean).forEach(t => addTeam(t));
+        ta.value = '';
+    });
+    // Config toggles
+    document.getElementById('tc-groups').addEventListener('change', e => {
+        editState.hasGroups = e.target.checked;
+        document.getElementById('tc-group-config').style.display = e.target.checked ? 'block' : 'none';
+        renderBuilders();
+    });
+    document.getElementById('tc-knockout').addEventListener('change', e => {
+        editState.hasKnockout = e.target.checked;
+        document.getElementById('tc-ko-config').style.display = e.target.checked ? 'block' : 'none';
+        renderBuilders();
+    });
+    document.getElementById('tc-ko-start').addEventListener('change', e => {
+        editState.koStart = e.target.value;
+        renderTwoLeggedCheckboxes();
+        renderBuilders();
+        renderTeamRoster();
+    });
+    container.addEventListener('change', e => {
+        if (e.target.classList.contains('tc-tl-cb')) {
+            editState.twoLegged[e.target.dataset.round] = e.target.checked;
+        }
+    });
+    // Save config
+    document.getElementById('tc-save-config').addEventListener('click', saveConfig);
+    // Clear
     document.getElementById('clear-all-btn').addEventListener('click', clearAllData);
 }
 
-// ── Switch Tournament ──────────────────────────────────────────────
+async function saveConfig() {
+    editState.name = document.getElementById('tc-name').value.trim();
+    editState.championLabel = document.getElementById('tc-champ').value.trim();
+    if (editState.hasGroups) {
+        const numGroups = parseInt(document.getElementById('tc-num-groups').value) || 4;
+        editState.groupLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, numGroups).split('');
+        editState.teamsPerGroup = parseInt(document.getElementById('tc-teams-per-group').value) || 4;
+    }
+    const cfg = buildTournamentConfig();
+    await setDoc(doc(db, "matches", "_tournament"), cfg);
+    await bumpDataVersion();
+    const s = document.getElementById('tc-config-status');
+    s.textContent = '✓ Sparat!'; s.style.color = '#28a745';
+    setTimeout(() => { s.textContent = ''; }, 2500);
+}
+
 async function switchTournament(presetKey) {
-    const preset = PRESETS[presetKey];
-    if (!preset) return;
-
-    const ok = confirm(
-        `Byt till "${preset.name}"?\n\n` +
-        `Detta kommer:\n` +
-        `• Ta bort alla matcher\n` +
-        `• Rensa alla resultat och bracket\n` +
-        `• Rensa alla användartips\n` +
-        `• Sätta ny turneringskonfiguration\n\n` +
-        `Har du exporterat en backup? Denna åtgärd kan inte ångras.`
-    );
-    if (!ok) return;
-
-    const statusEl = document.getElementById('tournament-switch-status');
-    statusEl.textContent = 'Byter turnering...';
-    statusEl.style.color = '#888';
-
+    const p = PRESETS[presetKey];
+    if (!p || !confirm(`Byt till "${p.name}"?\n\nDetta rensar alla matcher, resultat, bracket och tips.`)) return;
+    const s = document.getElementById('tournament-switch-status');
+    s.textContent = 'Byter...'; s.style.color = '#888';
     try {
-        await clearAllDataInternal(statusEl);
-
-        statusEl.textContent = 'Skriver turneringskonfiguration...';
-        await setDoc(doc(db, "matches", "_tournament"), preset);
-
-        await setDoc(doc(db, "matches", "_settings"), {
-            tipsLocked: false,
-            tipsVisible: true,
-            dataVersion: Date.now()
-        });
-
-        statusEl.textContent = `✓ Bytt till "${preset.name}"! Laddar om...`;
-        statusEl.style.color = '#28a745';
-        setTimeout(() => window.location.reload(), 1500);
-    } catch (err) {
-        console.error('Switch tournament failed:', err);
-        statusEl.textContent = 'Fel: ' + err.message;
-        statusEl.style.color = '#dc3545';
-    }
+        await clearAllDataInternal();
+        editState.name = p.name; editState.championLabel = p.championLabel; editState.year = p.year;
+        editState.hasGroups = !!p.groupLetters; editState.hasKnockout = true;
+        editState.koStart = p.koStart; editState.twoLegged = { ...p.twoLegged };
+        editState.teams = []; editState.groupAssignments = {};
+        if (p.groupLetters) {
+            editState.groupLetters = p.groupLetters.split(',');
+            editState.teamsPerGroup = p.teamsPerGroup;
+            editState.perGroup = p.perGroup || 2; editState.bestOfRest = p.bestOfRest || 0;
+            editState.scoring = p.scoring || {};
+        } else { editState.groupLetters = []; }
+        const cfg = buildTournamentConfig();
+        await setDoc(doc(db, "matches", "_tournament"), cfg);
+        await setDoc(doc(db, "matches", "_settings"), { tipsLocked: false, tipsVisible: true, dataVersion: Date.now() });
+        s.textContent = '✓ Laddar om...'; s.style.color = '#28a745';
+        setTimeout(() => window.location.reload(), 1000);
+    } catch (err) { s.textContent = 'Fel: ' + err.message; s.style.color = '#dc3545'; }
 }
 
-// ── Clear All Data ─────────────────────────────────────────────────
 async function clearAllData() {
-    const ok = confirm(
-        'Rensa ALL data?\n\n' +
-        '• Alla matcher tas bort\n' +
-        '• Alla resultat och bracket rensas\n' +
-        '• Alla användartips rensas\n\n' +
-        'Turneringskonfigurationen behålls. Denna åtgärd kan inte ångras.'
-    );
-    if (!ok) return;
-
-    const statusEl = document.getElementById('clear-all-status');
-    statusEl.textContent = 'Rensar...';
-    statusEl.style.color = '#888';
-
+    if (!confirm('Rensa ALL data? Matcher, resultat, bracket och tips tas bort.')) return;
+    const s = document.getElementById('clear-all-status');
+    s.textContent = 'Rensar...'; s.style.color = '#888';
     try {
-        await clearAllDataInternal(statusEl);
+        await clearAllDataInternal();
         await bumpDataVersion();
-        statusEl.textContent = '✓ All data rensad! Laddar om...';
-        statusEl.style.color = '#28a745';
-        setTimeout(() => window.location.reload(), 1500);
-    } catch (err) {
-        console.error('Clear all failed:', err);
-        statusEl.textContent = 'Fel: ' + err.message;
-        statusEl.style.color = '#dc3545';
-    }
+        s.textContent = '✓ Rensad!'; s.style.color = '#28a745';
+        setTimeout(() => window.location.reload(), 1000);
+    } catch (err) { s.textContent = 'Fel: ' + err.message; s.style.color = '#dc3545'; }
 }
 
-async function clearAllDataInternal(statusEl) {
-    statusEl.textContent = 'Tar bort matcher...';
+async function clearAllDataInternal() {
     const matchSnap = await getDocs(collection(db, "matches"));
     const matchDocs = matchSnap.docs.filter(d => !d.id.startsWith('_'));
     for (let i = 0; i < matchDocs.length; i += 500) {
@@ -278,148 +371,16 @@ async function clearAllDataInternal(statusEl) {
         matchDocs.slice(i, i + 500).forEach(d => batch.delete(d.ref));
         await batch.commit();
     }
-
-    statusEl.textContent = 'Rensar resultat och bracket...';
     await setDoc(doc(db, "matches", "_results"), {});
     await setDoc(doc(db, "matches", "_bracket"), { teams: [], rounds: {} });
-
-    statusEl.textContent = 'Rensar användartips...';
     const userSnap = await getDocs(collection(db, "users"));
-    const userDocs = userSnap.docs;
-    for (let i = 0; i < userDocs.length; i += 500) {
+    for (let i = 0; i < userSnap.docs.length; i += 500) {
         const batch = writeBatch(db);
-        userDocs.slice(i, i + 500).forEach(d => {
-            batch.update(d.ref, {
-                groupPicks: {},
-                matchTips: {},
-                knockout: {}
-            });
-        });
+        userSnap.docs.slice(i, i + 500).forEach(d => batch.update(d.ref, { groupPicks: {}, matchTips: {}, knockout: {} }));
         await batch.commit();
     }
 }
 
-// ── Add Single Match ───────────────────────────────────────────────
-async function addSingleMatch() {
-    const homeEl = document.getElementById('add-match-home');
-    const awayEl = document.getElementById('add-match-away');
-    const stageEl = document.getElementById('add-match-stage');
-    const dateEl = document.getElementById('add-match-date');
-    const statusEl = document.getElementById('add-match-status');
-
-    const homeTeam = homeEl.value.trim();
-    const awayTeam = awayEl.value.trim();
-    const stage = stageEl.value.trim();
-    const date = dateEl.value.trim();
-
-    if (!homeTeam || !awayTeam) {
-        statusEl.textContent = 'Ange både hemma- och bortalag.';
-        statusEl.style.color = '#dc3545';
-        return;
-    }
-
-    try {
-        const id = await getNextMatchId();
-        const matchData = { id, homeTeam, awayTeam, stage, date };
-        await setDoc(doc(db, "matches", String(id)), matchData);
-        await bumpDataVersion();
-
-        homeEl.value = '';
-        awayEl.value = '';
-        dateEl.value = '';
-        statusEl.textContent = `✓ Match ${id} tillagd: ${homeTeam} - ${awayTeam}`;
-        statusEl.style.color = '#28a745';
-        showToast(`Match tillagd: ${homeTeam} - ${awayTeam}`);
-        setTimeout(() => { statusEl.textContent = ''; }, 4000);
-    } catch (err) {
-        console.error('Add match failed:', err);
-        statusEl.textContent = 'Fel: ' + err.message;
-        statusEl.style.color = '#dc3545';
-    }
-}
-
-// ── Bulk Add Matches ───────────────────────────────────────────────
-async function addBulkMatches() {
-    const textarea = document.getElementById('bulk-match-input');
-    const statusEl = document.getElementById('bulk-match-status');
-    const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
-
-    if (lines.length === 0) {
-        statusEl.textContent = 'Skriv minst en match.';
-        statusEl.style.color = '#dc3545';
-        return;
-    }
-
-    const matches = [];
-    for (let i = 0; i < lines.length; i++) {
-        const parsed = parseBulkLine(lines[i]);
-        if (!parsed) {
-            statusEl.textContent = `Rad ${i + 1} har fel format: "${lines[i]}"`;
-            statusEl.style.color = '#dc3545';
-            return;
-        }
-        matches.push(parsed);
-    }
-
-    statusEl.textContent = 'Lägger till matcher...';
-    statusEl.style.color = '#888';
-
-    try {
-        let nextId = await getNextMatchId();
-        for (let i = 0; i < matches.length; i += 500) {
-            const batch = writeBatch(db);
-            const chunk = matches.slice(i, i + 500);
-            chunk.forEach(m => {
-                const id = nextId++;
-                batch.set(doc(db, "matches", String(id)), { id, homeTeam: m.home, awayTeam: m.away, stage: m.stage, date: m.date });
-            });
-            await batch.commit();
-        }
-        await bumpDataVersion();
-
-        textarea.value = '';
-        statusEl.textContent = `✓ ${matches.length} matcher tillagda!`;
-        statusEl.style.color = '#28a745';
-        showToast(`${matches.length} matcher tillagda!`);
-        setTimeout(() => { statusEl.textContent = ''; }, 4000);
-    } catch (err) {
-        console.error('Bulk add failed:', err);
-        statusEl.textContent = 'Fel: ' + err.message;
-        statusEl.style.color = '#dc3545';
-    }
-}
-
-function parseBulkLine(line) {
-    const parts = line.split(',').map(s => s.trim());
-    if (parts.length < 2) return null;
-
-    const teamPart = parts[0];
-    const dashIdx = teamPart.indexOf(' - ');
-    if (dashIdx < 0) return null;
-
-    const home = teamPart.substring(0, dashIdx).trim();
-    const away = teamPart.substring(dashIdx + 3).trim();
-    if (!home || !away) return null;
-
-    if (parts.length >= 3) {
-        return { home, away, stage: parts[1], date: parts.slice(2).join(', ') };
-    } else {
-        return { home, away, stage: '', date: parts[1] };
-    }
-}
-
-async function getNextMatchId() {
-    const snap = await getDocs(collection(db, "matches"));
-    let maxId = 0;
-    snap.docs.forEach(d => {
-        if (d.id.startsWith('_')) return;
-        const num = parseInt(d.id);
-        if (!isNaN(num) && num > maxId) maxId = num;
-    });
-    return maxId + 1;
-}
-
-// ── Init ───────────────────────────────────────────────────────────
 export function initTournament() {
     renderTournamentTab();
 }
