@@ -217,7 +217,7 @@ export function renderTippersSummary(exactTippers, winnerTippers) {
 export function renderTippersLine(icon, names, suffix, color) {
     if (names.length <= 3) {
         const joined = names.length <= 2 ? names.join(' & ') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
-        return `<div style="font-size:12px; color:${color}; margin-top:4px; text-align:center;">${icon} ${joined} ${suffix}</div>`;
+        return `<div style="font-size:12px; color:${color}; margin-top:4px; text-align:center; display:block; width:100%;">${icon} ${joined} ${suffix}</div>`;
     }
 
     let displayNames = [...names].sort(() => 0.5 - Math.random());
@@ -232,7 +232,7 @@ export function renderTippersLine(icon, names, suffix, color) {
         tooltipText = displayNames.join(', ');
     }
 
-    return `<div class="tipper-hover" style="font-size:12px; color:${color}; margin-top:4px; cursor:default; text-align:center;">
+    return `<div class="tipper-hover" style="font-size:12px; color:${color}; margin-top:4px; cursor:default; text-align:center; display:block; width:100%;">
         ${icon} ${names.length} st ${suffix}
         <span class="tipper-tooltip">${tooltipText}</span>
     </div>`;
