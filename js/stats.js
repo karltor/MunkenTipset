@@ -12,7 +12,7 @@ export function invalidateStatsCache() {
 }
 
 // ── localStorage cache helpers ─────────────────────────────────────────────
-const STATS_CACHE_KEY = 'munkentipset_stats_cache_v1';
+const STATS_CACHE_KEY = 'munkentipset_stats_cache_v2';
 
 function _loadStatsCache() {
     try {
