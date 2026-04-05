@@ -86,6 +86,7 @@ export async function loadCommunityStats(prefetchedSettings) {
     window._cachedMatchDocs = matchDocs;
     window._cachedUsers = users;
     window._cachedResults = results;
+    window._cachedBracket = bracket;
     const matchDocMap = {};
     matchDocs.forEach(m => matchDocMap[String(m.id)] = m);
 

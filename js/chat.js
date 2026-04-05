@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove }
 import { f, flags } from './wizard.js';
 import { teamImg } from './team-data.js';
 import { parseMatchDate } from './scoring.js';
+import { getKnockoutRounds, isTwoLegged } from './tournament-config.js';
 
 /* ── state ─────────────────────────────────────────── */
 let unsubMessages = null;   // onSnapshot unsubscribe handle
@@ -433,9 +434,46 @@ function getActiveMatches() {
 }
 
 function getActiveBracketMatches(now) {
-    // We don't have bracket match data cached with dates in a way that maps to tip IDs easily
-    // Return empty — group stage matches cover most cases, knockout handled via results
-    return { ongoing: [], upcoming: [] };
+    const bracket = window._cachedBracket;
+    if (!bracket?.rounds) return { ongoing: [], upcoming: [] };
+
+    const ongoing = [], upcoming = [];
+    getKnockoutRounds().forEach(rd => {
+        const twoLeg = isTwoLegged(rd.key);
+        (bracket.rounds[rd.adminKey] || []).forEach((m, mi) => {
+            if (!m.team1 || !m.team2) return;
+
+            // Leg 1
+            if (m.score1 === undefined) {
+                const parsed = m.date ? parseMatchDate(m.date) : null;
+                const entry = {
+                    homeTeam: m.team1, awayTeam: m.team2, date: m.date,
+                    stage: twoLeg ? `${rd.label} – Match 1` : rd.label,
+                    _parsed: parsed, _hasResult: false,
+                    _isKnockout: true, _koRoundKey: rd.key, _koMatchIdx: mi, _koLeg: 1
+                };
+                if (parsed && parsed.getTime() <= now) ongoing.push(entry);
+                else upcoming.push(entry);
+            }
+
+            // Leg 2
+            if (twoLeg && m.score1_leg2 === undefined) {
+                const parsed = m.date_leg2 ? parseMatchDate(m.date_leg2) : null;
+                const entry = {
+                    homeTeam: m.team2, awayTeam: m.team1, date: m.date_leg2,
+                    stage: `${rd.label} – Match 2 (retur)`,
+                    _parsed: parsed, _hasResult: false,
+                    _isKnockout: true, _koRoundKey: rd.key, _koMatchIdx: mi, _koLeg: 2
+                };
+                if (parsed && parsed.getTime() <= now) ongoing.push(entry);
+                else upcoming.push(entry);
+            }
+        });
+    });
+
+    ongoing.sort((a, b) => (b._parsed || 0) - (a._parsed || 0));
+    upcoming.sort((a, b) => (a._parsed || Infinity) - (b._parsed || Infinity));
+    return { ongoing, upcoming };
 }
 
 function buildMatchSidebar() {
@@ -489,16 +527,30 @@ function buildMatchSidebar() {
 
 function computeTipDistribution(match, users) {
     let home = 0, draw = 0, away = 0, total = 0;
-    const matchId = String(match.id);
 
-    users.forEach(u => {
-        const tip = u.matchTips?.[matchId];
-        if (!tip || tip.homeScore === undefined || tip.awayScore === undefined) return;
-        total++;
-        if (tip.homeScore > tip.awayScore) home++;
-        else if (tip.homeScore < tip.awayScore) away++;
-        else draw++;
-    });
+    if (match._isKnockout) {
+        const rk = match._koRoundKey, mi = match._koMatchIdx, leg = match._koLeg;
+        users.forEach(u => {
+            const tip = u.knockoutScores?.[rk]?.[mi];
+            if (!tip) return;
+            let h, a;
+            if (leg === 1) { h = tip.score1; a = tip.score2; }
+            else if (leg === 2) { h = tip.score1_leg2; a = tip.score2_leg2; }
+            if (h == null || a == null) return;
+            total++;
+            if (h > a) home++; else if (h < a) away++; else draw++;
+        });
+    } else {
+        const matchId = String(match.id);
+        users.forEach(u => {
+            const tip = u.matchTips?.[matchId];
+            if (!tip || tip.homeScore === undefined || tip.awayScore === undefined) return;
+            total++;
+            if (tip.homeScore > tip.awayScore) home++;
+            else if (tip.homeScore < tip.awayScore) away++;
+            else draw++;
+        });
+    }
 
     if (total === 0) return { home: 0, draw: 0, away: 0 };
     return {
@@ -547,13 +599,25 @@ function buildTipBadges(activeMatches, chatUids) {
 
         let badges = '';
         activeMatches.forEach(match => {
-            const tip = u.matchTips?.[String(match.id)];
-            if (!tip || tip.homeScore === undefined) return;
+            let tipH, tipA;
+
+            if (match._isKnockout) {
+                const tip = u.knockoutScores?.[match._koRoundKey]?.[match._koMatchIdx];
+                if (!tip) return;
+                if (match._koLeg === 1) { tipH = tip.score1; tipA = tip.score2; }
+                else if (match._koLeg === 2) { tipH = tip.score1_leg2; tipA = tip.score2_leg2; }
+                if (tipH == null || tipA == null) return;
+            } else {
+                const tip = u.matchTips?.[String(match.id)];
+                if (!tip || tip.homeScore === undefined) return;
+                tipH = tip.homeScore;
+                tipA = tip.awayScore;
+            }
 
             const flagHome = teamImg(match.homeTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
             const flagAway = teamImg(match.awayTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
 
-            badges += `<span class="chat-tip-badge">${flagHome}${tip.homeScore}-${tip.awayScore}${flagAway}</span>`;
+            badges += `<span class="chat-tip-badge">${flagHome}${tipH}-${tipA}${flagAway}</span>`;
         });
 
         if (badges) tipMap.set(uid, badges);
