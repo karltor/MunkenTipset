@@ -263,6 +263,8 @@ export async function autoFillKnockoutRound(targetRound) {
         }
     }
 
+    const roundUserKey = koRounds.find(r => r.adminKey === targetRound)?.key || '';
+    const twoLeg = isTwoLegged(roundUserKey);
     const count = matchCounts[targetRound];
     let filled = 0;
     for (let i = 0; i < count; i++) {
@@ -272,15 +274,32 @@ export async function autoFillKnockoutRound(targetRound) {
         if (!match.team1 || !match.team2) continue;
         if (match.winner) continue;
 
-        let s1, s2;
-        do {
-            s1 = Math.floor(Math.random() * 4);
-            s2 = Math.floor(Math.random() * 4);
-        } while (s1 === s2);
-
-        match.score1 = s1;
-        match.score2 = s2;
-        match.winner = s1 > s2 ? match.team1 : match.team2;
+        if (twoLeg) {
+            match.score1 = Math.floor(Math.random() * 4);
+            match.score2 = Math.floor(Math.random() * 4);
+            match.score1_leg2 = Math.floor(Math.random() * 4);
+            match.score2_leg2 = Math.floor(Math.random() * 4);
+            const t1agg = match.score1 + match.score2_leg2;
+            const t2agg = match.score2 + match.score1_leg2;
+            if (t1agg > t2agg) {
+                match.winner = match.team1;
+            } else if (t2agg > t1agg) {
+                match.winner = match.team2;
+            } else {
+                // Tied aggregate — random penalty winner
+                match.penaltyWinner = Math.random() < 0.5 ? match.team1 : match.team2;
+                match.winner = match.penaltyWinner;
+            }
+        } else {
+            let s1, s2;
+            do {
+                s1 = Math.floor(Math.random() * 4);
+                s2 = Math.floor(Math.random() * 4);
+            } while (s1 === s2);
+            match.score1 = s1;
+            match.score2 = s2;
+            match.winner = s1 > s2 ? match.team1 : match.team2;
+        }
         filled++;
     }
 
