@@ -1,6 +1,7 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { f, flags } from './wizard.js';
+import { f, fLarge, flags } from './wizard.js';
+import { getTeamImageUrl } from './team-data.js';
 import { invalidateStatsCache } from './stats.js';
 import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound, hasStageType, isTwoLegged, getRoundAdminKey } from './tournament-config.js';
 
@@ -576,9 +577,7 @@ function renderSection(title, teams, showGroup) {
     return html;
 }
 
-function fLarge(t) {
-    return flags[t] ? `<img src="https://flagcdn.com/40x30/${flags[t]}.png" style="vertical-align:-5px; margin-right:10px; border-radius:2px;" width="40" height="30" alt="">` : '🌍 ';
-}
+// fLarge imported from wizard.js (uses team-data.js)
 
 // ── Team toggle (casual mode + flat grid) ─────────────────────────────
 window.toggleBracketTeam = function (team) {
@@ -712,8 +711,8 @@ function showChampion(team) {
     const champ = document.getElementById('bracket-champion');
     champ.style.display = 'block';
 
-    const flagCode = flags[team];
-    const bigFlag = flagCode ? `<img src="https://flagcdn.com/80x60/${flagCode}.png" style="border-radius:4px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" width="80" height="60" alt="">` : '';
+    const imgUrl = getTeamImageUrl(team, '80x60');
+    const bigFlag = imgUrl ? `<img src="${imgUrl}" style="border-radius:4px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" width="80" height="60" alt="">` : '';
 
     champ.innerHTML = `
         <div class="bracket-bg" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">

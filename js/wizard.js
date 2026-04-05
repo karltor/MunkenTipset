@@ -2,10 +2,16 @@ import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { invalidateStatsCache } from './stats.js';
 import { getGroupLetters } from './tournament-config.js';
+import { countryFlags, clubCrestIds, teamImg, teamImgLarge } from './team-data.js';
 
-// Flagg-hjälpare
-export const flags = { "Mexiko": "mx", "Sydafrika": "za", "Sydkorea": "kr", "Kanada": "ca", "USA": "us", "Paraguay": "py", "Qatar": "qa", "Schweiz": "ch", "Brasilien": "br", "Marocko": "ma", "Haiti": "ht", "Skottland": "gb-sct", "Australien": "au", "Tyskland": "de", "Curaçao": "cw", "Nederländerna": "nl", "Japan": "jp", "Elfenbenskusten": "ci", "Ecuador": "ec", "Tunisien": "tn", "Spanien": "es", "Kap Verde": "cv", "Belgien": "be", "Egypten": "eg", "Saudiarabien": "sa", "Uruguay": "uy", "Iran": "ir", "Nya Zeeland": "nz", "Frankrike": "fr", "Senegal": "sn", "Norge": "no", "Argentina": "ar", "Algeriet": "dz", "Österrike": "at", "Jordanien": "jo", "Portugal": "pt", "England": "gb-eng", "Kroatien": "hr", "Ghana": "gh", "Panama": "pa", "Uzbekistan": "uz", "Colombia": "co" };
-export const f = (t) => flags[t] ? `<img src="https://flagcdn.com/24x18/${flags[t]}.png" style="vertical-align:-4px; margin:0 6px; border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);" width="24" height="18" alt="">` : '🌍 ';
+// Flagg-hjälpare — backward-compatible exports
+// 'flags' maps team name → flag code (countries) or null (clubs handled by teamImg)
+export const flags = { ...countryFlags };
+// Add club entries as truthy values so existing code like `flags[t]` works for icon checks
+Object.keys(clubCrestIds).forEach(name => { if (!flags[name]) flags[name] = `club:${clubCrestIds[name]}`; });
+
+export const f = (t) => teamImg(t);
+export const fLarge = (t) => teamImgLarge(t);
 let currentIndex = 0;
 let currentTeams = [];
 let selFirst = null, selSecond = null;

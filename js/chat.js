@@ -2,6 +2,7 @@ import { db, auth } from './config.js';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f, flags } from './wizard.js';
+import { teamImg } from './team-data.js';
 import { parseMatchDate } from './scoring.js';
 
 /* ── state ─────────────────────────────────────────── */
@@ -549,8 +550,8 @@ function buildTipBadges(activeMatches, chatUids) {
             const tip = u.matchTips?.[String(match.id)];
             if (!tip || tip.homeScore === undefined) return;
 
-            const flagHome = flags[match.homeTeam] ? `<img src="https://flagcdn.com/16x12/${flags[match.homeTeam]}.png" width="16" height="12" style="vertical-align:-2px; border-radius:1px;">` : '';
-            const flagAway = flags[match.awayTeam] ? `<img src="https://flagcdn.com/16x12/${flags[match.awayTeam]}.png" width="16" height="12" style="vertical-align:-2px; border-radius:1px;">` : '';
+            const flagHome = teamImg(match.homeTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
+            const flagAway = teamImg(match.awayTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
 
             badges += `<span class="chat-tip-badge">${flagHome}${tip.homeScore}-${tip.awayScore}${flagAway}</span>`;
         });

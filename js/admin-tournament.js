@@ -1,4 +1,5 @@
 import { db } from './config.js';
+import { getAllTeamNames, teamImg } from './team-data.js';
 import { collection, getDocs, doc, setDoc, writeBatch }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { bumpDataVersion } from './admin.js';
@@ -147,7 +148,10 @@ export function renderTournamentTab() {
     html += `<div class="admin-card" style="margin-bottom:16px;">`;
     html += `<h3 style="margin-top:0;">Lag <span id="team-count-badge" style="font-size:12px; font-weight:400; color:#888;"></span></h3>`;
     html += `<div style="display:flex; gap:8px; margin-bottom:10px;">`;
-    html += `<input type="text" id="add-team-input" placeholder="Lagnamn" style="flex:1; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `<input type="text" id="add-team-input" placeholder="Lagnamn" list="team-name-suggestions" autocomplete="off" style="flex:1; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `<datalist id="team-name-suggestions">`;
+    getAllTeamNames().forEach(name => { html += `<option value="${name}">`; });
+    html += `</datalist>`;
     html += `<button class="btn" id="add-team-btn" style="background:#28a745; font-size:13px;">+</button>`;
     html += `</div>`;
     html += `<details style="margin-bottom:10px;"><summary style="font-size:12px; color:#888; cursor:pointer;">Lägg till flera (ett per rad)</summary>`;
@@ -228,7 +232,7 @@ export function renderTeamRoster() {
     const needed = editState.hasKnockout ? getTeamsNeeded() : editState.groupLetters.length * editState.teamsPerGroup;
     if (badge) badge.textContent = `(${editState.teams.length}${needed ? ' / ' + needed + ' behövs' : ''})`;
     el.innerHTML = editState.teams.map(t =>
-        `<span class="team-tag" draggable="true" data-team="${t}">${t} <span class="team-tag-x" data-team="${t}">&times;</span></span>`
+        `<span class="team-tag" draggable="true" data-team="${t}">${teamImg(t, { size: 16, height: 12, style: 'margin:0 4px 0 0;' })}${t} <span class="team-tag-x" data-team="${t}">&times;</span></span>`
     ).join('') || '<span style="color:#999; font-size:12px;">Inga lag tillagda ännu</span>';
     // Remove buttons
     el.querySelectorAll('.team-tag-x').forEach(x => {
