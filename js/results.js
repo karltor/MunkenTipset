@@ -194,14 +194,40 @@ function renderBracketMatch(match, isFinal) {
     const t1w = w === t1, t2w = w === t2;
     const sz = isFinal ? 'font-size:13px; padding:6px 10px;' : '';
     const dateStr = match.date ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date}</div>` : '';
+    const hasTwoLegs = match.score1_leg2 !== undefined && match.score2_leg2 !== undefined;
 
-    return `<div class="abt-match" style="pointer-events:none;">
-        ${dateStr}
-        <div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team1 ? 'opacity:0.4;' : ''}">
+    let html = `<div class="abt-match" style="pointer-events:none;">`;
+
+    if (hasTwoLegs) {
+        html += `<div style="font-size:9px; color:#17a2b8; font-weight:600; text-align:center; padding:2px 0;">MATCH 1</div>`;
+    }
+    html += dateStr;
+    html += `<div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team1 ? 'opacity:0.4;' : ''}">
             <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s1}</span>
         </div>
         <div class="abt-team-row" style="${sz}${t2w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team2 ? 'opacity:0.4;' : ''}">
             <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s2}</span>
+        </div>`;
+
+    if (hasTwoLegs) {
+        const dateStr2 = match.date_leg2 ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date_leg2}</div>` : '';
+        html += `<div style="border-top:1px dashed rgba(255,255,255,0.1); margin:3px 0;"></div>`;
+        html += `<div style="font-size:9px; color:#ffc107; font-weight:600; text-align:center; padding:2px 0;">MATCH 2</div>`;
+        html += dateStr2;
+        html += `<div class="abt-team-row" style="${sz}${t2w ? 'background:rgba(40,167,69,0.15);' : ''}">
+            <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score1_leg2}</span>
         </div>
-    </div>`;
+        <div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}">
+            <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score2_leg2}</span>
+        </div>`;
+
+        const t1agg = (match.score1 || 0) + (match.score2_leg2 || 0);
+        const t2agg = (match.score2 || 0) + (match.score1_leg2 || 0);
+        let aggText = `${t1} ${t1agg} – ${t2agg} ${t2}`;
+        if (t1agg === t2agg && w) aggText += ` (str.)`;
+        html += `<div style="font-size:10px; color:#ccc; text-align:center; padding:4px 0; border-top:1px solid rgba(255,255,255,0.05);">Totalt: ${aggText}</div>`;
+    }
+
+    html += `</div>`;
+    return html;
 }

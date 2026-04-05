@@ -12,7 +12,7 @@ function _roundLabel(key) {
     const finalKey = rounds.length > 0 ? rounds[rounds.length - 1].key : 'final';
     if (key === finalKey) return `Vilket lag vinner ${getTournamentName()}?`;
     const nextRound = idx < rounds.length - 1 ? rounds[idx + 1] : null;
-    return `Välj vinnare i varje möte — de går vidare till ${nextRound?.label?.toLowerCase() || 'nästa omgång'}`;
+    return `Vilka lag går vidare till ${nextRound?.label?.toLowerCase() || 'nästa omgång'}?`;
 }
 function _roundPickCount(key) {
     const round = getKnockoutRounds().find(r => r.key === key);
@@ -25,8 +25,11 @@ function _isFinalRound(key) {
 
 let currentRound = 0;
 let knockoutData = {};
+let knockoutScores = {};
+let bracketMode = 'casual';
 let allTeamsInRound = [];
 let selectedTeams = new Set();
+let penaltyWinners = {};
 let listenersAttached = false;
 let bracketLocked = false;
 let adminBracket = null;
@@ -37,7 +40,6 @@ export async function initBracket(groupPicks, tipsLocked) {
     knockoutOnly = !hasStageType('round-robin-groups');
 
     if (knockoutOnly) {
-        // Load bracket from admin — teams/matchups defined there
         const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
         adminBracket = bracketSnap.exists() ? bracketSnap.data() : null;
         if (!adminBracket || !adminBracket.teams || adminBracket.teams.length === 0) {
@@ -45,16 +47,17 @@ export async function initBracket(groupPicks, tipsLocked) {
             return;
         }
     } else {
-        // Group-stage tournaments: require group picks
         if (!groupPicks || !groupPicks.completedAt) { showLocked(); return; }
         allTeamsInRound = buildQualifiedTeams(groupPicks);
     }
 
     const userId = auth.currentUser.uid;
     const userSnap = await getDoc(doc(db, "users", userId));
-    knockoutData = userSnap.exists() ? (userSnap.data().knockout || {}) : {};
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    knockoutData = userData.knockout || {};
+    knockoutScores = userData.knockoutScores || {};
+    bracketMode = userData.knockoutMode || 'casual';
 
-    // Attach listeners early
     if (!listenersAttached) {
         document.getElementById('btn-bracket-save').addEventListener('click', saveBracketRound);
         document.getElementById('btn-bracket-prev').addEventListener('click', () => {
@@ -68,7 +71,6 @@ export async function initBracket(groupPicks, tipsLocked) {
     if (knockoutData[finalRoundKey] && typeof knockoutData[finalRoundKey] === 'string') { showChampion(knockoutData[finalRoundKey]); return; }
     if (knockoutData[finalRoundKey]) { showChampion(knockoutData[finalRoundKey]); return; }
 
-    // Find furthest completed round
     currentRound = 0;
     const koRounds = getKnockoutRounds();
     for (let i = 0; i < koRounds.length - 1; i++) {
@@ -104,6 +106,7 @@ function showBracketContent() {
     document.getElementById('bracket-locked').style.display = 'none';
     document.getElementById('bracket-content').style.display = 'block';
     document.getElementById('bracket-champion').style.display = 'none';
+    if (knockoutOnly) renderModeBar();
 }
 
 function buildQualifiedTeams(picks) {
@@ -124,6 +127,37 @@ function buildQualifiedTeams(picks) {
     return [...firsts, ...seconds, ...thirds.slice(0, bestOfRest)];
 }
 
+// ── Mode bar for knockout-only ────────────────────────────────────────
+function renderModeBar() {
+    let bar = document.getElementById('bracket-mode-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'bracket-mode-bar';
+        bar.style.cssText = 'text-align:center; margin-bottom:12px;';
+        const content = document.getElementById('bracket-content');
+        const roundInfo = document.getElementById('bracket-round-info');
+        content.insertBefore(bar, roundInfo);
+    }
+
+    const isCasual = bracketMode === 'casual';
+    bar.innerHTML = `
+        <button class="btn" id="btn-bracket-switch-mode" style="background:rgba(255,255,255,0.15); color:white; font-size:12px; padding:6px 16px;">
+            ${isCasual ? '📊 Byt till Detaljerat' : '🎯 Byt till Snabbtips'}
+        </button>
+        <p style="font-size:12px; color:#888; margin:8px 0 0;">
+            ${isCasual
+                ? 'Välj vinnare — matchresultat genereras automatiskt'
+                : 'Tippa matchresultat — vinnaren bestäms av dina resultat'}
+        </p>
+    `;
+
+    document.getElementById('btn-bracket-switch-mode').addEventListener('click', () => {
+        bracketMode = bracketMode === 'casual' ? 'detailed' : 'casual';
+        renderModeBar();
+        loadRound(currentRound);
+    });
+}
+
 // ── Get matchups for a round in knockout-only mode ──────────────────
 function getMatchupsForRound(roundIndex) {
     const rounds = _rounds();
@@ -132,15 +166,14 @@ function getMatchupsForRound(roundIndex) {
     const adminRound = adminBracket?.rounds?.[adminKey] || [];
 
     if (roundIndex === 0) {
-        // First round: matchups directly from admin bracket
         return adminRound.map(m => ({
             team1: m.team1 || '',
             team2: m.team2 || '',
-            date: m.date || ''
+            date: m.date || '',
+            date_leg2: m.date_leg2 || ''
         }));
     }
 
-    // Subsequent rounds: pair up winners from previous round
     const prevKey = rounds[roundIndex - 1];
     const prevPicks = knockoutData[prevKey] || [];
     const matchups = [];
@@ -148,7 +181,8 @@ function getMatchupsForRound(roundIndex) {
         matchups.push({
             team1: prevPicks[i] || '',
             team2: prevPicks[i + 1] || '',
-            date: ''
+            date: '',
+            date_leg2: ''
         });
     }
     return matchups;
@@ -157,20 +191,29 @@ function getMatchupsForRound(roundIndex) {
 function loadRound(roundIndex) {
     const roundKey = _rounds()[roundIndex];
     selectedTeams = new Set();
+    penaltyWinners = {};
 
-    // Pre-select previously saved picks
     if (knockoutData[roundKey]) {
         const picks = _isFinalRound(roundKey) ? [knockoutData[roundKey]] : knockoutData[roundKey];
         picks.forEach(t => selectedTeams.add(t));
     }
 
+    // Restore penalty winners from saved scores
+    const roundScores = knockoutScores[roundKey] || [];
+    roundScores.forEach((s, i) => {
+        if (s.penaltyWinner) penaltyWinners[i] = s.penaltyWinner;
+    });
+
     document.getElementById('bracket-round-info').innerHTML =
         `<p style="font-size: 1.1rem;">${_roundLabel(roundKey)}</p>`;
 
     if (knockoutOnly) {
-        renderMatchups(roundIndex, roundKey);
+        if (bracketMode === 'detailed') {
+            renderDetailedMatchups(roundIndex, roundKey);
+        } else {
+            renderMatchups(roundIndex, roundKey);
+        }
     } else {
-        // Original flat-grid mode for group-stage tournaments
         let teamsForRound;
         if (roundIndex === 0) {
             teamsForRound = allTeamsInRound;
@@ -186,7 +229,7 @@ function loadRound(roundIndex) {
     updateSaveBtn(roundKey);
 }
 
-// ── Matchup-based rendering (knockout-only mode) ────────────────────
+// ── Casual mode rendering (matchup cards with team picker) ────────────
 function renderMatchups(roundIndex, roundKey) {
     const container = document.getElementById('bracket-container');
     const matchups = getMatchupsForRound(roundIndex);
@@ -198,9 +241,8 @@ function renderMatchups(roundIndex, roundKey) {
         html += `<h3 style="font-family: 'Playfair Display', serif; color: #ffc107; font-size: 1.8rem; margin-bottom: 24px;">${(finalRound?.label || 'FINAL').toUpperCase()}</h3>`;
         if (matchups.length > 0 && matchups[0].team1 && matchups[0].team2) {
             const m = matchups[0];
-            html += renderMatchupCard(m, roundKey, true);
+            html += renderCasualMatchupCard(m, roundKey, true);
         } else {
-            // Just show the two teams from prev round
             const prevKey = _rounds()[roundIndex - 1];
             const prevPicks = knockoutData[prevKey] || [];
             html += `<div class="bracket-team-grid" style="justify-content: center; gap: 20px;">`;
@@ -217,13 +259,13 @@ function renderMatchups(roundIndex, roundKey) {
 
     let html = `<div class="bracket-matchups">`;
     matchups.forEach(m => {
-        html += renderMatchupCard(m, roundKey, false, twoLeg);
+        html += renderCasualMatchupCard(m, roundKey, false, twoLeg);
     });
     html += `</div>`;
     container.innerHTML = html;
 }
 
-function renderMatchupCard(matchup, roundKey, isFinal, twoLeg) {
+function renderCasualMatchupCard(matchup, roundKey, isFinal, twoLeg) {
     const { team1, team2, date } = matchup;
     if (!team1 && !team2) return '';
 
@@ -249,6 +291,240 @@ function renderMatchupCard(matchup, roundKey, isFinal, twoLeg) {
 
     html += `</div>`;
     return html;
+}
+
+// ── Detailed mode rendering (score inputs for each leg) ───────────────
+function renderDetailedMatchups(roundIndex, roundKey) {
+    const container = document.getElementById('bracket-container');
+    const matchups = getMatchupsForRound(roundIndex);
+    const twoLeg = isTwoLegged(roundKey);
+    const savedRoundScores = knockoutScores[roundKey] || [];
+
+    let html = '';
+    if (_isFinalRound(roundKey)) {
+        const finalRound = getFinalRound();
+        html += `<div style="text-align: center; padding: 20px 0;">`;
+        html += `<h3 style="font-family: 'Playfair Display', serif; color: #ffc107; font-size: 1.8rem; margin-bottom: 24px;">${(finalRound?.label || 'FINAL').toUpperCase()}</h3>`;
+        if (matchups.length > 0 && matchups[0].team1 && matchups[0].team2) {
+            html += renderDetailedMatchupCard(matchups[0], 0, roundKey, true, isTwoLegged(roundKey), savedRoundScores[0]);
+        } else {
+            const prevKey = _rounds()[roundIndex - 1];
+            const prevPicks = knockoutData[prevKey] || [];
+            if (prevPicks.length === 2) {
+                const fakeMatchup = { team1: prevPicks[0], team2: prevPicks[1], date: '', date_leg2: '' };
+                html += renderDetailedMatchupCard(fakeMatchup, 0, roundKey, true, isTwoLegged(roundKey), savedRoundScores[0]);
+            }
+        }
+        html += `</div>`;
+    } else {
+        html += `<div class="bracket-matchups">`;
+        matchups.forEach((m, i) => {
+            html += renderDetailedMatchupCard(m, i, roundKey, false, twoLeg, savedRoundScores[i]);
+        });
+        html += `</div>`;
+    }
+
+    container.innerHTML = html;
+    wireScoreInputs();
+    recalcDetailedWinners(roundKey);
+}
+
+function renderDetailedMatchupCard(matchup, matchIdx, roundKey, isFinal, twoLeg, savedScores) {
+    const { team1, team2, date, date_leg2 } = matchup;
+    if (!team1 && !team2) return '';
+
+    const s = savedScores || {};
+    const cardStyle = isFinal ? 'max-width:400px; margin:0 auto;' : '';
+
+    let html = `<div class="bracket-matchup-card bracket-detailed-card" style="${cardStyle}" data-matchup="${matchIdx}">`;
+
+    // Leg 1
+    if (twoLeg) html += `<div class="bracket-leg-label" style="color:#17a2b8;">MATCH 1</div>`;
+    if (date) html += `<div class="bracket-matchup-date">${date}</div>`;
+    html += `<div class="bracket-leg-row">`;
+    html += `<span class="bracket-leg-team" style="text-align:right;">${f(team1)}${team1}</span>`;
+    html += `<input type="number" min="0" max="20" class="bracket-score-input" data-matchup="${matchIdx}" data-leg="1" data-side="1" value="${s.score1 ?? ''}">`;
+    html += `<span class="bracket-leg-sep">–</span>`;
+    html += `<input type="number" min="0" max="20" class="bracket-score-input" data-matchup="${matchIdx}" data-leg="1" data-side="2" value="${s.score2 ?? ''}">`;
+    html += `<span class="bracket-leg-team" style="text-align:left;">${f(team2)}${team2}</span>`;
+    html += `</div>`;
+
+    // Leg 2
+    if (twoLeg) {
+        html += `<div style="border-top:1px dashed rgba(255,255,255,0.1); margin:6px 0;"></div>`;
+        html += `<div class="bracket-leg-label" style="color:#ffc107;">MATCH 2 (retur)</div>`;
+        if (date_leg2) html += `<div class="bracket-matchup-date">${date_leg2}</div>`;
+        html += `<div class="bracket-leg-row">`;
+        html += `<span class="bracket-leg-team" style="text-align:right;">${f(team2)}${team2}</span>`;
+        html += `<input type="number" min="0" max="20" class="bracket-score-input" data-matchup="${matchIdx}" data-leg="2" data-side="1" value="${s.score1_leg2 ?? ''}">`;
+        html += `<span class="bracket-leg-sep">–</span>`;
+        html += `<input type="number" min="0" max="20" class="bracket-score-input" data-matchup="${matchIdx}" data-leg="2" data-side="2" value="${s.score2_leg2 ?? ''}">`;
+        html += `<span class="bracket-leg-team" style="text-align:left;">${f(team1)}${team1}</span>`;
+        html += `</div>`;
+    }
+
+    // Aggregate / winner display
+    html += `<div class="bracket-matchup-result" data-matchup="${matchIdx}"></div>`;
+
+    // Penalty picker (hidden by default, shown when tied)
+    html += `<div class="bracket-penalty-pick" data-matchup="${matchIdx}" style="display:none;">`;
+    html += `<div style="font-size:11px; color:#ffc107; margin-top:4px; text-align:center;">Lika efter ${twoLeg ? '180' : '90'} min — välj straffvinnare:</div>`;
+    html += `<div style="display:flex; gap:8px; justify-content:center; margin-top:6px;">`;
+    const pw = penaltyWinners[matchIdx] || '';
+    html += `<div class="bracket-team bracket-penalty-btn ${pw === team1 ? 'selected' : ''}" onclick="window.setPenaltyWinner(${matchIdx}, '${team1}')" style="font-size:12px; padding:6px 12px;">${f(team1)}${team1}</div>`;
+    html += `<div class="bracket-team bracket-penalty-btn ${pw === team2 ? 'selected' : ''}" onclick="window.setPenaltyWinner(${matchIdx}, '${team2}')" style="font-size:12px; padding:6px 12px;">${f(team2)}${team2}</div>`;
+    html += `</div></div>`;
+
+    html += `</div>`;
+    return html;
+}
+
+function wireScoreInputs() {
+    document.querySelectorAll('.bracket-score-input').forEach(input => {
+        input.addEventListener('input', () => {
+            const roundKey = _rounds()[currentRound];
+            recalcDetailedWinners(roundKey);
+            updateSaveBtn(roundKey);
+        });
+    });
+}
+
+// ── Recalculate winners from score inputs in detailed mode ────────────
+function recalcDetailedWinners(roundKey) {
+    const matchups = getMatchupsForRound(currentRound);
+    const twoLeg = isTwoLegged(roundKey);
+    selectedTeams = new Set();
+
+    matchups.forEach((m, i) => {
+        const resultEl = document.querySelector(`.bracket-matchup-result[data-matchup="${i}"]`);
+        const penaltyEl = document.querySelector(`.bracket-penalty-pick[data-matchup="${i}"]`);
+        if (!resultEl) return;
+
+        const s1 = getScoreVal(i, '1', '1');
+        const s2 = getScoreVal(i, '1', '2');
+
+        if (s1 === null || s2 === null) {
+            resultEl.innerHTML = '';
+            if (penaltyEl) penaltyEl.style.display = 'none';
+            return;
+        }
+
+        if (!twoLeg) {
+            // Single leg
+            if (s1 > s2) {
+                selectedTeams.add(m.team1);
+                resultEl.innerHTML = `<div style="font-size:12px; color:#28a745; text-align:center; margin-top:6px;">✅ ${f(m.team1)}${m.team1} vinner</div>`;
+                if (penaltyEl) penaltyEl.style.display = 'none';
+            } else if (s2 > s1) {
+                selectedTeams.add(m.team2);
+                resultEl.innerHTML = `<div style="font-size:12px; color:#28a745; text-align:center; margin-top:6px;">✅ ${f(m.team2)}${m.team2} vinner</div>`;
+                if (penaltyEl) penaltyEl.style.display = 'none';
+            } else {
+                // Draw in single leg - need penalty
+                resultEl.innerHTML = '';
+                if (penaltyEl) penaltyEl.style.display = 'block';
+                if (penaltyWinners[i]) selectedTeams.add(penaltyWinners[i]);
+            }
+            return;
+        }
+
+        // Two-legged
+        const s1l2 = getScoreVal(i, '2', '1');
+        const s2l2 = getScoreVal(i, '2', '2');
+
+        if (s1l2 === null || s2l2 === null) {
+            resultEl.innerHTML = `<div style="font-size:11px; color:#888; text-align:center; margin-top:6px;">Match 1: ${m.team1} ${s1} – ${s2} ${m.team2}</div>`;
+            if (penaltyEl) penaltyEl.style.display = 'none';
+            return;
+        }
+
+        // leg1: team1 s1 - s2 team2 (team1 home)
+        // leg2: team2 s1l2 - s2l2 team1 (team2 home)
+        const t1agg = s1 + s2l2;
+        const t2agg = s2 + s1l2;
+
+        let aggHtml = `<div style="font-size:11px; color:#ccc; text-align:center; margin-top:6px; border-top:1px solid rgba(255,255,255,0.05); padding-top:6px;">Totalt: ${m.team1} ${t1agg} – ${t2agg} ${m.team2}`;
+
+        if (t1agg > t2agg) {
+            selectedTeams.add(m.team1);
+            aggHtml += ` — <span style="color:#28a745;">${m.team1} vidare</span>`;
+            if (penaltyEl) penaltyEl.style.display = 'none';
+        } else if (t2agg > t1agg) {
+            selectedTeams.add(m.team2);
+            aggHtml += ` — <span style="color:#28a745;">${m.team2} vidare</span>`;
+            if (penaltyEl) penaltyEl.style.display = 'none';
+        } else {
+            aggHtml += ` — <span style="color:#ffc107;">Lika!</span>`;
+            if (penaltyEl) penaltyEl.style.display = 'block';
+            if (penaltyWinners[i]) selectedTeams.add(penaltyWinners[i]);
+        }
+        aggHtml += `</div>`;
+        resultEl.innerHTML = aggHtml;
+    });
+}
+
+function getScoreVal(matchIdx, leg, side) {
+    const el = document.querySelector(`.bracket-score-input[data-matchup="${matchIdx}"][data-leg="${leg}"][data-side="${side}"]`);
+    if (!el || el.value === '') return null;
+    return parseInt(el.value);
+}
+
+// ── Score generation for casual mode ──────────────────────────────────
+function generateMatchScores(winner, team1, team2, twoLeg) {
+    if (!twoLeg) {
+        let s1, s2;
+        do {
+            s1 = Math.floor(Math.random() * 4);
+            s2 = Math.floor(Math.random() * 4);
+        } while (s1 === s2);
+        if ((winner === team1 && s1 < s2) || (winner === team2 && s1 > s2)) {
+            [s1, s2] = [s2, s1];
+        }
+        return { score1: s1, score2: s2 };
+    }
+
+    // Two-legged
+    let s1 = Math.floor(Math.random() * 4);
+    let s2 = Math.floor(Math.random() * 4);
+    let s1l2 = Math.floor(Math.random() * 4);
+    let s2l2 = Math.floor(Math.random() * 4);
+
+    // team1 aggregate = s1 + s2l2, team2 aggregate = s2 + s1l2
+    let t1agg = s1 + s2l2;
+    let t2agg = s2 + s1l2;
+    const winnerIsTeam1 = winner === team1;
+
+    if (t1agg === t2agg) {
+        return { score1: s1, score2: s2, score1_leg2: s1l2, score2_leg2: s2l2, penaltyWinner: winner };
+    }
+
+    if ((winnerIsTeam1 && t1agg > t2agg) || (!winnerIsTeam1 && t2agg > t1agg)) {
+        return { score1: s1, score2: s2, score1_leg2: s1l2, score2_leg2: s2l2 };
+    }
+
+    // Wrong winner — swap all scores to reverse the aggregate
+    return { score1: s2, score2: s1, score1_leg2: s2l2, score2_leg2: s1l2 };
+}
+
+// ── Read scores from detailed mode inputs ─────────────────────────────
+function readDetailedScores(roundKey) {
+    const matchups = getMatchupsForRound(currentRound);
+    const twoLeg = isTwoLegged(roundKey);
+    const scores = [];
+
+    matchups.forEach((m, i) => {
+        const s = {
+            score1: getScoreVal(i, '1', '1'),
+            score2: getScoreVal(i, '1', '2')
+        };
+        if (twoLeg) {
+            s.score1_leg2 = getScoreVal(i, '2', '1');
+            s.score2_leg2 = getScoreVal(i, '2', '2');
+        }
+        if (penaltyWinners[i]) s.penaltyWinner = penaltyWinners[i];
+        scores.push(s);
+    });
+    return scores;
 }
 
 // ── Original flat-grid rendering (group-stage tournaments) ──────────
@@ -304,12 +580,14 @@ function fLarge(t) {
     return flags[t] ? `<img src="https://flagcdn.com/40x30/${flags[t]}.png" style="vertical-align:-5px; margin-right:10px; border-radius:2px;" width="40" height="30" alt="">` : '🌍 ';
 }
 
+// ── Team toggle (casual mode + flat grid) ─────────────────────────────
 window.toggleBracketTeam = function (team) {
     if (bracketLocked) return;
     const roundKey = _rounds()[currentRound];
 
+    if (knockoutOnly && bracketMode === 'detailed') return; // detailed mode uses score inputs
+
     if (knockoutOnly) {
-        // Matchup mode: selecting a team deselects its opponent
         const matchups = getMatchupsForRound(currentRound);
         const matchup = matchups.find(m => m.team1 === team || m.team2 === team);
         if (matchup) {
@@ -317,13 +595,12 @@ window.toggleBracketTeam = function (team) {
             if (selectedTeams.has(team)) {
                 selectedTeams.delete(team);
             } else {
-                selectedTeams.delete(opponent); // deselect opponent
+                selectedTeams.delete(opponent);
                 selectedTeams.add(team);
             }
         }
         renderMatchups(currentRound, roundKey);
     } else {
-        // Original flat-grid mode
         const required = _roundPickCount(roundKey);
         if (selectedTeams.has(team)) {
             selectedTeams.delete(team);
@@ -339,32 +616,90 @@ window.toggleBracketTeam = function (team) {
     updateSaveBtn(roundKey);
 };
 
+// ── Penalty winner picker (detailed mode) ─────────────────────────────
+window.setPenaltyWinner = function (matchIdx, team) {
+    penaltyWinners[matchIdx] = team;
+    const roundKey = _rounds()[currentRound];
+    // Update the penalty buttons
+    document.querySelectorAll(`.bracket-penalty-pick[data-matchup="${matchIdx}"] .bracket-penalty-btn`).forEach(btn => {
+        btn.classList.toggle('selected', btn.textContent.includes(team));
+    });
+    recalcDetailedWinners(roundKey);
+    updateSaveBtn(roundKey);
+};
+
 function updateSaveBtn(roundKey) {
     const btn = document.getElementById('btn-bracket-save');
     const required = _roundPickCount(roundKey);
     const count = selectedTeams.size;
-    btn.textContent = _isFinalRound(roundKey) ? '🏆 Kröna mästaren!' : `Spara & Nästa (${count}/${required}) ➡`;
-    btn.disabled = count !== required;
+
+    if (knockoutOnly && bracketMode === 'detailed') {
+        // In detailed mode, check that all matchups have complete scores
+        const matchups = getMatchupsForRound(currentRound);
+        const twoLeg = isTwoLegged(roundKey);
+        let allComplete = true;
+        matchups.forEach((m, i) => {
+            if (!m.team1 || !m.team2) return;
+            const s1 = getScoreVal(i, '1', '1');
+            const s2 = getScoreVal(i, '1', '2');
+            if (s1 === null || s2 === null) { allComplete = false; return; }
+            if (twoLeg) {
+                if (getScoreVal(i, '2', '1') === null || getScoreVal(i, '2', '2') === null) { allComplete = false; return; }
+            }
+        });
+        const winnersComplete = count === required;
+        btn.textContent = _isFinalRound(roundKey) ? '🏆 Kröna mästaren!' : `Spara & Nästa (${count}/${required}) ➡`;
+        btn.disabled = !allComplete || !winnersComplete;
+    } else {
+        btn.textContent = _isFinalRound(roundKey) ? '🏆 Kröna mästaren!' : `Spara & Nästa (${count}/${required}) ➡`;
+        btn.disabled = count !== required;
+    }
 }
 
+// ── Save bracket round ────────────────────────────────────────────────
 async function saveBracketRound() {
     if (bracketLocked) return;
     const roundKey = _rounds()[currentRound];
     const userId = auth.currentUser.uid;
+    const twoLeg = isTwoLegged(roundKey);
+    const matchups = knockoutOnly ? getMatchupsForRound(currentRound) : [];
+
+    // Build scores for this round
+    if (knockoutOnly) {
+        if (bracketMode === 'detailed') {
+            knockoutScores[roundKey] = readDetailedScores(roundKey);
+        } else {
+            // Casual: generate random scores for each matchup
+            const scores = [];
+            matchups.forEach((m, i) => {
+                const winner = Array.from(selectedTeams).find(t => t === m.team1 || t === m.team2);
+                if (winner && m.team1 && m.team2) {
+                    scores.push(generateMatchScores(winner, m.team1, m.team2, twoLeg));
+                } else {
+                    scores.push({});
+                }
+            });
+            knockoutScores[roundKey] = scores;
+        }
+    }
 
     if (_isFinalRound(roundKey)) {
         knockoutData[roundKey] = Array.from(selectedTeams)[0];
     } else {
         knockoutData[roundKey] = Array.from(selectedTeams);
-        // Clear all subsequent rounds — picks are now invalid since the pool changed
         const rounds = _rounds();
         const thisIdx = rounds.indexOf(roundKey);
         for (let i = thisIdx + 1; i < rounds.length; i++) {
             delete knockoutData[rounds[i]];
+            delete knockoutScores[rounds[i]];
         }
     }
 
-    await updateDoc(doc(db, "users", userId), { knockout: knockoutData });
+    await updateDoc(doc(db, "users", userId), {
+        knockout: knockoutData,
+        knockoutScores: knockoutScores,
+        knockoutMode: bracketMode
+    });
     invalidateStatsCache();
 
     if (_isFinalRound(roundKey)) { showChampion(knockoutData[roundKey]); }

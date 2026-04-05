@@ -120,6 +120,26 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .bracket-matchup-vs { font-size: 12px; color: #666; font-weight: 600; }
 .bracket-matchup-leg2 { margin-top: 8px; font-size: 12px; color: #666; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; }
 
+/* Detailed mode score inputs */
+.bracket-detailed-card { text-align: left; }
+.bracket-leg-label { font-size: 10px; font-weight: 600; text-align: center; padding: 2px 0; }
+.bracket-leg-row { display: flex; align-items: center; gap: 6px; justify-content: center; padding: 4px 0; }
+.bracket-leg-team { flex: 1; font-size: 13px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bracket-leg-sep { color: #888; font-weight: 700; padding: 0 2px; }
+.bracket-score-input {
+    width: 40px; height: 32px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+    background: rgba(255,255,255,0.08); color: white;
+    font-size: 15px; font-weight: 700; flex: 0 0 40px;
+    -moz-appearance: textfield;
+}
+.bracket-score-input:focus { outline: none; border-color: #ffc107; background: rgba(255,255,255,0.12); }
+.bracket-score-input::-webkit-outer-spin-button,
+.bracket-score-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bracket-matchup-result { min-height: 0; }
+.bracket-penalty-btn { cursor: pointer; transition: all 0.15s; }
+.bracket-penalty-btn:hover { background: rgba(255,193,7,0.15); }
+
 /* Bracket tree layout */
 .bracket-tree { display: flex; align-items: center; min-width: 1100px; gap: 0; }
 .bracket-round-col { display: flex; flex-direction: column; justify-content: space-around; flex: 1; min-width: 130px; padding: 0 2px; position: relative; }
