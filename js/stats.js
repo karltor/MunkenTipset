@@ -203,23 +203,33 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         // --- 2. SLUTSPELSTIPS (KOMPAKT KORT-LAYOUT) ---
         if (me.knockoutPicks) {
             const ko = me.knockoutPicks;
-            const finalPick = ko.final || null;
-            const sfPicks = ko.sf || [];
-            const qfPicks = ko.qf || [];
-            const r16Picks = ko.r16 || [];
-            const r32Picks = ko.r32 || [];
+            const koRoundsAll = getKnockoutRounds();
+            const finalRd = koRoundsAll[koRoundsAll.length - 1];
+            const gold = finalRd ? (typeof ko[finalRd.key] === 'string' ? ko[finalRd.key] : null) : null;
 
-            const gold = finalPick;
-            const silver = sfPicks.find(t => t !== gold) || null;
-            const bronze = qfPicks.filter(t => !sfPicks.includes(t));
-            const quarters = r16Picks.filter(t => !qfPicks.includes(t));
-            const eights = r32Picks.filter(t => !r16Picks.includes(t));
+            // Build eliminated-per-round: teams picked for round N but not for round N+1
+            const eliminatedPerRound = [];
+            for (let ri = koRoundsAll.length - 2; ri >= 0; ri--) {
+                const thisRound = koRoundsAll[ri];
+                const nextRound = koRoundsAll[ri + 1];
+                const thisPicks = ko[thisRound.key] || [];
+                const nextPicks = typeof ko[nextRound.key] === 'string' ? [ko[nextRound.key]] : (ko[nextRound.key] || []);
+                const eliminated = (Array.isArray(thisPicks) ? thisPicks : [thisPicks]).filter(t => !nextPicks.includes(t));
+                if (eliminated.length > 0) {
+                    eliminatedPerRound.push({ round: thisRound, eliminated });
+                }
+            }
+
+            // Silver = the other SF pick that isn't gold
+            const sfRound = koRoundsAll.length >= 2 ? koRoundsAll[koRoundsAll.length - 2] : null;
+            const sfPicks = sfRound ? (ko[sfRound.key] || []) : [];
+            const silver = Array.isArray(sfPicks) ? sfPicks.find(t => t !== gold) : null;
 
             const getStatusColor = (team, roundKey) => {
                 let color = '';
                 if (!team) return color;
                 const winners = officialKoWinners[roundKey] || [];
-                const roundOrder = getKnockoutRounds().map(r => r.key);
+                const roundOrder = koRoundsAll.map(r => r.key);
                 const thisIdx = roundOrder.indexOf(roundKey);
                 const eliminatedBefore = new Set();
                 for (let ri = 0; ri < thisIdx; ri++) {
@@ -240,14 +250,14 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             // Guld & Silver
             html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;">';
             if (gold) {
-                const c = getStatusColor(gold, 'final');
+                const c = getStatusColor(gold, finalRd.key);
                 html += '<div style="background:#f1c40f; border-radius:4px; padding:8px; text-align:center;">';
                 html += '<div style="font-size:9px; font-weight:800; color:#a67c00; letter-spacing:1px; margin-bottom:4px;">GULD</div>';
                 html += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(gold) + ' ' + gold + '</div>';
                 html += '</div>';
             }
             if (silver) {
-                const c = getStatusColor(silver, 'sf');
+                const c = getStatusColor(silver, sfRound.key);
                 html += '<div style="background:#d1d8e0; border-radius:4px; padding:8px; text-align:center;">';
                 html += '<div style="font-size:9px; font-weight:800; color:#6b7c93; letter-spacing:1px; margin-bottom:4px;">SILVER</div>';
                 html += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(silver) + ' ' + silver + '</div>';
@@ -255,44 +265,18 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             }
             html += '</div>';
 
-            // Utslagna i Semifinal
-            if (bronze.length > 0) {
-                html += '<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I SEMIFINAL</div>';
+            // Show eliminated teams per round (dynamic)
+            eliminatedPerRound.forEach(({ round, eliminated }) => {
+                html += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I ${round.label.toUpperCase()}</div>`;
                 html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
-                bronze.forEach(team => {
-                    const c = getStatusColor(team, 'qf');
-                    html += '<div style="background:#fdebd0; border:1px solid #fad7a1; border-radius:4px; padding:4px 6px; display:flex; align-items:center; gap:6px;">';
-                    html += '<span style="font-size:12px; font-weight:700; color:#444; ' + c + '">' + f(team) + ' ' + team + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            }
-
-            // Utslagna i Kvartsfinal
-            if (quarters.length > 0) {
-                html += '<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I KVARTSFINAL</div>';
-                html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
-                quarters.forEach(team => {
-                    const c = getStatusColor(team, 'r16');
+                eliminated.forEach(team => {
+                    const c = getStatusColor(team, round.key);
                     html += '<div style="background:#f4f6f9; border:1px solid #e1e5eb; border-radius:4px; padding:3px 6px; display:flex; align-items:center; gap:4px;">';
                     html += '<span style="font-size:11px; color:#444; ' + c + '">' + f(team) + ' ' + team + '</span>';
                     html += '</div>';
                 });
                 html += '</div>';
-            }
-
-            // Utslagna i Åttondelsfinal
-            if (eights.length > 0) {
-                html += '<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I ÅTTONDELSFINAL</div>';
-                html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
-                eights.forEach(team => {
-                    const c = getStatusColor(team, 'r32');
-                    html += '<div style="background:#fff; border:1px solid #eee; border-radius:4px; padding:2px 6px; display:flex; align-items:center; gap:4px;">';
-                    html += '<span style="font-size:11px; color:#555; ' + c + '">' + f(team) + ' ' + team + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            }
+            });
 
             html += '</div>';
         }

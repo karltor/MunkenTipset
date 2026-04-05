@@ -115,6 +115,17 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
 
         // Aggregate display
         html += `<div class="abt-aggregate" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; color:#888; margin-top:6px; text-align:center;"></div>`;
+
+        // Penalty winner picker (shown when aggregate is tied)
+        const pw = match.penaltyWinner || '';
+        html += `<div class="abt-penalty-pick" data-round="${round}" data-match="${matchIdx}" style="display:none; margin-top:6px; text-align:center;">
+            <div style="font-size:10px; color:#ffc107; font-weight:600; margin-bottom:4px;">Straffvinnare:</div>
+            <div style="display:flex; gap:6px; justify-content:center;">
+                <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="1" style="font-size:11px; padding:4px 10px; background:${pw === (match.team1 || '') ? '#28a745' : '#444'};">${f(match.team1 || 'Lag 1')}${match.team1 || 'Lag 1'}</button>
+                <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="2" style="font-size:11px; padding:4px 10px; background:${pw === (match.team2 || '') ? '#28a745' : '#444'};">${f(match.team2 || 'Lag 2')}${match.team2 || 'Lag 2'}</button>
+            </div>
+            <input type="hidden" class="abt-penalty-winner" data-round="${round}" data-match="${matchIdx}" value="${pw}">
+        </div>`;
     }
 
     html += `</div>`;
@@ -241,6 +252,26 @@ export async function renderAdminBracket() {
         });
     });
 
+    // Wire penalty buttons
+    container.querySelectorAll('.abt-penalty-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const round = btn.dataset.round, matchIdx = btn.dataset.match, side = btn.dataset.side;
+            const teamEl = container.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${matchIdx}"][data-side="${side}"]`);
+            const team = teamEl?.value || '';
+            const hiddenInput = container.querySelector(`.abt-penalty-winner[data-round="${round}"][data-match="${matchIdx}"]`);
+            if (hiddenInput) hiddenInput.value = team;
+            // Highlight selected button
+            container.querySelectorAll(`.abt-penalty-btn[data-round="${round}"][data-match="${matchIdx}"]`).forEach(b => {
+                b.style.background = '#444';
+            });
+            btn.style.background = '#28a745';
+            // Auto-advance this winner
+            const rounds = koRounds.map(r => r.adminKey);
+            const matchCounts = koRounds.map(r => r.teams / 2);
+            autoAdvanceWinners(rounds, matchCounts, koRounds);
+        });
+    });
+
     updateAggregates(container);
 }
 
@@ -251,17 +282,21 @@ function updateAggregates(container) {
         const s2 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value;
         const s1l2 = container.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value;
         const s2l2 = container.querySelector(`.admin-bracket-score-leg2[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value;
+        const penaltyEl = container.querySelector(`.abt-penalty-pick[data-round="${round}"][data-match="${matchIdx}"]`);
 
         if (s1 !== '' && s2 !== '' && s1l2 !== '' && s2l2 !== '' &&
             s1 !== undefined && s2 !== undefined && s1l2 !== undefined && s2l2 !== undefined) {
-            const t1Total = parseInt(s1) + parseInt(s2l2); // team1 home + team1 away
-            const t2Total = parseInt(s2) + parseInt(s1l2); // team2 home + team2 away (remember: leg2 team order is swapped)
+            const t1Total = parseInt(s1) + parseInt(s2l2);
+            const t2Total = parseInt(s2) + parseInt(s1l2);
             const t1name = container.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value || 'Lag 1';
             const t2name = container.querySelector(`.admin-bracket-team[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value || 'Lag 2';
+            const isTied = t1Total === t2Total;
             el.innerHTML = `<strong>Aggregerat:</strong> ${t1name} ${t1Total} – ${t2Total} ${t2name}` +
-                (t1Total === t2Total ? ' <span style="color:#ffc107;">(lika — välj vinnare manuellt)</span>' : '');
+                (isTied ? ' <span style="color:#ffc107;">(lika)</span>' : '');
+            if (penaltyEl) penaltyEl.style.display = isTied ? 'block' : 'none';
         } else {
             el.innerHTML = '';
+            if (penaltyEl) penaltyEl.style.display = 'none';
         }
     });
 }
@@ -318,7 +353,11 @@ function autoAdvanceWinners(rounds, matchCounts, koRounds) {
                 const t2Total = parseInt(s2) + parseInt(s1l2);
                 if (t1Total > t2Total) winner = t1El?.value || '';
                 else if (t2Total > t1Total) winner = t2El?.value || '';
-                // If tied, don't auto-advance (admin picks manually)
+                else {
+                    // Tied — check penalty winner selection
+                    const pw = document.querySelector(`.abt-penalty-winner[data-round="${round}"][data-match="${i}"]`)?.value || '';
+                    if (pw) winner = pw;
+                }
             } else {
                 const s1El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="1"]`);
                 const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
@@ -372,12 +411,25 @@ async function saveAdminBracket(rounds, matchCounts, koRounds) {
                     match.score1_leg2 = parseInt(s1l2);
                     match.score2_leg2 = parseInt(s2l2);
                 }
-                // Determine winner by aggregate
+                // Determine winner by aggregate or penalty
                 if (match.score1 !== undefined && match.score2 !== undefined &&
                     match.score1_leg2 !== undefined && match.score2_leg2 !== undefined) {
                     const t1Total = match.score1 + match.score2_leg2;
                     const t2Total = match.score2 + match.score1_leg2;
-                    match.winner = t1Total > t2Total ? t1 : (t2Total > t1Total ? t2 : '');
+                    if (t1Total > t2Total) {
+                        match.winner = t1;
+                    } else if (t2Total > t1Total) {
+                        match.winner = t2;
+                    } else {
+                        // Tied aggregate — check penalty winner
+                        const pw = document.querySelector(`.abt-penalty-winner[data-round="${round}"][data-match="${i}"]`)?.value || '';
+                        if (pw) {
+                            match.winner = pw;
+                            match.penaltyWinner = pw;
+                        } else {
+                            match.winner = '';
+                        }
+                    }
                 }
             } else {
                 if (match.score1 !== undefined && match.score2 !== undefined) {

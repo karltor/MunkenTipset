@@ -1,7 +1,7 @@
 import { db } from './config.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { getGroupLetters, getKnockoutRounds, getFinalRound, hasStageType } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getFinalRound, hasStageType, isTwoLegged } from './tournament-config.js';
 let subTabsWired = false;
 
 export async function loadResults(allMatches) {
@@ -122,10 +122,10 @@ function renderOfficialBracket(bracket) {
     const finalRound = getFinalRound();
     const nonFinal = koRounds.filter(r => r !== finalRound);
     const leftRounds = nonFinal.map(r => ({
-        key: r.adminKey, label: r.label, start: 0, count: r.teams / 4
+        key: r.adminKey, userKey: r.key, label: r.label, start: 0, count: r.teams / 4
     }));
     const rightRounds = [...nonFinal].reverse().map(r => ({
-        key: r.adminKey, label: r.label, start: r.teams / 4, count: r.teams / 4
+        key: r.adminKey, userKey: r.key, label: r.label, start: r.teams / 4, count: r.teams / 4
     }));
 
     let html = `<div style="background: linear-gradient(135deg, #1f1f3a, #2b2b52); border-radius: 16px; padding: 20px; overflow-x: auto;">`;
@@ -142,11 +142,13 @@ function renderOfficialBracket(bracket) {
 
     // Final (center)
     const finalAdminKey = finalRound?.adminKey || 'Final';
+    const finalUserKey = finalRound?.key || 'final';
     const finalMatch = (rd[finalAdminKey] || [])[0] || {};
+    const finalTwoLeg = isTwoLegged(finalUserKey);
     html += `<div class="br-round br-final-round">`;
     html += `<div class="br-round-label br-final-label">${(finalRound?.label || 'FINAL').toUpperCase()}</div>`;
     html += `<div class="br-round-matches">`;
-    html += `<div class="br-slot">${renderBracketMatch(finalMatch, true)}</div>`;
+    html += `<div class="br-slot">${renderBracketMatch(finalMatch, true, finalTwoLeg)}</div>`;
     html += `</div></div>`;
 
     // Right half (mirrored)
@@ -164,28 +166,27 @@ function renderOfficialBracket(bracket) {
 }
 
 function buildPairedMatches(rd, round, depth, side) {
+    const twoLeg = isTwoLegged(round.userKey);
     const matches = [];
     for (let i = 0; i < round.count; i++) {
         matches.push((rd[round.key] || [])[round.start + i] || {});
     }
-    // If only 1 match, no pairing needed — just a single slot with connector
     if (matches.length === 1) {
-        return `<div class="br-slot br-conn-${side}">${renderBracketMatch(matches[0])}</div>`;
+        return `<div class="br-slot br-conn-${side}">${renderBracketMatch(matches[0], false, twoLeg)}</div>`;
     }
-    // Wrap matches in pairs: [0,1], [2,3], etc.
     let html = '';
     for (let i = 0; i < matches.length; i += 2) {
         html += `<div class="br-pair br-pair-${side}">`;
-        html += `<div class="br-slot">${renderBracketMatch(matches[i])}</div>`;
+        html += `<div class="br-slot">${renderBracketMatch(matches[i], false, twoLeg)}</div>`;
         if (i + 1 < matches.length) {
-            html += `<div class="br-slot">${renderBracketMatch(matches[i + 1])}</div>`;
+            html += `<div class="br-slot">${renderBracketMatch(matches[i + 1], false, twoLeg)}</div>`;
         }
         html += `</div>`;
     }
     return html;
 }
 
-function renderBracketMatch(match, isFinal) {
+function renderBracketMatch(match, isFinal, twoLeg) {
     const t1 = match.team1 || 'TBD';
     const t2 = match.team2 || 'TBD';
     const s1 = match.score1 ?? '';
@@ -194,11 +195,12 @@ function renderBracketMatch(match, isFinal) {
     const t1w = w === t1, t2w = w === t2;
     const sz = isFinal ? 'font-size:13px; padding:6px 10px;' : '';
     const dateStr = match.date ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date}</div>` : '';
-    const hasTwoLegs = match.score1_leg2 !== undefined && match.score2_leg2 !== undefined;
+    const hasL1 = match.score1 !== undefined;
+    const hasL2 = match.score1_leg2 !== undefined && match.score2_leg2 !== undefined;
 
     let html = `<div class="abt-match" style="pointer-events:none;">`;
 
-    if (hasTwoLegs) {
+    if (twoLeg) {
         html += `<div style="font-size:9px; color:#17a2b8; font-weight:600; text-align:center; padding:2px 0;">MATCH 1</div>`;
     }
     html += dateStr;
@@ -209,23 +211,36 @@ function renderBracketMatch(match, isFinal) {
             <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s2}</span>
         </div>`;
 
-    if (hasTwoLegs) {
-        const dateStr2 = match.date_leg2 ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date_leg2}</div>` : '';
+    // Show leg 2 section if round is two-legged
+    if (twoLeg) {
         html += `<div style="border-top:1px dashed rgba(255,255,255,0.1); margin:3px 0;"></div>`;
-        html += `<div style="font-size:9px; color:#ffc107; font-weight:600; text-align:center; padding:2px 0;">MATCH 2</div>`;
-        html += dateStr2;
-        html += `<div class="abt-team-row" style="${sz}${t2w ? 'background:rgba(40,167,69,0.15);' : ''}">
-            <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score1_leg2}</span>
-        </div>
-        <div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}">
-            <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score2_leg2}</span>
-        </div>`;
+        html += `<div style="font-size:9px; color:#ffc107; font-weight:600; text-align:center; padding:2px 0;">MATCH 2 (retur)</div>`;
+        if (hasL2) {
+            const dateStr2 = match.date_leg2 ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date_leg2}</div>` : '';
+            html += dateStr2;
+            html += `<div class="abt-team-row" style="${sz}${t2w ? 'background:rgba(40,167,69,0.15);' : ''}">
+                <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score1_leg2}</span>
+            </div>
+            <div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}">
+                <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">${match.score2_leg2}</span>
+            </div>`;
 
-        const t1agg = (match.score1 || 0) + (match.score2_leg2 || 0);
-        const t2agg = (match.score2 || 0) + (match.score1_leg2 || 0);
-        let aggText = `${t1} ${t1agg} – ${t2agg} ${t2}`;
-        if (t1agg === t2agg && w) aggText += ` (str.)`;
-        html += `<div style="font-size:10px; color:#ccc; text-align:center; padding:4px 0; border-top:1px solid rgba(255,255,255,0.05);">Totalt: ${aggText}</div>`;
+            const t1agg = (match.score1 || 0) + (match.score2_leg2 || 0);
+            const t2agg = (match.score2 || 0) + (match.score1_leg2 || 0);
+            let aggText = `${t1} ${t1agg} – ${t2agg} ${t2}`;
+            if (t1agg === t2agg && w) aggText += ` <span style="color:#ffc107;">(${w} vidare på str.)</span>`;
+            html += `<div style="font-size:10px; color:#ccc; text-align:center; padding:4px 0; border-top:1px solid rgba(255,255,255,0.05);">Totalt: ${aggText}</div>`;
+        } else {
+            // Leg 2 not played yet — show TBD
+            const dateStr2 = match.date_leg2 ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date_leg2}</div>` : '';
+            html += dateStr2;
+            html += `<div class="abt-team-row" style="${sz} opacity:0.4;">
+                <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">-</span>
+            </div>
+            <div class="abt-team-row" style="${sz} opacity:0.4;">
+                <span style="flex:1;">${match.team1 ? f(t1) : ''}${t1}</span><span style="font-weight:700; min-width:20px; text-align:right;">-</span>
+            </div>`;
+        }
     }
 
     html += `</div>`;
