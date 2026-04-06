@@ -77,6 +77,10 @@ function _saveConfigCache(dataVersion, config) {
     } catch { /* quota exceeded */ }
 }
 
+// Pre-load cached config synchronously so getConfig() works before async load
+const _preloaded = _loadConfigCache();
+if (_preloaded?.config) _config = _preloaded.config;
+
 // ── Load config from Firestore (with localStorage cache) ───────────
 // Pass dataVersion from settings to avoid extra Firestore read
 export async function loadTournamentConfig(dataVersion) {
