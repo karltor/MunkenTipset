@@ -22,6 +22,19 @@ let allMatchesData = [];
 let isAdmin = false;
 let globalTipsLocked = false;
 
+function applyTabVisibility() {
+    const hasGroups = hasStageType('round-robin-groups');
+    const hasKnockout = hasStageType('single-elimination');
+    const hasLeague = hasStageType('league');
+    const wizardBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
+    const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
+    if (wizardBtn) {
+        wizardBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
+        if (hasLeague && !hasGroups) wizardBtn.textContent = '🎯 Tippa Tabell';
+    }
+    if (bracketBtn) bracketBtn.style.display = hasKnockout ? '' : 'none';
+}
+
 // Logga ut
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
 
@@ -88,31 +101,28 @@ onAuthStateChanged(auth, async (user) => {
     }
     document.getElementById('user-name').textContent = user.displayName || user.email;
 
+    // Apply cached config immediately to prevent tab flicker
+    // (tournament-config.js pre-loads from localStorage synchronously)
+    applyTabVisibility();
+    const cachedName = getTournamentName();
+    if (cachedName !== 'MunkenTipset') {
+        document.querySelector('.logo-text').textContent = cachedName;
+        document.title = cachedName;
+    }
+
     // Check lock status + get settings first (1 read — reused everywhere)
     const { locked, settings } = await checkTipsLocked();
     globalTipsLocked = locked;
     const dataVersion = settings.dataVersion || 0;
 
-    // Load tournament config (cached in localStorage using dataVersion)
+    // Load tournament config (validates cache against dataVersion, fetches if stale)
     await loadTournamentConfig(dataVersion);
 
-    // Update branding from config
+    // Re-apply branding and tab visibility with confirmed config
     const tName = getTournamentName();
     document.querySelector('.logo-text').textContent = tName;
     document.title = tName;
-
-    // Show/hide tabs based on tournament stages
-    const hasGroups = hasStageType('round-robin-groups');
-    const hasKnockout = hasStageType('single-elimination');
-    const hasLeague = hasStageType('league');
-
-    const wizardBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
-    const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
-    if (wizardBtn) {
-        wizardBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
-        if (hasLeague && !hasGroups) wizardBtn.textContent = '🎯 Tippa Tabell';
-    }
-    if (bracketBtn) bracketBtn.style.display = hasKnockout ? '' : 'none';
+    applyTabVisibility();
 
     // Ensure user doc exists with email + display name (single write)
     await setDoc(doc(db, "users", user.uid), { email: user.email, name: user.displayName || user.email }, { merge: true });
