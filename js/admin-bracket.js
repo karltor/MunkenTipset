@@ -87,7 +87,7 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
     let html = `<div class="abt-match" data-round="${round}" data-idx="${matchIdx}">`;
 
     // Leg 1 (or only leg)
-    if (twoLeg) html += `<div style="font-size:10px; color:#17a2b8; font-weight:600; margin-bottom:2px;">MATCH 1</div>`;
+    if (twoLeg) html += `<div style="font-size:10px; color:#17a2b8; font-weight:600; margin-bottom:2px; text-shadow:0 0 3px rgba(0,0,0,0.5);">MATCH 1</div>`;
     html += `<div class="abt-team-row">
         <input class="admin-bracket-team abt-input" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.team1 || ''}" placeholder="Lag 1" list="team-autocomplete">
         <input type="number" class="admin-bracket-score abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1 ?? ''}" placeholder="-">
@@ -102,7 +102,7 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
     if (twoLeg) {
         const t2 = match.team2 || 'Lag 2';
         const t1 = match.team1 || 'Lag 1';
-        html += `<div style="font-size:10px; color:#ffc107; font-weight:600; margin-top:8px; margin-bottom:2px; border-top:1px dashed #ddd; padding-top:6px;">MATCH 2 (retur)</div>`;
+        html += `<div style="font-size:10px; color:#ffc107; font-weight:600; margin-top:8px; margin-bottom:2px; border-top:1px dashed #ddd; padding-top:6px; text-shadow:0 0 3px rgba(0,0,0,0.5);">MATCH 2 (retur)</div>`;
         html += `<div class="abt-team-row">
             <span class="abt-input" style="flex:1; padding:4px 8px; color:#888; font-size:12px;">${f(t2)}${t2}</span>
             <input type="number" class="admin-bracket-score-leg2 abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1_leg2 ?? ''}" placeholder="-">

@@ -201,7 +201,7 @@ function renderBracketMatch(match, isFinal, twoLeg) {
     let html = `<div class="abt-match" style="pointer-events:none;">`;
 
     if (twoLeg) {
-        html += `<div style="font-size:9px; color:#17a2b8; font-weight:600; text-align:center; padding:2px 0;">MATCH 1</div>`;
+        html += `<div style="font-size:9px; color:#17a2b8; font-weight:600; text-align:center; padding:2px 0; text-shadow:0 0 3px rgba(0,0,0,0.5);">MATCH 1</div>`;
     }
     html += dateStr;
     html += `<div class="abt-team-row" style="${sz}${t1w ? 'background:rgba(40,167,69,0.15);' : ''}${!match.team1 ? 'opacity:0.4;' : ''}">
@@ -214,7 +214,7 @@ function renderBracketMatch(match, isFinal, twoLeg) {
     // Show leg 2 section if round is two-legged
     if (twoLeg) {
         html += `<div style="border-top:1px dashed rgba(255,255,255,0.1); margin:3px 0;"></div>`;
-        html += `<div style="font-size:9px; color:#ffc107; font-weight:600; text-align:center; padding:2px 0;">MATCH 2 (retur)</div>`;
+        html += `<div style="font-size:9px; color:#ffc107; font-weight:600; text-align:center; padding:2px 0; text-shadow:0 0 3px rgba(0,0,0,0.5);">MATCH 2 (retur)</div>`;
         if (hasL2) {
             const dateStr2 = match.date_leg2 ? `<div style="font-size:10px; color:#aaa; text-align:center; padding:2px 0;">${match.date_leg2}</div>` : '';
             html += dateStr2;
