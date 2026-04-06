@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MunkenTipset 2026</title>
     <link rel="icon" type="image/png" href="favicon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=block" as="style">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=block" rel="stylesheet">
     <link rel="stylesheet" href="css/theme.css">
     <link rel="stylesheet" href="css/dashboard.css">
 </head>
@@ -72,6 +73,37 @@
             <button class="tab-btn" data-target="results-tab">Matchresultat</button>
             <button class="tab-btn" data-target="chat-tab" style="border-color: #17a2b8; color: #1a1a1a;">💬 Chatt</button>
         </div>
+        <script>
+        // Apply cached branding & tab visibility synchronously before modules load
+        (function() {
+            try {
+                var raw = localStorage.getItem('munkentipset_tournament_config_v1');
+                if (!raw) return;
+                var cached = JSON.parse(raw);
+                var cfg = cached && cached.config;
+                if (!cfg) return;
+                if (cfg.name) {
+                    var logo = document.querySelector('.logo-text');
+                    if (logo) logo.textContent = cfg.name;
+                    document.title = cfg.name;
+                }
+                var stages = cfg.stages || [];
+                var hasGroups = false, hasKnockout = false, hasLeague = false;
+                for (var i = 0; i < stages.length; i++) {
+                    if (stages[i].type === 'round-robin-groups') hasGroups = true;
+                    if (stages[i].type === 'single-elimination') hasKnockout = true;
+                    if (stages[i].type === 'league') hasLeague = true;
+                }
+                var wizBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
+                var brBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
+                if (wizBtn) {
+                    wizBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
+                    if (hasLeague && !hasGroups) wizBtn.textContent = '\uD83C\uDFAF Tippa Tabell';
+                }
+                if (brBtn) brBtn.style.display = hasKnockout ? '' : 'none';
+            } catch(e) {}
+        })();
+        </script>
 
         <!-- START TAB -->
         <div id="start-tab" class="tab-content active">

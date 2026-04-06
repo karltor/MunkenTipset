@@ -143,7 +143,7 @@ onAuthStateChanged(auth, async (user) => {
     if (locked) {
         lockTab('wizard-tab', 'Tipsraderna är låsta av admin.');
         lockTab('bracket-tab', 'Tipsraderna är låsta av admin.');
-    } else if (!hasGroups) {
+    } else if (!hasStageType('round-robin-groups')) {
         // No group stage — bracket is always available
         unlockBracket();
     } else if (userData.groupPicks?.completedAt) {
