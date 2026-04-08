@@ -85,6 +85,62 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .team-chip.rank-2 { border-color: #17a2b8; background: #f4fbff; }
 .team-chip.rank-2::after { content: '🥈 2:a'; }
 
+/* ── Casual mode: 2×2 team grid ── */
+.casual-cta {
+    text-align: center; font-size: 15px; font-weight: 600; color: #444;
+    margin: 0 0 12px; padding: 8px 12px; background: #fffde7; border-radius: 8px;
+    border: 1px dashed #ffc107; animation: ctaPulse 2s ease infinite;
+}
+@keyframes ctaPulse { 0%,100% { border-color: #ffc107; } 50% { border-color: #ff9800; } }
+
+.casual-team-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+}
+.casual-team-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 16px 10px; background: white; border: 3px solid #e0e0e0; border-radius: 12px;
+    cursor: pointer; transition: all 0.2s; min-height: 80px;
+}
+.casual-team-card:hover { border-color: #aaa; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.casual-team-card.rank-1 { border-color: #ffc107; background: #fffdf5; box-shadow: 0 0 0 2px rgba(255,193,7,0.25); }
+.casual-team-card.rank-1::after { content: '🏆 Etta'; display: block; font-size: 12px; font-weight: 700; color: #d4a017; margin-top: 6px; }
+.casual-team-card.rank-2 { border-color: #17a2b8; background: #f4fbff; box-shadow: 0 0 0 2px rgba(23,162,184,0.2); }
+.casual-team-card.rank-2::after { content: '🥈 Tvåa'; display: block; font-size: 12px; font-weight: 700; color: #138496; margin-top: 6px; }
+.casual-team-flag { font-size: 0; line-height: 1; margin-bottom: 6px; }
+.casual-team-flag img { width: 40px; height: 28px; object-fit: cover; border-radius: 3px; }
+.casual-team-name { font-size: 14px; font-weight: 700; text-align: center; }
+
+/* ── Casual mode: compact match list ── */
+.casual-match-list { border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
+.casual-match-row {
+    display: flex; align-items: center; padding: 5px 10px; font-size: 12px;
+    border-bottom: 1px solid #f0f0f0; cursor: pointer; gap: 6px;
+}
+.casual-match-row:last-child { border-bottom: none; }
+.casual-match-row:hover { background: #fafafa; }
+.casual-match-date { font-size: 10px; color: #999; min-width: 85px; flex-shrink: 0; }
+.casual-match-home { flex: 1; text-align: right; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.casual-match-away { flex: 1; text-align: left; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.casual-match-score { display: flex; align-items: center; gap: 3px; flex-shrink: 0; color: #aaa; }
+.casual-match-score span { font-weight: 700; }
+.casual-score { width: 26px; height: 24px; font-size: 11px; text-align: center; border: 1px solid #e0e0e0; border-radius: 4px; padding: 0; }
+.casual-match-row img { width: 16px; height: 12px; vertical-align: middle; }
+
+/* ── Casual mode: layout override ── */
+.wizard-layout.casual-mode { grid-template-columns: 1fr !important; }
+.wizard-layout.casual-mode .wizard-left { order: 1; }
+.wizard-layout.casual-mode .wizard-right { order: 2; }
+.wizard-layout.casual-mode .wizard-sticky-sidebar { position: static; }
+
+@media (max-width: 768px) {
+    .casual-team-grid { gap: 8px; }
+    .casual-team-card { padding: 12px 8px; min-height: 60px; }
+    .casual-team-flag img { width: 32px; height: 22px; }
+    .casual-team-name { font-size: 13px; }
+    .casual-match-date { min-width: 70px; font-size: 9px; }
+    .casual-match-row { font-size: 11px; padding: 4px 8px; }
+}
+
 /* Smooth table row animation */
 .table-row-anim { transition: all 0.4s ease; }
 .row-shift { animation: rowSlide 0.5s ease; }

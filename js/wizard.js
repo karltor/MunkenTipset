@@ -93,8 +93,13 @@ function startMode(mode) {
     const isCasual = mode === 'casual';
     document.getElementById('btn-switch-mode').textContent = isCasual ? '📊 Byt till Detaljerat' : '🎯 Byt till Snabbtips';
     document.getElementById('wizard-mode-label').textContent = isCasual
-        ? 'Klicka på etta 🏆 och tvåa 🥈 — resultat genereras automatiskt'
+        ? ''
         : 'Tippa resultatet i varje match — tabellen uppdateras live';
+
+    // Toggle casual layout class on the wizard layout container
+    const layout = document.querySelector('.wizard-layout');
+    if (layout) layout.classList.toggle('casual-mode', isCasual);
+
     loadGroup(currentIndex);
 }
 
@@ -198,39 +203,77 @@ function restoreSavedScores(groupMatches) {
 
 function renderTeamSelectors() {
     const container = document.getElementById('wizard-team-selectors');
-    container.innerHTML = '';
-    currentTeams.forEach(team => {
-        const cls = team === selFirst ? 'rank-1' : (team === selSecond ? 'rank-2' : '');
-        container.innerHTML += `<div class="team-chip ${cls}" onclick="window.toggleWizTeam('${team}')">${f(team)}${team}</div>`;
-    });
+    const isCasual = currentMode === 'casual';
+
+    if (isCasual) {
+        // Big 2x2 grid for casual mode
+        const pickedCount = (selFirst ? 1 : 0) + (selSecond ? 1 : 0);
+        let cta = '';
+        if (pickedCount === 0) cta = 'Klicka på det lag du tror vinner gruppen';
+        else if (pickedCount === 1) cta = 'Bra! Välj nu tvåan i gruppen';
+
+        container.innerHTML = (cta ? `<p class="casual-cta">${cta}</p>` : '') +
+            '<div class="casual-team-grid">' +
+            currentTeams.map(team => {
+                const cls = team === selFirst ? 'rank-1' : (team === selSecond ? 'rank-2' : '');
+                return `<div class="casual-team-card ${cls}" onclick="window.toggleWizTeam('${team}')">
+                    <div class="casual-team-flag">${fLarge(team)}</div>
+                    <div class="casual-team-name">${team}</div>
+                </div>`;
+            }).join('') +
+            '</div>';
+    } else {
+        // Original list for detailed mode
+        container.innerHTML = '';
+        currentTeams.forEach(team => {
+            const cls = team === selFirst ? 'rank-1' : (team === selSecond ? 'rank-2' : '');
+            container.innerHTML += `<div class="team-chip ${cls}" onclick="window.toggleWizTeam('${team}')">${f(team)}${team}</div>`;
+        });
+    }
 }
 
 function renderMatchCards(groupMatches) {
     const container = document.getElementById('wizard-matches');
     const isCasual = currentMode === 'casual';
     container.innerHTML = '';
-    groupMatches.forEach(m => {
-        container.innerHTML += `
-            <div class="match-card ${isCasual ? 'locked' : ''}">
-                <div class="match-header"><span>${m.date || ''}</span></div>
-                <div class="match-teams">
-                    <span class="team-name home" id="wizNameHome-${m.id}">${f(m.homeTeam)}${m.homeTeam}</span>
-                    <div class="score-input-group">
-                        <input type="number" min="0" id="wizHome-${m.id}" class="score-input" placeholder="-"
-                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()">
-                        <span style="color:#aaa; font-weight:bold; margin: 0 4px;">:</span>
-                        <input type="number" min="0" id="wizAway-${m.id}" class="score-input" placeholder="-"
-                            ${isCasual ? 'disabled' : ''} oninput="window.updateWizTable()">
-                    </div>
-                    <span class="team-name away" id="wizNameAway-${m.id}">${f(m.awayTeam)}${m.awayTeam}</span>
-                </div>
-            </div>`;
-    });
 
-    // Attach click listeners on locked cards for toast
     if (isCasual) {
-        container.querySelectorAll('.match-card.locked').forEach(card => {
-            card.addEventListener('click', onLockedCardClick);
+        // Compact match list for casual mode
+        container.innerHTML = '<div class="casual-match-list">' +
+            groupMatches.map(m => `
+                <div class="casual-match-row">
+                    <span class="casual-match-date">${m.date || ''}</span>
+                    <span class="casual-match-home">${f(m.homeTeam)}${m.homeTeam}</span>
+                    <span class="casual-match-score">
+                        <input type="number" min="0" id="wizHome-${m.id}" class="score-input casual-score" placeholder="-" disabled>
+                        <span>-</span>
+                        <input type="number" min="0" id="wizAway-${m.id}" class="score-input casual-score" placeholder="-" disabled>
+                    </span>
+                    <span class="casual-match-away">${m.awayTeam}${f(m.awayTeam)}</span>
+                </div>`).join('') +
+            '</div>';
+
+        container.querySelectorAll('.casual-match-row').forEach(row => {
+            row.addEventListener('click', onLockedCardClick);
+        });
+    } else {
+        // Full match cards for detailed mode
+        groupMatches.forEach(m => {
+            container.innerHTML += `
+                <div class="match-card">
+                    <div class="match-header"><span>${m.date || ''}</span></div>
+                    <div class="match-teams">
+                        <span class="team-name home" id="wizNameHome-${m.id}">${f(m.homeTeam)}${m.homeTeam}</span>
+                        <div class="score-input-group">
+                            <input type="number" min="0" id="wizHome-${m.id}" class="score-input" placeholder="-"
+                                oninput="window.updateWizTable()">
+                            <span style="color:#aaa; font-weight:bold; margin: 0 4px;">:</span>
+                            <input type="number" min="0" id="wizAway-${m.id}" class="score-input" placeholder="-"
+                                oninput="window.updateWizTable()">
+                        </div>
+                        <span class="team-name away" id="wizNameAway-${m.id}">${f(m.awayTeam)}${m.awayTeam}</span>
+                    </div>
+                </div>`;
         });
     }
 }
@@ -385,7 +428,10 @@ async function saveAndNext() {
         thirdPts: standings[2]?.pts || 0, thirdGd: standings[2]?.gd || 0, thirdGf: standings[2]?.gf || 0
     };
     existing.mode = currentMode;
-    if (currentIndex === getGroupLetters().length - 1) existing.completedAt = new Date().toISOString();
+
+    // Only mark as completed when ALL groups have picks
+    const allGroupsDone = getGroupLetters().every(l => existing[l]?.first && existing[l]?.second);
+    if (allGroupsDone) existing.completedAt = new Date().toISOString();
     updates.groupPicks = existing;
 
     try {
@@ -397,14 +443,37 @@ async function saveAndNext() {
         return showToast("Kunde inte spara. Försök igen.");
     }
 
-    if (currentIndex < getGroupLetters().length - 1) {
-        storeCurrentScores();
-        currentIndex++;
-        loadGroup(currentIndex);
-        window.scrollTo(0, 0);
-    } else {
+    if (allGroupsDone) {
         showToast("Snyggt! Gruppspelet klart — slutspelet låses upp!");
         if (onGroupsComplete) onGroupsComplete();
+    } else {
+        // Find next untipped group, or go to next sequential group
+        const letters = getGroupLetters();
+        const missingIdx = letters.findIndex(l => !existing[l]?.first);
+        if (missingIdx !== -1 && missingIdx !== currentIndex) {
+            const remaining = letters.filter(l => !existing[l]?.first).length;
+            showToast(`Sparat! ${remaining} grupp${remaining > 1 ? 'er' : ''} kvar att tippa.`);
+            storeCurrentScores();
+            currentIndex = missingIdx;
+            loadGroup(currentIndex);
+            window.scrollTo(0, 0);
+        } else if (currentIndex < letters.length - 1) {
+            storeCurrentScores();
+            currentIndex++;
+            loadGroup(currentIndex);
+            window.scrollTo(0, 0);
+        } else {
+            // On last group but others missing — jump to first missing
+            const firstMissing = letters.findIndex(l => !existing[l]?.first);
+            if (firstMissing !== -1) {
+                const remaining = letters.filter(l => !existing[l]?.first).length;
+                showToast(`Sparat! ${remaining} grupp${remaining > 1 ? 'er' : ''} kvar att tippa.`);
+                storeCurrentScores();
+                currentIndex = firstMissing;
+                loadGroup(currentIndex);
+                window.scrollTo(0, 0);
+            }
+        }
     }
 }
 
