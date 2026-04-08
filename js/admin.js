@@ -3,7 +3,8 @@ import { doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.co
 import { f, flags } from './wizard.js';
 import { DEFAULT_SCORING } from './stats.js';
 import { renderAdminBracket } from './admin-bracket.js';
-import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams, renderMatchManager } from './admin-testtools.js';
+import { addFakeTeachers, removeFakeTeachers, autoFillGroupResults, clearGroupResults, autoFillKnockoutRound, clearKnockoutResults, clearKnockoutTeams } from './admin-testtools.js';
+import { renderMatchManager, renderAddMatchForm } from './admin-matches.js';
 import { initEmailDraft } from './admin-email.js';
 import { initThemeEditor } from './admin-theme.js';
 import { initBackup } from './admin-backup.js';
@@ -42,6 +43,7 @@ export async function initAdmin(matchesData) {
     renderTeamRenames();
     renderScoringConfig();
     renderAdminBracket();
+    renderAddMatchForm();
     renderMatchManager();
 
     if (!initDone) {
