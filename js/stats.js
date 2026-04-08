@@ -173,14 +173,18 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         html += '<h3 style="margin-top:0; margin-bottom:10px;">Min tipsrad</h3>';
         html += '<div class="stat-card">';
 
-        // --- 1. GRUPPSPELSTABELLEN MED RUBRIKER (TIGHT) ---
+        // Check if all group stage matches have official results
+        const allGroupsDone = hasGroups && getGroupLetters().every(l => officialGroupStandings[l]?.complete);
+
+        // --- Build group stage HTML ---
+        let groupHtml = '';
         if (me.groupPicks && hasGroups) {
-        html += '<table class="my-tips-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">';
-        html += '<thead><tr>';
-        html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Tippad</th>';
-        html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Gruppetta</th>';
-        html += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Grupptvåa</th>';
-        html += '</tr></thead><tbody>';
+        groupHtml += '<table class="my-tips-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">';
+        groupHtml += '<thead><tr>';
+        groupHtml += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Tippad</th>';
+        groupHtml += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Gruppetta</th>';
+        groupHtml += '<th style="padding-bottom:4px; font-size:10px; color:#888; text-transform:uppercase; font-weight:700;">Grupptvåa</th>';
+        groupHtml += '</tr></thead><tbody>';
 
         getGroupLetters().forEach(letter => {
             const pick = me.groupPicks[letter];
@@ -191,16 +195,17 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
                 secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
             }
-            html += '<tr style="border-top:1px solid #f1f1f1;">';
-            html += '<td class="mtt-label" style="padding:4px 0; font-weight:700; color:#555;">Grupp ' + letter + '</td>';
-            html += '<td class="mtt-team" style="padding:4px 0; ' + firstColor + '">' + f(pick.first) + ' ' + pick.first + '</td>';
-            html += '<td class="mtt-team" style="padding:4px 0; ' + secondColor + '">' + f(pick.second) + ' ' + pick.second + '</td>';
-            html += '</tr>';
+            groupHtml += '<tr style="border-top:1px solid #f1f1f1;">';
+            groupHtml += '<td class="mtt-label" style="padding:4px 0; font-weight:700; color:#555;">Grupp ' + letter + '</td>';
+            groupHtml += '<td class="mtt-team" style="padding:4px 0; ' + firstColor + '">' + f(pick.first) + ' ' + pick.first + '</td>';
+            groupHtml += '<td class="mtt-team" style="padding:4px 0; ' + secondColor + '">' + f(pick.second) + ' ' + pick.second + '</td>';
+            groupHtml += '</tr>';
         });
-        html += '</tbody></table>';
+        groupHtml += '</tbody></table>';
         }
 
-        // --- 2. SLUTSPELSTIPS (KOMPAKT KORT-LAYOUT) ---
+        // --- Build knockout HTML ---
+        let koHtml = '';
         if (me.knockoutPicks) {
             const ko = me.knockoutPicks;
             const koRoundsAll = getKnockoutRounds();
@@ -212,11 +217,9 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             const sfPicks = sfRound ? (ko[sfRound.key] || []) : [];
             const silver = Array.isArray(sfPicks) ? sfPicks.find(t => t !== gold) : null;
 
-            // Build eliminated-per-round: teams in round N picks but not in round N+1 picks
-            // = teams that won round N but lost in round N+1 → label with nextRound
-            // Skip the SF→Final pair since that gives us Silver (already shown above)
+            // Build eliminated-per-round: teams in round N but not in round N+1
             const eliminatedPerRound = [];
-            for (let ri = koRoundsAll.length - 3; ri >= 0; ri--) {
+            for (let ri = 0; ri <= koRoundsAll.length - 3; ri++) {
                 const thisRound = koRoundsAll[ri];
                 const nextRound = koRoundsAll[ri + 1];
                 const thisPicks = ko[thisRound.key] || [];
@@ -228,60 +231,70 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             }
 
             const getStatusColor = (team, roundKey) => {
-                let color = '';
-                if (!team) return color;
+                if (!team) return '';
                 const winners = officialKoWinners[roundKey] || [];
                 const roundOrder = koRoundsAll.map(r => r.key);
                 const thisIdx = roundOrder.indexOf(roundKey);
+                // Only check group-stage elimination if ALL groups are done
+                if (allGroupsDone) {
+                    const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
+                    if (eliminatedInGroups) return 'color:#dc3545;';
+                }
                 const eliminatedBefore = new Set();
                 for (let ri = 0; ri < thisIdx; ri++) {
                     (eliminatedInRound[roundOrder[ri]] || []).forEach(t => eliminatedBefore.add(t));
                 }
-                const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
-                if (eliminatedInGroups) { color = 'color:#dc3545;'; }
-                else if (winners.length > 0 && winners.includes(team)) { color = 'color:#28a745;'; }
-                else if (eliminatedBefore.has(team)) { color = 'color:#dc3545;'; }
-                else if (winners.length > 0 && !winners.includes(team)) {
-                    if ((eliminatedInRound[roundKey] || []).includes(team)) { color = 'color:#dc3545;'; }
+                if (winners.length > 0 && winners.includes(team)) return 'color:#28a745;';
+                if (eliminatedBefore.has(team)) return 'color:#dc3545;';
+                if (winners.length > 0 && !winners.includes(team)) {
+                    if ((eliminatedInRound[roundKey] || []).includes(team)) return 'color:#dc3545;';
                 }
-                return color;
+                return '';
             };
 
-            html += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
+            koHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
 
-            // Guld & Silver
-            html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;">';
+            // Eliminated teams per round (ÅF → KF → SF, ascending)
+            eliminatedPerRound.forEach(({ round, statusRoundKey, eliminated }) => {
+                koHtml += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I ${round.label.toUpperCase()}</div>`;
+                koHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
+                eliminated.forEach(team => {
+                    const c = getStatusColor(team, statusRoundKey);
+                    koHtml += '<div style="background:#f4f6f9; border:1px solid #e1e5eb; border-radius:4px; padding:3px 6px; display:flex; align-items:center; gap:4px;">';
+                    koHtml += '<span style="font-size:11px; color:#444; ' + c + '">' + f(team) + ' ' + team + '</span>';
+                    koHtml += '</div>';
+                });
+                koHtml += '</div>';
+            });
+
+            // Guld & Silver (at the bottom)
+            koHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:12px;">';
             if (gold) {
                 const c = getStatusColor(gold, finalRd.key);
-                html += '<div style="background:#f1c40f; border-radius:4px; padding:8px; text-align:center;">';
-                html += '<div style="font-size:9px; font-weight:800; color:#a67c00; letter-spacing:1px; margin-bottom:4px;">GULD</div>';
-                html += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(gold) + ' ' + gold + '</div>';
-                html += '</div>';
+                koHtml += '<div style="background:#f1c40f; border-radius:4px; padding:8px; text-align:center;">';
+                koHtml += '<div style="font-size:9px; font-weight:800; color:#a67c00; letter-spacing:1px; margin-bottom:4px;">GULD</div>';
+                koHtml += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(gold) + ' ' + gold + '</div>';
+                koHtml += '</div>';
             }
             if (silver) {
                 const c = getStatusColor(silver, sfRound.key);
-                html += '<div style="background:#d1d8e0; border-radius:4px; padding:8px; text-align:center;">';
-                html += '<div style="font-size:9px; font-weight:800; color:#6b7c93; letter-spacing:1px; margin-bottom:4px;">SILVER</div>';
-                html += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(silver) + ' ' + silver + '</div>';
-                html += '</div>';
+                koHtml += '<div style="background:#d1d8e0; border-radius:4px; padding:8px; text-align:center;">';
+                koHtml += '<div style="font-size:9px; font-weight:800; color:#6b7c93; letter-spacing:1px; margin-bottom:4px;">SILVER</div>';
+                koHtml += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(silver) + ' ' + silver + '</div>';
+                koHtml += '</div>';
             }
-            html += '</div>';
+            koHtml += '</div>';
 
-            // Show eliminated teams per round (dynamic)
-            eliminatedPerRound.forEach(({ round, statusRoundKey, eliminated }) => {
-                html += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I ${round.label.toUpperCase()}</div>`;
-                html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
-                eliminated.forEach(team => {
-                    const c = getStatusColor(team, statusRoundKey);
-                    html += '<div style="background:#f4f6f9; border:1px solid #e1e5eb; border-radius:4px; padding:3px 6px; display:flex; align-items:center; gap:4px;">';
-                    html += '<span style="font-size:11px; color:#444; ' + c + '">' + f(team) + ' ' + team + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            });
-
-            html += '</div>';
+            koHtml += '</div>';
         }
+
+        // Order: groups first during group stage, knockout first after groups are done
+        if (allGroupsDone) {
+            html += koHtml + groupHtml;
+        } else {
+            html += groupHtml + koHtml;
+        }
+
         html += '</div>';
     }
     html += `</div>`; // end dashboard-left
