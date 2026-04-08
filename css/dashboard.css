@@ -402,7 +402,6 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .mm-table td { padding: 6px 10px; vertical-align: middle; }
 .mm-row { border-top: 1px solid #eee; transition: background 0.15s; }
 .mm-row:hover { background: #f8faf8; }
-.mm-row-editing { border-top: 1px solid #28a745; background: #f0fff4; }
 .mm-id { font-family: monospace; font-weight: 700; color: #888; width: 40px; }
 .mm-team { white-space: nowrap; font-weight: 600; }
 .mm-team img { vertical-align: middle; margin-right: 4px; }
@@ -414,11 +413,33 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .mm-edit-btn:hover { background: #e0e0e0; }
 .mm-delete-btn { background: #fce8e6; color: #dc3545; font-size: 13px; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: none; margin-left: 4px; }
 .mm-delete-btn:hover { background: #dc3545; color: white; }
-.mm-save-btn { background: #28a745; color: white; font-size: 12px; padding: 4px 12px; }
-.mm-cancel-btn { background: #6c757d; color: white; font-size: 12px; padding: 4px 10px; margin-left: 4px; }
-.mm-edit-input { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box; min-width: 80px; }
-.mm-edit-input:focus { outline: none; border-color: #28a745; }
-.mm-edit-select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box; }
+
+/* ── Edit Modal ── */
+.mm-modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    animation: mmFadeIn 0.15s ease;
+}
+@keyframes mmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.mm-modal {
+    background: white; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    width: 90%; max-width: 480px; animation: mmSlideUp 0.2s ease;
+}
+@keyframes mmSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.mm-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid #eee;
+}
+.mm-modal-header h3 { margin: 0; font-size: 16px; }
+.mm-modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #999; padding: 0 4px; line-height: 1; }
+.mm-modal-close:hover { color: #333; }
+.mm-modal-body { padding: 16px 20px; }
+.mm-modal-body .mm-add-row { margin-bottom: 10px; }
+.mm-modal-footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 12px 20px; border-top: 1px solid #eee;
+}
 
 @media (max-width: 768px) {
     .mm-add-row { flex-direction: column; gap: 8px; }
@@ -426,6 +447,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     .mm-table th, .mm-table td { padding: 5px 6px; }
     .mm-id { width: 30px; }
     .mm-stage, .mm-date { font-size: 11px; }
+    .mm-modal { width: 95%; max-width: none; }
 }
 
 /* ── Admin Bracket Tree ── */

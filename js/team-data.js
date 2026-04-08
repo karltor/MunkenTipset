@@ -20,7 +20,7 @@ export const countryFlags = {
     "Centralafrikanska republiken": "cf", "Chile": "cl", "Colombia": "co",
     "Costa Rica": "cr", "Curaçao": "cw", "Cypern": "cy",
     // D
-    "Danmark": "dk", "Demokratiska republiken Kongo": "cd", "Dominikanska republiken": "do",
+    "Danmark": "dk", "Demokratiska republiken Kongo": "cd", "DR Kongo": "cd", "Dominikanska republiken": "do",
     // E
     "Ecuador": "ec", "Egypten": "eg", "El Salvador": "sv", "Elfenbenskusten": "ci",
     "England": "gb-eng", "Eritrea": "er", "Estland": "ee", "Etiopien": "et",

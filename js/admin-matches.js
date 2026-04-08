@@ -1,7 +1,7 @@
 /**
  * Admin Match Management Module
  *
- * Full CRUD for individual matches: add, edit (inline), delete.
+ * Full CRUD for individual matches: add, edit (modal), delete.
  * Date/time input uses native datetime-local for easy entry.
  */
 
@@ -53,7 +53,6 @@ function isoToMatchDate(isoStr) {
 function getStages() {
     const stages = new Set();
     allMatches.forEach(m => { if (m.stage) stages.add(m.stage); });
-    // Also add group stages from config even if no matches yet
     getGroupLetters().forEach(l => stages.add(`Grupp ${l}`));
     return [...stages].sort();
 }
@@ -66,6 +65,25 @@ function nextMatchId() {
         if (!isNaN(n) && n > max) max = n;
     });
     return String(max + 1);
+}
+
+// ── Cached docs for instant filter/render ──────────────────────────────
+
+let cachedDocs = [];
+let currentFilter = '';
+
+async function fetchDocs() {
+    const snap = await getDocs(collection(db, "matches"));
+    cachedDocs = snap.docs
+        .filter(d => !d.id.startsWith('_'))
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+            const stageA = a.stage || '';
+            const stageB = b.stage || '';
+            if (stageA !== stageB) return stageA.localeCompare(stageB);
+            return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+        });
+    return cachedDocs;
 }
 
 // ── Add Match Form ─────────────────────────────────────────────────────
@@ -109,7 +127,6 @@ export function renderAddMatchForm() {
             <button class="btn" id="mm-add-btn" style="margin-top:8px;">Lägg till match</button>
         </div>`;
 
-    // Toggle custom stage input
     const stageSelect = document.getElementById('mm-add-stage-select');
     const stageCustom = document.getElementById('mm-add-stage-custom');
     stageSelect.addEventListener('change', () => {
@@ -141,7 +158,6 @@ async function addMatch() {
 
     showToast(`Match #${id} tillagd: ${home} — ${away}`);
 
-    // Clear form
     document.getElementById('mm-add-home').value = '';
     document.getElementById('mm-add-away').value = '';
     document.getElementById('mm-add-stage-select').value = '';
@@ -149,207 +165,221 @@ async function addMatch() {
     document.getElementById('mm-add-stage-custom').style.display = 'none';
     document.getElementById('mm-add-datetime').value = '';
 
-    // Re-render
     renderMatchManager();
-    renderAddMatchForm(); // Update stage options
+    renderAddMatchForm();
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);
 }
 
-// ── Match Manager (list with inline edit + delete) ─────────────────────
-
-let editingMatchId = null;
-let currentFilter = '';
+// ── Match Manager (list + modal edit) ──────────────────────────────────
 
 export async function renderMatchManager() {
     const container = document.getElementById('admin-match-manager');
     if (!container) return;
     container.innerHTML = '<p style="color:#999;">Laddar matcher...</p>';
 
-    const snap = await getDocs(collection(db, "matches"));
-    const docs = snap.docs
-        .filter(d => !d.id.startsWith('_'))
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-            const stageA = a.stage || '';
-            const stageB = b.stage || '';
-            if (stageA !== stageB) return stageA.localeCompare(stageB);
-            return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
-        });
+    await fetchDocs();
+    renderList();
+}
 
-    // Render filter buttons
-    renderFilterButtons(docs);
+function renderList() {
+    const container = document.getElementById('admin-match-manager');
+    if (!container) return;
 
-    if (docs.length === 0) {
+    renderFilterButtons();
+
+    if (cachedDocs.length === 0) {
         container.innerHTML = '<p style="color:#999;">Inga matcher i databasen.</p>';
         return;
     }
 
-    const filtered = currentFilter ? docs.filter(d => d.stage === currentFilter) : docs;
+    const filtered = currentFilter ? cachedDocs.filter(d => d.stage === currentFilter) : cachedDocs;
 
     let html = '<div class="mm-table-wrap">';
     html += '<table class="mm-table">';
     html += '<thead><tr><th>ID</th><th>Hemma</th><th></th><th>Borta</th><th>Fas</th><th>Datum & tid</th><th></th></tr></thead><tbody>';
 
     filtered.forEach(m => {
-        const isEditing = editingMatchId === m.id;
         const home = m.homeTeam || '?';
         const away = m.awayTeam || '?';
         const stage = m.stage || '-';
         const date = m.date || '-';
-
-        if (isEditing) {
-            const stages = getStages();
-            const stageOpts = stages.map(s =>
-                `<option value="${s}" ${s === stage ? 'selected' : ''}>${s}</option>`
-            ).join('');
-            const isoDate = matchDateToISO(date);
-
-            html += `<tr class="mm-row mm-row-editing" data-id="${m.id}">
-                <td class="mm-id">${m.id}</td>
-                <td><input type="text" class="mm-edit-input" data-field="homeTeam" value="${home}"></td>
-                <td class="mm-vs">—</td>
-                <td><input type="text" class="mm-edit-input" data-field="awayTeam" value="${away}"></td>
-                <td>
-                    <select class="mm-edit-select" data-field="stage">
-                        ${stageOpts}
-                        <option value="__custom">Annan...</option>
-                    </select>
-                    <input type="text" class="mm-edit-input mm-edit-stage-custom" data-field="stageCustom" placeholder="Egen fas" style="display:none; margin-top:4px;">
-                </td>
-                <td><input type="datetime-local" class="mm-edit-input" data-field="date" value="${isoDate}"></td>
-                <td class="mm-actions">
-                    <button class="btn mm-save-btn" data-id="${m.id}">Spara</button>
-                    <button class="btn mm-cancel-btn" data-id="${m.id}">Avbryt</button>
-                </td>
-            </tr>`;
-        } else {
-            html += `<tr class="mm-row" data-id="${m.id}">
-                <td class="mm-id">${m.id}</td>
-                <td class="mm-team">${f(home)}<span>${home}</span></td>
-                <td class="mm-vs">—</td>
-                <td class="mm-team">${f(away)}<span>${away}</span></td>
-                <td class="mm-stage">${stage}</td>
-                <td class="mm-date">${date}</td>
-                <td class="mm-actions">
-                    <button class="btn mm-edit-btn" data-id="${m.id}" title="Redigera">&#9998;</button>
-                    <button class="btn mm-delete-btn" data-id="${m.id}" title="Ta bort">&#10005;</button>
-                </td>
-            </tr>`;
-        }
+        html += `<tr class="mm-row" data-id="${m.id}">
+            <td class="mm-id">${m.id}</td>
+            <td class="mm-team">${f(home)}<span>${home}</span></td>
+            <td class="mm-vs">—</td>
+            <td class="mm-team">${f(away)}<span>${away}</span></td>
+            <td class="mm-stage">${stage}</td>
+            <td class="mm-date">${date}</td>
+            <td class="mm-actions">
+                <button class="btn mm-edit-btn" data-id="${m.id}" title="Redigera">&#9998;</button>
+                <button class="btn mm-delete-btn" data-id="${m.id}" title="Ta bort">&#10005;</button>
+            </td>
+        </tr>`;
     });
 
     html += '</tbody></table></div>';
-    html += `<p style="font-size:12px; color:#888; margin-top:6px;">${filtered.length} av ${docs.length} matcher</p>`;
+    html += `<p style="font-size:12px; color:#888; margin-top:6px;">${filtered.length} av ${cachedDocs.length} matcher</p>`;
     container.innerHTML = html;
 
-    // ── Event listeners ──
-
-    // Edit buttons
+    // Edit → open modal
     container.querySelectorAll('.mm-edit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            editingMatchId = btn.dataset.id;
-            renderMatchManager();
+            const m = cachedDocs.find(d => d.id === btn.dataset.id);
+            if (m) openEditModal(m);
         });
     });
 
-    // Cancel buttons
-    container.querySelectorAll('.mm-cancel-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            editingMatchId = null;
-            renderMatchManager();
-        });
-    });
-
-    // Save buttons
-    container.querySelectorAll('.mm-save-btn').forEach(btn => {
-        btn.addEventListener('click', () => saveEditedMatch(btn.dataset.id));
-    });
-
-    // Custom stage toggle in edit mode
-    container.querySelectorAll('.mm-edit-select[data-field="stage"]').forEach(sel => {
-        const customInput = sel.parentElement.querySelector('.mm-edit-stage-custom');
-        sel.addEventListener('change', () => {
-            if (customInput) customInput.style.display = sel.value === '__custom' ? '' : 'none';
-        });
-    });
-
-    // Delete buttons
+    // Delete
     container.querySelectorAll('.mm-delete-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const matchId = btn.dataset.id;
-            if (!confirm(`Ta bort match "${matchId}"? Kan inte ångras.`)) return;
-
-            await deleteDoc(doc(db, "matches", matchId));
-
-            if (existingResults[matchId]) {
-                delete existingResults[matchId];
-                await setDoc(doc(db, "matches", "_results"), existingResults);
-            }
-
-            await bumpDataVersion();
-
-            const idx = allMatches.findIndex(m => String(m.id) === matchId);
-            if (idx !== -1) allMatches.splice(idx, 1);
-
-            showToast(`Match "${matchId}" borttagen!`);
-            editingMatchId = null;
-            renderMatchManager();
-            renderGroupButtons();
-            renderAdminMatches(currentAdminGroup);
-        });
+        btn.addEventListener('click', () => deleteMatch(btn.dataset.id));
     });
 }
 
-async function saveEditedMatch(matchId) {
-    const row = document.querySelector(`.mm-row-editing[data-id="${matchId}"]`);
-    if (!row) return;
+// ── Edit Modal ─────────────────────────────────────────────────────────
 
-    const homeTeam = row.querySelector('[data-field="homeTeam"]').value.trim();
-    const awayTeam = row.querySelector('[data-field="awayTeam"]').value.trim();
-    const stageSelect = row.querySelector('[data-field="stage"]');
-    const stageCustom = row.querySelector('[data-field="stageCustom"]')?.value.trim() || '';
-    const stage = stageSelect.value === '__custom' ? stageCustom : stageSelect.value;
-    const datetimeVal = row.querySelector('[data-field="date"]').value;
-    const date = isoToMatchDate(datetimeVal);
+function openEditModal(m) {
+    // Remove any existing modal
+    document.getElementById('mm-edit-modal')?.remove();
 
-    if (!homeTeam || !awayTeam) { showToast('Ange hemma- och bortalag'); return; }
-    if (!stage) { showToast('Välj eller ange en fas'); return; }
+    const stages = getStages();
+    const stageOpts = stages.map(s =>
+        `<option value="${s}" ${s === (m.stage || '') ? 'selected' : ''}>${s}</option>`
+    ).join('');
+    const isoDate = matchDateToISO(m.date || '');
 
-    const matchData = { id: parseInt(matchId) || matchId, homeTeam, awayTeam, stage, date };
-    await setDoc(doc(db, "matches", matchId), matchData);
+    const overlay = document.createElement('div');
+    overlay.id = 'mm-edit-modal';
+    overlay.className = 'mm-modal-overlay';
+    overlay.innerHTML = `
+        <div class="mm-modal">
+            <div class="mm-modal-header">
+                <h3>Redigera match #${m.id}</h3>
+                <button class="mm-modal-close" id="mm-modal-close">&times;</button>
+            </div>
+            <div class="mm-modal-body">
+                <div class="mm-add-row">
+                    <div class="mm-field">
+                        <label>Hemmalag</label>
+                        <input type="text" id="mm-modal-home" value="${m.homeTeam || ''}" autocomplete="off">
+                    </div>
+                    <div class="mm-field">
+                        <label>Bortalag</label>
+                        <input type="text" id="mm-modal-away" value="${m.awayTeam || ''}" autocomplete="off">
+                    </div>
+                </div>
+                <div class="mm-add-row">
+                    <div class="mm-field">
+                        <label>Fas</label>
+                        <div style="display:flex; gap:6px;">
+                            <select id="mm-modal-stage">
+                                ${stageOpts}
+                                <option value="__custom">Annan...</option>
+                            </select>
+                            <input type="text" id="mm-modal-stage-custom" placeholder="Egen fas" style="display:none;">
+                        </div>
+                    </div>
+                    <div class="mm-field">
+                        <label>Datum & tid</label>
+                        <input type="datetime-local" id="mm-modal-date" value="${isoDate}">
+                    </div>
+                </div>
+            </div>
+            <div class="mm-modal-footer">
+                <button class="btn" id="mm-modal-save">Spara</button>
+                <button class="btn" id="mm-modal-cancel" style="background:#6c757d;">Avbryt</button>
+            </div>
+        </div>`;
 
-    // Update in-memory array
-    const idx = allMatches.findIndex(m => String(m.id) === matchId);
-    if (idx !== -1) {
-        allMatches[idx] = { id: matchId, ...matchData };
-    }
+    document.body.appendChild(overlay);
 
-    // Update results if they exist for this match
+    // Focus first field
+    document.getElementById('mm-modal-home').focus();
+
+    // Close handlers
+    const close = () => overlay.remove();
+    document.getElementById('mm-modal-close').addEventListener('click', close);
+    document.getElementById('mm-modal-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    // Custom stage toggle
+    const stageSel = document.getElementById('mm-modal-stage');
+    const stageCust = document.getElementById('mm-modal-stage-custom');
+    stageSel.addEventListener('change', () => {
+        stageCust.style.display = stageSel.value === '__custom' ? '' : 'none';
+    });
+
+    // Save
+    document.getElementById('mm-modal-save').addEventListener('click', async () => {
+        const homeTeam = document.getElementById('mm-modal-home').value.trim();
+        const awayTeam = document.getElementById('mm-modal-away').value.trim();
+        const stageVal = stageSel.value === '__custom' ? stageCust.value.trim() : stageSel.value;
+        const date = isoToMatchDate(document.getElementById('mm-modal-date').value);
+
+        if (!homeTeam || !awayTeam) { showToast('Ange hemma- och bortalag'); return; }
+        if (!stageVal) { showToast('Välj eller ange en fas'); return; }
+
+        const matchData = { id: parseInt(m.id) || m.id, homeTeam, awayTeam, stage: stageVal, date };
+        await setDoc(doc(db, "matches", m.id), matchData);
+
+        // Update in-memory
+        const idx = allMatches.findIndex(x => String(x.id) === m.id);
+        if (idx !== -1) allMatches[idx] = { id: m.id, ...matchData };
+
+        // Update cached docs
+        const ci = cachedDocs.findIndex(x => x.id === m.id);
+        if (ci !== -1) cachedDocs[ci] = { id: m.id, ...matchData };
+
+        // Update results if they exist
+        if (existingResults[m.id]) {
+            existingResults[m.id].homeTeam = homeTeam;
+            existingResults[m.id].awayTeam = awayTeam;
+            existingResults[m.id].stage = stageVal;
+            existingResults[m.id].date = date;
+            await setDoc(doc(db, "matches", "_results"), existingResults);
+        }
+
+        await bumpDataVersion();
+        close();
+        showToast(`Match #${m.id} uppdaterad!`);
+        renderList();
+        renderGroupButtons();
+        renderAdminMatches(currentAdminGroup);
+    });
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────
+
+async function deleteMatch(matchId) {
+    if (!confirm(`Ta bort match "${matchId}"? Kan inte ångras.`)) return;
+
+    await deleteDoc(doc(db, "matches", matchId));
+
     if (existingResults[matchId]) {
-        existingResults[matchId].homeTeam = homeTeam;
-        existingResults[matchId].awayTeam = awayTeam;
-        existingResults[matchId].stage = stage;
-        existingResults[matchId].date = date;
+        delete existingResults[matchId];
         await setDoc(doc(db, "matches", "_results"), existingResults);
     }
 
     await bumpDataVersion();
-    editingMatchId = null;
-    showToast(`Match #${matchId} uppdaterad!`);
 
-    renderMatchManager();
+    const idx = allMatches.findIndex(m => String(m.id) === matchId);
+    if (idx !== -1) allMatches.splice(idx, 1);
+
+    cachedDocs = cachedDocs.filter(d => d.id !== matchId);
+
+    showToast(`Match "${matchId}" borttagen!`);
+    renderList();
     renderGroupButtons();
     renderAdminMatches(currentAdminGroup);
 }
 
 // ── Filter Buttons ─────────────────────────────────────────────────────
 
-function renderFilterButtons(docs) {
+function renderFilterButtons() {
     const filterContainer = document.getElementById('admin-match-filter');
     if (!filterContainer) return;
 
-    const stages = [...new Set(docs.map(d => d.stage).filter(Boolean))].sort();
+    const stages = [...new Set(cachedDocs.map(d => d.stage).filter(Boolean))].sort();
 
     let html = '<div class="mm-filter-bar">';
     html += `<button class="mm-filter-btn ${!currentFilter ? 'active' : ''}" data-filter="">Alla</button>`;
@@ -362,7 +392,7 @@ function renderFilterButtons(docs) {
     filterContainer.querySelectorAll('.mm-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             currentFilter = btn.dataset.filter;
-            renderMatchManager();
+            renderList(); // instant — no Firestore fetch
         });
     });
 }
