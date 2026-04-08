@@ -1,6 +1,5 @@
 import { db } from './config.js';
-import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { f } from './wizard.js';
+import { doc, getDoc, setDoc, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { bumpDataVersion, allMatches, existingResults, currentAdminGroup, renderGroupButtons, renderAdminMatches } from './admin.js';
 import { getGroupStandings, renderAdminBracket } from './admin-bracket.js';
 import { getGroupLetters, getKnockoutRounds, getFinalRound, getGroupStageConfig, hasStageType, isTwoLegged } from './tournament-config.js';
@@ -358,69 +357,4 @@ export async function clearKnockoutTeams() {
     showToast('Hela bracketen rensad!');
 }
 
-export async function renderMatchManager() {
-    const container = document.getElementById('admin-match-manager');
-    container.innerHTML = '<p style="color:#999;">Laddar matcher...</p>';
-
-    const snap = await getDocs(collection(db, "matches"));
-    const docs = snap.docs
-        .filter(d => !d.id.startsWith('_'))
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-            const stageA = a.stage || '';
-            const stageB = b.stage || '';
-            if (stageA !== stageB) return stageA.localeCompare(stageB);
-            return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
-        });
-
-    if (docs.length === 0) {
-        container.innerHTML = '<p style="color:#999;">Inga matcher i databasen.</p>';
-        return;
-    }
-
-    let html = '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px;">';
-    html += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
-    html += '<thead style="position:sticky; top:0; background:#f8f9fa;"><tr><th style="text-align:left;padding:8px;">ID</th><th style="text-align:left;padding:8px;">Match</th><th style="text-align:left;padding:8px;">Fas</th><th style="text-align:left;padding:8px;">Datum</th><th style="padding:8px;">Ta bort</th></tr></thead><tbody>';
-
-    docs.forEach(m => {
-        const home = m.homeTeam || '?';
-        const away = m.awayTeam || '?';
-        const stage = m.stage || '-';
-        const date = m.date || '-';
-        html += `<tr style="border-top:1px solid #eee;">
-            <td style="padding:6px 8px; font-family:monospace; font-weight:600;">${m.id}</td>
-            <td style="padding:6px 8px;">${f(home)}${home} — ${f(away)}${away}</td>
-            <td style="padding:6px 8px; color:#666;">${stage}</td>
-            <td style="padding:6px 8px; color:#888; font-size:12px;">${date}</td>
-            <td style="padding:6px 8px; text-align:center;"><button class="btn btn-delete-match" data-match-id="${m.id}" style="background:#dc3545; font-size:11px; padding:3px 10px;">✕</button></td>
-        </tr>`;
-    });
-
-    html += '</tbody></table></div>';
-    html += `<p style="font-size:12px; color:#888; margin-top:6px;">${docs.length} matcher totalt</p>`;
-    container.innerHTML = html;
-
-    container.querySelectorAll('.btn-delete-match').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const matchId = btn.dataset.matchId;
-            if (!confirm(`Ta bort match "${matchId}"? Denna åtgärd kan inte ångras.`)) return;
-
-            await deleteDoc(doc(db, "matches", matchId));
-
-            if (existingResults[matchId]) {
-                delete existingResults[matchId];
-                await setDoc(doc(db, "matches", "_results"), existingResults);
-            }
-
-            await bumpDataVersion();
-
-            const idx = allMatches.findIndex(m => String(m.id) === matchId);
-            if (idx !== -1) allMatches.splice(idx, 1);
-
-            showToast(`Match "${matchId}" borttagen!`);
-            renderMatchManager();
-            renderGroupButtons();
-            renderAdminMatches(currentAdminGroup);
-        });
-    });
-}
+// renderMatchManager moved to admin-matches.js

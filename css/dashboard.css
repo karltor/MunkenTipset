@@ -327,6 +327,51 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .scoring-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
 .scoring-row label { flex: 1; }
 
+/* ── Match Manager (admin-matches.js) ── */
+.mm-add-form { display: flex; flex-direction: column; gap: 10px; }
+.mm-add-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.mm-add-row .mm-field { flex: 1; min-width: 180px; }
+.mm-field label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+.mm-field input, .mm-field select { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.mm-field input:focus, .mm-field select:focus { outline: none; border-color: #28a745; box-shadow: 0 0 0 2px rgba(40,167,69,0.15); }
+
+.mm-filter-bar { display: flex; flex-wrap: wrap; gap: 4px; }
+.mm-filter-btn { padding: 4px 10px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 11px; font-weight: 600; color: #555; }
+.mm-filter-btn.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+
+.mm-table-wrap { max-height: 500px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }
+.mm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mm-table thead { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
+.mm-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; color: #888; letter-spacing: 0.5px; }
+.mm-table td { padding: 6px 10px; vertical-align: middle; }
+.mm-row { border-top: 1px solid #eee; transition: background 0.15s; }
+.mm-row:hover { background: #f8faf8; }
+.mm-row-editing { border-top: 1px solid #28a745; background: #f0fff4; }
+.mm-id { font-family: monospace; font-weight: 700; color: #888; width: 40px; }
+.mm-team { white-space: nowrap; font-weight: 600; }
+.mm-team img { vertical-align: middle; margin-right: 4px; }
+.mm-vs { color: #ccc; text-align: center; width: 24px; }
+.mm-stage { color: #666; font-size: 12px; }
+.mm-date { color: #888; font-size: 12px; white-space: nowrap; }
+.mm-actions { white-space: nowrap; text-align: right; }
+.mm-edit-btn { background: #f0f0f0; color: #333; font-size: 13px; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: none; }
+.mm-edit-btn:hover { background: #e0e0e0; }
+.mm-delete-btn { background: #fce8e6; color: #dc3545; font-size: 13px; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: none; margin-left: 4px; }
+.mm-delete-btn:hover { background: #dc3545; color: white; }
+.mm-save-btn { background: #28a745; color: white; font-size: 12px; padding: 4px 12px; }
+.mm-cancel-btn { background: #6c757d; color: white; font-size: 12px; padding: 4px 10px; margin-left: 4px; }
+.mm-edit-input { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box; min-width: 80px; }
+.mm-edit-input:focus { outline: none; border-color: #28a745; }
+.mm-edit-select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box; }
+
+@media (max-width: 768px) {
+    .mm-add-row { flex-direction: column; gap: 8px; }
+    .mm-table { font-size: 12px; }
+    .mm-table th, .mm-table td { padding: 5px 6px; }
+    .mm-id { width: 30px; }
+    .mm-stage, .mm-date { font-size: 11px; }
+}
+
 /* ── Admin Bracket Tree ── */
 .abt-tree {
     display: flex;
