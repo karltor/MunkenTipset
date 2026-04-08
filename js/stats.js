@@ -123,7 +123,7 @@ export async function loadCommunityStats(prefetchedSettings) {
     for (let i = 0; i < showTop; i++) {
         const s = scores[i];
         const isMe = s.userId === currentUserId;
-        const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : ''));
+        const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : `${i + 1}. `));
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
         html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
     }
@@ -168,6 +168,48 @@ export async function loadCommunityStats(prefetchedSettings) {
     // Teams that qualified for R32 (from admin bracket) — used to detect group-stage elimination
     const qualifiedForKnockout = new Set(bracket?.teams || []);
 
+    // Helper: build group standings tooltip (same layout as Matchresultat tab)
+    function buildGroupTooltip(letter, allMatchDocs, allResults) {
+        const groupMatches = (allMatchDocs || []).filter(m => m.stage === `Grupp ${letter}`);
+        if (groupMatches.length === 0) return '';
+        const teams = Array.from(new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam])));
+        const tData = {};
+        teams.forEach(t => tData[t] = { name: t, pld: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
+        let hasResult = false;
+        let matchListHtml = '';
+        groupMatches.forEach(m => {
+            const r = allResults[m.id];
+            if (r && r.homeScore !== undefined) {
+                hasResult = true;
+                const h = r.homeScore, a = r.awayScore;
+                tData[m.homeTeam].pld++; tData[m.awayTeam].pld++;
+                tData[m.homeTeam].gf += h; tData[m.homeTeam].ga += a;
+                tData[m.awayTeam].gf += a; tData[m.awayTeam].ga += h;
+                tData[m.homeTeam].gd += (h - a); tData[m.awayTeam].gd += (a - h);
+                if (h > a) { tData[m.homeTeam].w++; tData[m.homeTeam].pts += 3; tData[m.awayTeam].l++; }
+                else if (a > h) { tData[m.awayTeam].w++; tData[m.awayTeam].pts += 3; tData[m.homeTeam].l++; }
+                else { tData[m.homeTeam].d++; tData[m.awayTeam].d++; tData[m.homeTeam].pts++; tData[m.awayTeam].pts++; }
+                const hw = h > a ? 'font-weight:700;' : '', aw = a > h ? 'font-weight:700;' : '';
+                matchListHtml += `<div style="font-size:11px; padding:2px 0; display:flex; align-items:center;">
+                    <span style="flex:1; text-align:left; ${hw}">${f(m.homeTeam)}${m.homeTeam}</span>
+                    <span style="flex:0 0 auto; font-weight:700; padding:0 6px;">${h} - ${a}</span>
+                    <span style="flex:1; text-align:right; ${aw}">${m.awayTeam}${f(m.awayTeam)}</span>
+                </div>`;
+            }
+        });
+        if (!hasResult) return '';
+        const sorted = Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+        let tip = `<div class="group-table-header" style="padding:6px 8px; font-size:12px;">Grupp ${letter}</div>`;
+        tip += '<table class="group-table" style="font-size:11px;"><thead><tr><th style="text-align:left;">Lag</th><th>S</th><th>V</th><th>O</th><th>F</th><th>+/-</th><th>P</th></tr></thead><tbody>';
+        sorted.forEach((t, i) => {
+            const bg = i < 2 ? 'background-color:rgba(40,167,69,0.06);' : '';
+            tip += `<tr style="${bg}"><td style="text-align:left;padding-left:4px;">${f(t.name)}${t.name}</td><td>${t.pld}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gd > 0 ? '+' + t.gd : t.gd}</td><td><strong>${t.pts}</strong></td></tr>`;
+        });
+        tip += '</tbody></table>';
+        if (matchListHtml) tip += `<div style="padding:6px 8px; border-top:1px solid #eee;">${matchListHtml}</div>`;
+        return tip;
+    }
+
     const me = users.find(u => u.userId === currentUserId);
 if (me && (me.groupPicks || me.knockoutPicks)) {
         html += '<h3 style="margin-top:0; margin-bottom:10px;">Min tipsrad</h3>';
@@ -192,11 +234,24 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             const official = officialGroupStandings[letter];
             let firstColor = '', secondColor = '';
             if (official && official.complete) {
-                firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
-                secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
+                // Check for swapped picks (user's 1st = official 2nd AND user's 2nd = official 1st)
+                const swapped = pick.first === official.second && pick.second === official.first;
+                if (swapped) {
+                    firstColor = 'color:#e67e22;';  // orange
+                    secondColor = 'color:#e67e22;';
+                } else {
+                    firstColor = pick.first === official.first ? 'color:#28a745;' : 'color:#dc3545;';
+                    secondColor = pick.second === official.second ? 'color:#28a745;' : 'color:#dc3545;';
+                }
             }
-            groupHtml += '<tr style="border-top:1px solid #f1f1f1;">';
-            groupHtml += '<td class="mtt-label" style="padding:4px 0; font-weight:700; color:#555;">Grupp ' + letter + '</td>';
+
+            // Build hover tooltip with group standings table
+            const tooltipHtml = buildGroupTooltip(letter, matchDocs, results);
+
+            groupHtml += '<tr class="mtt-row" style="border-top:1px solid #f1f1f1;">';
+            groupHtml += '<td class="mtt-label" style="padding:4px 0; font-weight:700; color:#555; position:relative;">Grupp ' + letter;
+            if (tooltipHtml) groupHtml += '<div class="mtt-tooltip">' + tooltipHtml + '</div>';
+            groupHtml += '</td>';
             groupHtml += '<td class="mtt-team" style="padding:4px 0; ' + firstColor + '">' + f(pick.first) + ' ' + pick.first + '</td>';
             groupHtml += '<td class="mtt-team" style="padding:4px 0; ' + secondColor + '">' + f(pick.second) + ' ' + pick.second + '</td>';
             groupHtml += '</tr>';

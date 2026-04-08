@@ -232,6 +232,15 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .my-tips-table tr + tr td { border-top: 1px solid #f0f0f0; }
 .mtt-label { font-weight: 700; white-space: nowrap; padding: 4px 8px 4px 0; color: #555; width: 70px; }
 .mtt-team { white-space: nowrap; padding: 4px 4px; }
+.mtt-row:hover { background: rgba(0,0,0,0.02); }
+.mtt-tooltip {
+    display: none; position: absolute; left: 0; top: 100%;
+    z-index: 100; min-width: 320px;
+    background: white; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+    border: 1px solid #e0e0e0; overflow: hidden;
+}
+.mtt-row:hover .mtt-tooltip { display: block; }
+@media (max-width: 768px) { .mtt-tooltip { min-width: 260px; } }
 .mtt-sep { color: #ccc; padding: 4px 6px; text-align: center; }
 
 /* Full leaderboard */
