@@ -3,7 +3,7 @@ import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/fireba
 import { f } from './wizard.js';
 import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate, renderStatBar, renderTippersSummary, renderTippersLine } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
-import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType, isTwoLegged } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType, isTwoLegged, getSpecialQuestionsConfig, hasSpecialQuestions } from './tournament-config.js';
 
 export { DEFAULT_SCORING };
 
@@ -75,9 +75,10 @@ export async function loadCommunityStats(prefetchedSettings) {
                 groupPicks: d.groupPicks || null,
                 knockoutPicks: d.knockout || null,
                 knockoutScores: d.knockoutScores || null,
-                matchTips: d.matchTips || {}
+                matchTips: d.matchTips || {},
+                specialPicks: d.specialPicks || null
             };
-            if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0) users.push(u);
+            if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0 || u.specialPicks) users.push(u);
         }
 
         _saveStatsCache(dataVersion, { results, bracket, users, matchDocs });
@@ -115,7 +116,11 @@ export async function loadCommunityStats(prefetchedSettings) {
     // ── LEADERBOARD (top 10 + show more) ──────────
     html += `<div class="stat-card leaderboard-card"><h3>Leaderboard</h3>`;
     const hasGroups = hasStageType('round-robin-groups');
-    html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th>${hasGroups ? '<th>Grupp</th>' : ''}<th>Slutspel</th><th>Totalt</th></tr></thead><tbody>`;
+    const hasSpecial = hasSpecialQuestions();
+    const specialConfig = getSpecialQuestionsConfig();
+    const specialLabel = specialConfig?.label || 'Special';
+    const colCount = 2 + (hasGroups ? 1 : 0) + (hasSpecial ? 1 : 0);
+    html += `<table class="group-table" style="font-size:14px;"><thead><tr><th style="text-align:left;">Namn</th>${hasGroups ? '<th>Grupp</th>' : ''}<th>Slutspel</th>${hasSpecial ? `<th>${specialLabel}</th>` : ''}<th>Totalt</th></tr></thead><tbody>`;
 
     const myRank = scores.findIndex(s => s.userId === currentUserId);
     const showTop = Math.min(scores.length, 10);
@@ -125,14 +130,14 @@ export async function loadCommunityStats(prefetchedSettings) {
         const isMe = s.userId === currentUserId;
         const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : `${i + 1}. `));
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
-        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
     }
 
     // If user is outside top 10, show separator + their row
     if (myRank >= 10) {
         const s = scores[myRank];
-        html += `<tr style="border-top:2px dashed #ddd;"><td colspan="4" style="text-align:center; color:#999; font-size:11px; padding:4px;">···</td></tr>`;
-        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td><td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="border-top:2px dashed #ddd;"><td colspan="${colCount + 1}" style="text-align:center; color:#999; font-size:11px; padding:4px;">···</td></tr>`;
+        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${s.name}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
     }
 
     html += `</tbody></table>`;
@@ -343,11 +348,36 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             koHtml += '</div>';
         }
 
+        // --- Build special tips HTML ---
+        let specialHtml = '';
+        if (hasSpecial && me.specialPicks && specialConfig?.questions?.length) {
+            specialHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
+            specialHtml += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin-bottom:8px;">${specialLabel.toUpperCase()}</div>`;
+            specialConfig.questions.forEach(q => {
+                const pick = me.specialPicks[q.id];
+                if (pick == null) return;
+                const isResolved = q.correctAnswer != null;
+                let correct = false;
+                if (isResolved) {
+                    correct = q.type === 'numeric'
+                        ? Number(pick) === Number(q.correctAnswer)
+                        : String(pick) === String(q.correctAnswer);
+                }
+                const color = isResolved ? (correct ? 'color:#28a745;' : 'color:#dc3545;') : '';
+                const icon = isResolved ? (correct ? '&#10003; ' : '&#10007; ') : '';
+                specialHtml += `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:12px; border-bottom:1px solid #f1f1f1;">`;
+                specialHtml += `<span style="flex:1; color:#555;">${q.text}</span>`;
+                specialHtml += `<span style="font-weight:700; ${color} white-space:nowrap; margin-left:8px;">${icon}${pick}</span>`;
+                specialHtml += `</div>`;
+            });
+            specialHtml += '</div>';
+        }
+
         // Order: groups first during group stage, knockout first after groups are done
         if (allGroupsDone) {
-            html += koHtml + groupHtml;
+            html += koHtml + groupHtml + specialHtml;
         } else {
-            html += groupHtml + koHtml;
+            html += groupHtml + koHtml + specialHtml;
         }
 
         html += '</div>';

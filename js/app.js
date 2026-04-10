@@ -1,11 +1,12 @@
 import { auth, db } from './config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { collection, getDocs, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { loadTournamentConfig, getTournamentName, hasStageType } from './tournament-config.js';
+import { loadTournamentConfig, getTournamentName, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { initWizard, getGroupPicks } from './wizard.js';
 import { initBracket } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
+import { initSpecialTips } from './special-tips.js';
 import { loadResults } from './results.js';
 import { applyStoredTheme } from './admin-theme.js';
 import { loadEmailPref, showEmailPrefPopup, initSettingsTab } from './user-settings.js';
@@ -26,13 +27,22 @@ function applyTabVisibility() {
     const hasGroups = hasStageType('round-robin-groups');
     const hasKnockout = hasStageType('single-elimination');
     const hasLeague = hasStageType('league');
+    const hasSpecial = hasStageType('special-questions');
     const wizardBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
     const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
+    const specialBtn = document.querySelector('.tab-btn[data-target="special-tab"]');
     if (wizardBtn) {
         wizardBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
         if (hasLeague && !hasGroups) wizardBtn.textContent = '🎯 Tippa Tabell';
     }
     if (bracketBtn) bracketBtn.style.display = hasKnockout ? '' : 'none';
+    if (specialBtn) {
+        specialBtn.style.display = hasSpecial ? '' : 'none';
+        if (hasSpecial) {
+            const cfg = getSpecialQuestionsConfig();
+            if (cfg?.label) specialBtn.textContent = '⭐ ' + cfg.label;
+        }
+    }
 }
 
 // Logga ut
@@ -52,6 +62,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         destroyChat();
 
         if (target === 'bracket-tab') initBracket(getGroupPicks(), globalTipsLocked);
+        if (target === 'special-tab') initSpecialTips(globalTipsLocked);
         if (target === 'results-tab') loadResults(allMatchesData);
         if (target === 'start-tab') loadCommunityStats();
         if (target === 'chat-tab') initChat();
@@ -139,10 +150,11 @@ onAuthStateChanged(auth, async (user) => {
     const userSnap = await getDoc(doc(db, "users", user.uid));
     const userData = userSnap.data() || {};
 
-    // When tips are locked by admin, lock both wizard and bracket tabs
+    // When tips are locked by admin, lock wizard, bracket and special tabs
     if (locked) {
         lockTab('wizard-tab', 'Tipsraderna är låsta av admin.');
         lockTab('bracket-tab', 'Tipsraderna är låsta av admin.');
+        lockTab('special-tab', 'Tipsraderna är låsta av admin.');
     } else if (!hasStageType('round-robin-groups')) {
         // No group stage — bracket is always available
         unlockBracket();

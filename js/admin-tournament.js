@@ -3,7 +3,7 @@ import { getAllTeamNames, teamImg } from './team-data.js';
 import { collection, getDocs, doc, setDoc, writeBatch }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { bumpDataVersion } from './admin.js';
-import { getConfig, getGroupLetters, hasStageType } from './tournament-config.js';
+import { getConfig, getGroupLetters, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { renderBracketBuilder, saveBracketFromBuilder } from './admin-tournament-bracket.js';
 import { renderGroupBuilder } from './admin-tournament-groups.js';
 
@@ -25,12 +25,14 @@ const PRESETS = {
 // ── Editable state ─────────────────────────────────────────────────
 export let editState = {
     name: '', championLabel: '', year: 2026,
-    hasGroups: false, hasKnockout: true,
+    hasGroups: false, hasKnockout: true, hasSpecial: false,
     groupLetters: [], teamsPerGroup: 4, perGroup: 2, bestOfRest: 0,
     koStart: 'qf', twoLegged: {},
     teams: [], // all team names
     groupAssignments: {}, // { A: ['team1','team2'], B: [...] }
     scoring: {},
+    specialLabel: 'Specialtips',
+    specialQuestions: [], // { id, text, type, options[], points, correctAnswer }
 };
 
 function loadStateFromConfig() {
@@ -52,6 +54,10 @@ function loadStateFromConfig() {
         editState.twoLegged = {};
         ko.rounds.forEach(r => { if (r.twoLegged) editState.twoLegged[r.key] = true; });
     }
+    const sp = cfg.stages?.find(s => s.type === 'special-questions');
+    editState.hasSpecial = !!sp;
+    editState.specialLabel = sp?.label || 'Specialtips';
+    editState.specialQuestions = sp?.questions ? JSON.parse(JSON.stringify(sp.questions)) : [];
 }
 
 function getActiveKoRounds() {
@@ -87,6 +93,13 @@ function buildTournamentConfig() {
             rounds,
         });
     }
+    if (editState.hasSpecial && editState.specialQuestions.length > 0) {
+        stages.push({
+            id: "special", type: "special-questions",
+            label: editState.specialLabel || 'Specialtips',
+            questions: editState.specialQuestions,
+        });
+    }
     return { name: editState.name, championLabel: editState.championLabel, year: editState.year, stages };
 }
 
@@ -119,6 +132,7 @@ export function renderTournamentTab() {
     html += `<div style="display:flex; gap:16px; margin-bottom:12px;">`;
     html += `<label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="tc-groups" ${editState.hasGroups ? 'checked' : ''}> Gruppspel</label>`;
     html += `<label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="tc-knockout" ${editState.hasKnockout ? 'checked' : ''}> Slutspel</label>`;
+    html += `<label style="font-size:13px; cursor:pointer;"><input type="checkbox" id="tc-special" ${editState.hasSpecial ? 'checked' : ''}> Specialtips</label>`;
     html += `</div>`;
 
     // Knockout config
@@ -139,6 +153,16 @@ export function renderTournamentTab() {
     html += `<label style="font-size:13px;">Antal grupper:</label><input type="number" id="tc-num-groups" min="1" max="26" value="${editState.groupLetters.length || 4}" style="width:60px; padding:4px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `<label style="font-size:13px;">Lag per grupp:</label><input type="number" id="tc-teams-per-group" min="2" max="8" value="${editState.teamsPerGroup}" style="width:60px; padding:4px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `</div></div>`;
+
+    // Special questions config
+    html += `<div id="tc-special-config" style="display:${editState.hasSpecial ? 'block' : 'none'}; background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:12px;">`;
+    html += `<div style="display:flex; gap:12px; align-items:center; margin-bottom:12px;">`;
+    html += `<label style="font-size:13px; font-weight:600;">Titel:</label>`;
+    html += `<input type="text" id="tc-special-label" value="${editState.specialLabel}" placeholder="t.ex. Sverigetipset" style="flex:1; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    html += `</div>`;
+    html += `<div id="tc-special-questions"></div>`;
+    html += `<button class="btn" id="tc-add-question" style="background:#28a745; font-size:12px; margin-top:8px;">+ Lägg till fråga</button>`;
+    html += `</div>`;
 
     html += `<button class="btn" id="tc-save-config" style="background:#ffc107; color:#000; font-size:13px;">Spara inställningar</button>`;
     html += `<span id="tc-config-status" style="margin-left:8px; font-size:12px; color:#888;"></span>`;
@@ -178,6 +202,7 @@ export function renderTournamentTab() {
     loadTeamsFromBracket();
     renderTwoLeggedCheckboxes();
     renderTeamRoster();
+    renderSpecialQuestions();
 }
 
 function renderTwoLeggedCheckboxes() {
@@ -297,6 +322,14 @@ function attachListeners(container) {
         document.getElementById('tc-ko-config').style.display = e.target.checked ? 'block' : 'none';
         renderBuilders();
     });
+    document.getElementById('tc-special').addEventListener('change', e => {
+        editState.hasSpecial = e.target.checked;
+        document.getElementById('tc-special-config').style.display = e.target.checked ? 'block' : 'none';
+        if (e.target.checked && editState.specialQuestions.length === 0) {
+            addQuestion();
+        }
+    });
+    document.getElementById('tc-add-question').addEventListener('click', () => addQuestion());
     document.getElementById('tc-ko-start').addEventListener('change', e => {
         editState.koStart = e.target.value;
         renderTwoLeggedCheckboxes();
@@ -322,6 +355,10 @@ async function saveConfig() {
         editState.groupLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, numGroups).split('');
         editState.teamsPerGroup = parseInt(document.getElementById('tc-teams-per-group').value) || 4;
     }
+    if (editState.hasSpecial) {
+        editState.specialLabel = document.getElementById('tc-special-label')?.value.trim() || 'Specialtips';
+        syncQuestionsFromDOM();
+    }
     const cfg = buildTournamentConfig();
     await setDoc(doc(db, "matches", "_tournament"), cfg);
     await bumpDataVersion();
@@ -339,6 +376,7 @@ async function switchTournament(presetKey) {
         await clearAllDataInternal();
         editState.name = p.name; editState.championLabel = p.championLabel; editState.year = p.year;
         editState.hasGroups = !!p.groupLetters; editState.hasKnockout = true;
+        editState.hasSpecial = false; editState.specialLabel = 'Specialtips'; editState.specialQuestions = [];
         editState.koStart = p.koStart; editState.twoLegged = { ...p.twoLegged };
         editState.teams = []; editState.groupAssignments = {};
         if (p.groupLetters) {
@@ -380,9 +418,135 @@ async function clearAllDataInternal() {
     const userSnap = await getDocs(collection(db, "users"));
     for (let i = 0; i < userSnap.docs.length; i += 500) {
         const batch = writeBatch(db);
-        userSnap.docs.slice(i, i + 500).forEach(d => batch.update(d.ref, { groupPicks: {}, matchTips: {}, knockout: {} }));
+        userSnap.docs.slice(i, i + 500).forEach(d => batch.update(d.ref, { groupPicks: {}, matchTips: {}, knockout: {}, specialPicks: {} }));
         await batch.commit();
     }
+}
+
+// ── Special Questions Editor ──────────────────────────────────────
+function nextQuestionId() {
+    let max = 0;
+    editState.specialQuestions.forEach(q => {
+        const n = parseInt(String(q.id).replace('q', ''));
+        if (!isNaN(n) && n > max) max = n;
+    });
+    return 'q' + (max + 1);
+}
+
+function addQuestion() {
+    editState.specialQuestions.push({
+        id: nextQuestionId(),
+        text: '',
+        type: 'yesno',
+        options: ['Ja', 'Nej'],
+        points: 5,
+        correctAnswer: null,
+    });
+    renderSpecialQuestions();
+}
+
+function removeQuestion(qId) {
+    editState.specialQuestions = editState.specialQuestions.filter(q => q.id !== qId);
+    renderSpecialQuestions();
+}
+
+function syncQuestionsFromDOM() {
+    const container = document.getElementById('tc-special-questions');
+    if (!container) return;
+    container.querySelectorAll('.sq-card').forEach(card => {
+        const qId = card.dataset.qid;
+        const q = editState.specialQuestions.find(x => x.id === qId);
+        if (!q) return;
+        q.text = card.querySelector('.sq-text')?.value.trim() || '';
+        q.type = card.querySelector('.sq-type')?.value || 'yesno';
+        q.points = parseInt(card.querySelector('.sq-points')?.value) || 5;
+        if (q.type === 'yesno') {
+            q.options = ['Ja', 'Nej'];
+        } else if (q.type === 'multi') {
+            const optInput = card.querySelector('.sq-options');
+            q.options = optInput ? optInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+        } else {
+            q.options = [];
+        }
+        const correctEl = card.querySelector('.sq-correct');
+        if (correctEl) {
+            q.correctAnswer = correctEl.value.trim() || null;
+            if (q.type === 'numeric' && q.correctAnswer !== null) {
+                q.correctAnswer = Number(q.correctAnswer);
+                if (isNaN(q.correctAnswer)) q.correctAnswer = null;
+            }
+        }
+    });
+}
+
+function renderSpecialQuestions() {
+    const container = document.getElementById('tc-special-questions');
+    if (!container) return;
+
+    if (editState.specialQuestions.length === 0) {
+        container.innerHTML = '<p style="color:#999; font-size:12px;">Inga frågor tillagda.</p>';
+        return;
+    }
+
+    let html = '';
+    editState.specialQuestions.forEach((q, i) => {
+        const isYesNo = q.type === 'yesno';
+        const isMulti = q.type === 'multi';
+        const isNumeric = q.type === 'numeric';
+        html += `<div class="sq-card" data-qid="${q.id}" style="background:white; border:1px solid #e1e5eb; border-radius:8px; padding:10px 12px; margin-bottom:8px;">`;
+        html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">`;
+        html += `<span style="font-size:12px; font-weight:700; color:#888;">#${i + 1}</span>`;
+        html += `<input type="text" class="sq-text" value="${(q.text || '').replace(/"/g, '&quot;')}" placeholder="Skriv din fråga..." style="flex:1; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+        html += `<button class="sq-remove" data-qid="${q.id}" style="background:none; border:none; color:#dc3545; font-size:18px; cursor:pointer; padding:0 4px;" title="Ta bort">&times;</button>`;
+        html += `</div>`;
+        html += `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">`;
+        html += `<select class="sq-type" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px;">`;
+        html += `<option value="yesno" ${isYesNo ? 'selected' : ''}>Ja / Nej</option>`;
+        html += `<option value="multi" ${isMulti ? 'selected' : ''}>Flerval</option>`;
+        html += `<option value="numeric" ${isNumeric ? 'selected' : ''}>Numeriskt</option>`;
+        html += `</select>`;
+        if (isMulti) {
+            html += `<input type="text" class="sq-options" value="${(q.options || []).join(', ')}" placeholder="Alt1, Alt2, Alt3" style="flex:1; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px;">`;
+        }
+        html += `<label style="font-size:12px; display:flex; align-items:center; gap:4px;">Poäng: <input type="number" class="sq-points" min="0" value="${q.points || 5}" style="width:50px; padding:4px; border:1px solid #ddd; border-radius:6px; font-size:12px; text-align:center;"></label>`;
+        html += `</div>`;
+        // Correct answer field
+        html += `<div style="margin-top:8px; display:flex; align-items:center; gap:6px;">`;
+        html += `<label style="font-size:11px; color:#888; white-space:nowrap;">Rätt svar:</label>`;
+        if (isYesNo) {
+            html += `<select class="sq-correct" style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">`;
+            html += `<option value="" ${!q.correctAnswer ? 'selected' : ''}>Ej avgjort</option>`;
+            html += `<option value="Ja" ${q.correctAnswer === 'Ja' ? 'selected' : ''}>Ja</option>`;
+            html += `<option value="Nej" ${q.correctAnswer === 'Nej' ? 'selected' : ''}>Nej</option>`;
+            html += `</select>`;
+        } else if (isMulti) {
+            html += `<select class="sq-correct" style="padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">`;
+            html += `<option value="" ${!q.correctAnswer ? 'selected' : ''}>Ej avgjort</option>`;
+            (q.options || []).forEach(opt => {
+                html += `<option value="${opt}" ${q.correctAnswer === opt ? 'selected' : ''}>${opt}</option>`;
+            });
+            html += `</select>`;
+        } else {
+            html += `<input type="number" class="sq-correct" value="${q.correctAnswer != null ? q.correctAnswer : ''}" placeholder="—" style="width:70px; padding:3px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px; text-align:center;">`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+    });
+    container.innerHTML = html;
+
+    // Attach listeners
+    container.querySelectorAll('.sq-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+            syncQuestionsFromDOM();
+            removeQuestion(btn.dataset.qid);
+        });
+    });
+    container.querySelectorAll('.sq-type').forEach(sel => {
+        sel.addEventListener('change', () => {
+            syncQuestionsFromDOM();
+            renderSpecialQuestions();
+        });
+    });
 }
 
 export function initTournament() {

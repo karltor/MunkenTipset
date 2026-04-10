@@ -1,5 +1,5 @@
 import { f } from './wizard.js';
-import { getGroupLetters, getKnockoutRounds, getGroupStageConfig, getRoundUserKey, getTournamentYear, isTwoLegged } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getGroupStageConfig, getRoundUserKey, getTournamentYear, isTwoLegged, getSpecialQuestionsConfig } from './tournament-config.js';
 
 // Build default scoring dynamically from tournament config
 export function buildDefaultScoring() {
@@ -174,7 +174,25 @@ export function calcLeaderboard(users, results, bracket, scoring, officialGroupS
             });
         }
 
-        return { userId: u.userId, name: u.name, groupPts, koPts, total: groupPts + koPts, detail };
+        // Score special questions
+        let specialPts = 0;
+        const specialConfig = getSpecialQuestionsConfig();
+        if (specialConfig?.questions && u.specialPicks) {
+            specialConfig.questions.forEach(q => {
+                if (q.correctAnswer == null) return;
+                const pick = u.specialPicks[q.id];
+                if (pick == null) return;
+                let correct = false;
+                if (q.type === 'numeric') {
+                    correct = Number(pick) === Number(q.correctAnswer);
+                } else {
+                    correct = String(pick) === String(q.correctAnswer);
+                }
+                if (correct) specialPts += (q.points || 0);
+            });
+        }
+
+        return { userId: u.userId, name: u.name, groupPts, koPts, specialPts, total: groupPts + koPts + specialPts, detail };
     });
 }
 

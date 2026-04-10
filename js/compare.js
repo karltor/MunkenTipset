@@ -1,7 +1,7 @@
 import { auth } from './config.js';
 import { f } from './wizard.js';
 import { sign } from './scoring.js';
-import { getGroupLetters, getKnockoutRounds, getFinalRound, getTournamentName, isTwoLegged } from './tournament-config.js';
+import { getGroupLetters, getKnockoutRounds, getFinalRound, getTournamentName, isTwoLegged, hasSpecialQuestions, getSpecialQuestionsConfig } from './tournament-config.js';
 
 let _comparisonState = {
     selectedUsers: [],
@@ -40,6 +40,8 @@ export function showFullLeaderboard() {
     html += `<div class="stat-card"><h3>Leaderboard — Detaljerad</h3>`;
     html += `<div style="overflow-x:auto;">`;
     html += `<table class="group-table full-leaderboard" style="font-size:13px;">`;
+    const _hasSpecial = hasSpecialQuestions();
+    const _specialLabel = _hasSpecial ? (getSpecialQuestionsConfig()?.label || 'Special') : '';
     html += `<thead><tr>
         <th style="text-align:left;">#</th>
         <th style="text-align:left;">Namn</th>
@@ -48,6 +50,7 @@ export function showFullLeaderboard() {
         <th title="Exakt resultat">Exakt</th>
         <th title="Rätt gruppetta/tvåa">Grupp</th>
         <th title="Slutspelspoäng">Slutspel</th>
+        ${_hasSpecial ? `<th title="${_specialLabel}">${_specialLabel}</th>` : ''}
         <th>Totalt</th>
     </tr></thead><tbody>`;
 
@@ -64,6 +67,7 @@ export function showFullLeaderboard() {
             <td>${s.detail.exactScore || 0}</td>
             <td>${s.detail.groupPlace || 0}</td>
             <td>${s.koPts}</td>
+            ${_hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}
             <td><strong>${s.total}</strong></td>
         </tr>`;
     });

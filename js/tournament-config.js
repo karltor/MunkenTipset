@@ -172,6 +172,15 @@ export function isTwoLegged(roundKey) {
     return stage.twoLegged || false;
 }
 
+// ── Convenience: special questions ─────────────────────────────────
+export function getSpecialQuestionsConfig() {
+    return getStageByType('special-questions');
+}
+
+export function hasSpecialQuestions() {
+    return hasStageType('special-questions');
+}
+
 // ── Convenience: league ─────────────────────────────────────────────
 export function getLeagueStageConfig() {
     return getStageByType('league');
