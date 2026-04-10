@@ -76,7 +76,7 @@ async function fetchDocs() {
     const snap = await getDocs(collection(db, "matches"));
     cachedDocs = snap.docs
         .filter(d => !d.id.startsWith('_'))
-        .map(d => ({ id: d.id, ...d.data() }))
+        .map(d => ({ ...d.data(), id: d.id }))
         .sort((a, b) => {
             const stageA = a.stage || '';
             const stageB = b.stage || '';
@@ -153,7 +153,7 @@ async function addMatch() {
     const matchData = { id: parseInt(id), homeTeam: home, awayTeam: away, stage, date };
 
     await setDoc(doc(db, "matches", id), matchData);
-    allMatches.push({ id, ...matchData });
+    allMatches.push({ ...matchData, id });
     await bumpDataVersion();
 
     showToast(`Match #${id} tillagd: ${home} — ${away}`);
@@ -324,11 +324,11 @@ function openEditModal(m) {
 
         // Update in-memory
         const idx = allMatches.findIndex(x => String(x.id) === m.id);
-        if (idx !== -1) allMatches[idx] = { id: m.id, ...matchData };
+        if (idx !== -1) allMatches[idx] = { ...matchData, id: m.id };
 
         // Update cached docs
         const ci = cachedDocs.findIndex(x => x.id === m.id);
-        if (ci !== -1) cachedDocs[ci] = { id: m.id, ...matchData };
+        if (ci !== -1) cachedDocs[ci] = { ...matchData, id: m.id };
 
         // Update results if they exist
         if (existingResults[m.id]) {
