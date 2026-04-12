@@ -29,9 +29,17 @@ body { font-family: var(--font-body); margin: 0; background-color: var(--color-p
     .tabs { gap: 4px; margin-bottom: 10px; padding-bottom: 8px; }
     .tab-btn { padding: 7px 10px; font-size: 12px; }
     /* Leaderboard/stat cards: reduce padding and cell padding on mobile */
-    .stat-card { padding: 12px; }
+    .stat-card { padding: 12px; min-width: 0; max-width: 100%; overflow-x: hidden; }
     .full-leaderboard td, .full-leaderboard th { padding: 4px 3px; font-size: 12px; }
     .dashboard-grid { gap: 12px; }
+    .dashboard-left, .dashboard-right { min-width: 0; }
+    /* Allow my-tips team names to wrap on mobile so the table doesn't push page wider */
+    .my-tips-table { table-layout: fixed; }
+    .mtt-team { white-space: normal; word-break: break-word; }
+    .mtt-label { width: auto; padding-right: 6px; }
+    /* Defensive: never allow horizontal scroll on the page */
+    html, body { overflow-x: hidden; }
+    .container { overflow-x: hidden; }
 }
 
 /* Tabs */
