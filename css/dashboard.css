@@ -25,9 +25,13 @@ body { font-family: var(--font-body); margin: 0; background-color: var(--color-p
     .navbar #user-name { font-size: 12px; margin-right: 0 !important; }
     .navbar .btn { padding: 5px 10px; font-size: 11px; }
     .navbar .btn-settings { font-size: 16px; padding: 2px 6px; }
-    .container { margin: 0.5rem auto; padding: 0 8px; }
+    .container { margin: 0.5rem auto; padding: 0 6px; }
     .tabs { gap: 4px; margin-bottom: 10px; padding-bottom: 8px; }
     .tab-btn { padding: 7px 10px; font-size: 12px; }
+    /* Leaderboard/stat cards: reduce padding and cell padding on mobile */
+    .stat-card { padding: 12px; }
+    .full-leaderboard td, .full-leaderboard th { padding: 4px 3px; font-size: 12px; }
+    .dashboard-grid { gap: 12px; }
 }
 
 /* Tabs */

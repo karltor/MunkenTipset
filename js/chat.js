@@ -44,6 +44,10 @@ export async function initChat() {
     const adminBtn = document.getElementById('chat-admin-btn');
     if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
 
+    // Mobile: scroll chat-tab into view and size the layout to fill the viewport
+    // so the input row is immediately visible at the bottom of the screen.
+    fitChatLayoutToViewport();
+
     // Load meta (shadowban/mute lists) — 1 read
     try {
         const metaSnap = await getDoc(doc(db, "chat", "_meta"));
@@ -624,4 +628,22 @@ function buildTipBadges(activeMatches, chatUids) {
     });
 
     return tipMap;
+}
+
+// Ensures the chat input row is immediately visible at the bottom of the
+// viewport on mobile, rather than requiring the user to scroll the page.
+// The CSS calc(100dvh - 110px) for .chat-layout is an approximation of the
+// page chrome (navbar + tabs); here we measure it at runtime instead.
+function fitChatLayoutToViewport() {
+    if (window.innerWidth > 768) return;
+    const tab = document.getElementById('chat-tab');
+    const layout = tab?.querySelector('.chat-layout');
+    if (!tab || !layout) return;
+    // Defer so any layout shifts from rendering the chat complete first
+    requestAnimationFrame(() => {
+        const offsetTop = tab.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: offsetTop, behavior: 'instant' });
+        // After scrolling, chat-tab starts at viewport top → fill remaining height
+        layout.style.height = (window.innerHeight - 4) + 'px';
+    });
 }
