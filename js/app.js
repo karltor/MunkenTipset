@@ -16,6 +16,22 @@ import { toggleChatAdminPanel } from './chat-admin.js';
 // Apply saved theme immediately before anything renders
 applyStoredTheme();
 
+// Loading screen: hide after minimum duration (to cover font/layout flashes)
+const _loaderStart = Date.now();
+const MIN_LOADER_MS = 900;
+function hideLoader() {
+    const elapsed = Date.now() - _loaderStart;
+    const wait = Math.max(0, MIN_LOADER_MS - elapsed);
+    setTimeout(() => {
+        const el = document.getElementById('mt-loader');
+        if (!el) return;
+        el.classList.add('mt-loader-hidden');
+        setTimeout(() => el.remove(), 450);
+    }, wait);
+}
+// Safety fallback: always hide loader after 5s even if init stalls
+setTimeout(hideLoader, 5000);
+
 const ADMINS = ['karl.tornered@nyamunken.se', 'jonas.waltelius@nyamunken.se'];
 const MATCHES_CACHE_KEY = 'munkentipset_matches_cache_v1';
 const WELCOME_DISMISSED_KEY = 'munkentipset_welcome_dismissed';
@@ -107,6 +123,7 @@ document.getElementById('settings-btn').addEventListener('click', () => {
 onAuthStateChanged(auth, async (user) => {
     const email = user ? user.email.toLowerCase() : '';
     if (!user || !email.endsWith('@nyamunken.se') || email.startsWith('qq')) {
+        hideLoader();
         window.location.href = 'index.html';
         return;
     }
@@ -134,6 +151,9 @@ onAuthStateChanged(auth, async (user) => {
     document.querySelector('.logo-text').textContent = tName;
     document.title = tName;
     applyTabVisibility();
+
+    // Hide loading screen now that branding & tabs are in their final state
+    hideLoader();
 
     // Ensure user doc exists with email + display name (single write)
     await setDoc(doc(db, "users", user.uid), { email: user.email, name: user.displayName || user.email }, { merge: true });
