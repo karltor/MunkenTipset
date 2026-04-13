@@ -25,8 +25,15 @@ function showToast(msg) {
 }
 
 // Disable a set of buttons during an async op and surface errors as a toast.
+// Also refuses to start when offline — Firestore would otherwise queue the
+// write silently with no error, and the admin wouldn't know their save
+// didn't hit the server.
 async function withBusy(btns, fn) {
     const buttons = (Array.isArray(btns) ? btns : [btns]).filter(Boolean);
+    if (!navigator.onLine) {
+        showToast('Ingen internetanslutning — ändringen sparades inte.');
+        return;
+    }
     buttons.forEach(b => { b.disabled = true; });
     try {
         return await fn();

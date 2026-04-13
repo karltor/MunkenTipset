@@ -192,6 +192,16 @@ async function sendMessage() {
     if (!uid) return;
     if (meta?.muted?.includes(uid)) return;
 
+    // Firestore queues writes silently when offline (promise doesn't reject,
+    // message shows optimistically via onSnapshot) but the queue is lost on
+    // page reload. Refuse to send upfront so the user can retry after
+    // reconnecting. navigator.onLine is reliable for the DevTools Offline
+    // toggle and clear network drops.
+    if (!navigator.onLine) {
+        showToast('Ingen internetanslutning — meddelandet skickades inte.');
+        return;
+    }
+
     // Determine display name
     const displayName = meta?.chatNames?.[uid] || auth.currentUser.displayName || auth.currentUser.email;
     const firstName = displayName.split(' ')[0];
