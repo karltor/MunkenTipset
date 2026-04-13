@@ -16,6 +16,14 @@ let initialized = false;
 let replyingToMsg = null;    // state for active reply
 const TRIM_THRESHOLD = 2000; // trim array when it exceeds this
 
+function showToast(msg) {
+    let t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
 /* ── public api ────────────────────────────────────── */
 
 export function setChatAdmin(val) { isAdmin = val; }
@@ -208,6 +216,7 @@ async function sendMessage() {
         renderReplyPreview();
     }
 
+    const originalText = text;
     input.value = '';
     input.focus();
 
@@ -230,6 +239,9 @@ async function sendMessage() {
         }
     } catch (err) {
         console.error('Chat send error:', err);
+        // Restore the user's message so they can retry
+        if (!input.value) input.value = originalText;
+        showToast('Meddelandet kunde inte skickas. Försök igen.');
     }
 }
 
