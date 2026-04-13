@@ -16,6 +16,28 @@ export let currentAdminGroup = 'A';
 export let existingResults = {};
 let initDone = false;
 
+function showToast(msg) {
+    let t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Disable a set of buttons during an async op and surface errors as a toast.
+async function withBusy(btns, fn) {
+    const buttons = (Array.isArray(btns) ? btns : [btns]).filter(Boolean);
+    buttons.forEach(b => { b.disabled = true; });
+    try {
+        return await fn();
+    } catch (err) {
+        showToast('Något gick fel: ' + (err?.message || err));
+        throw err;
+    } finally {
+        buttons.forEach(b => { b.disabled = false; });
+    }
+}
+
 // Bump dataVersion in _settings so clients know to invalidate their stats cache
 export async function bumpDataVersion() {
     await setDoc(doc(db, "matches", "_settings"), { dataVersion: Date.now() }, { merge: true });
@@ -146,18 +168,24 @@ async function refreshLockStatus() {
 }
 
 async function toggleLock(lock) {
-    await setDoc(doc(db, "matches", "_settings"), { tipsLocked: lock }, { merge: true });
-    refreshLockStatus();
+    const lockBtn = document.getElementById('admin-lock-tips');
+    const unlockBtn = document.getElementById('admin-unlock-tips');
+    await withBusy([lockBtn, unlockBtn], async () => {
+        await setDoc(doc(db, "matches", "_settings"), { tipsLocked: lock }, { merge: true });
+        await refreshLockStatus();
+    });
 }
 
 async function toggleTipsVisible() {
-    const snap = await getDoc(doc(db, "matches", "_settings"));
-    const settings = snap.exists() ? snap.data() : {};
-    const current = settings.tipsVisible !== false;
-    await setDoc(doc(db, "matches", "_settings"), { tipsVisible: !current }, { merge: true });
     const btn = document.getElementById('admin-toggle-tips-visible');
-    btn.textContent = !current ? '🔓 Tipsrader synliga för alla' : '🔒 Tipsrader dolda';
-    btn.style.background = !current ? '#28a745' : '#6c757d';
+    await withBusy(btn, async () => {
+        const snap = await getDoc(doc(db, "matches", "_settings"));
+        const settings = snap.exists() ? snap.data() : {};
+        const current = settings.tipsVisible !== false;
+        await setDoc(doc(db, "matches", "_settings"), { tipsVisible: !current }, { merge: true });
+        btn.textContent = !current ? '🔓 Tipsrader synliga för alla' : '🔒 Tipsrader dolda';
+        btn.style.background = !current ? '#28a745' : '#6c757d';
+    });
 }
 
 export function renderAdminMatches(letter) {
@@ -186,31 +214,33 @@ export function renderAdminMatches(letter) {
 }
 
 async function saveAdminResults() {
-    const inputs = document.querySelectorAll('.admin-score');
-    const updates = {};
-    inputs.forEach(input => {
-        const matchId = input.dataset.match;
-        if (!updates[matchId]) updates[matchId] = {};
-        updates[matchId][input.dataset.side] = input.value !== '' ? parseInt(input.value) : undefined;
-    });
-
-    Object.entries(updates).forEach(([matchId, scores]) => {
-        if (scores.home !== undefined && scores.away !== undefined) {
-            const m = allMatches.find(m2 => String(m2.id) === matchId);
-            existingResults[matchId] = {
-                homeScore: scores.home, awayScore: scores.away,
-                homeTeam: m?.homeTeam, awayTeam: m?.awayTeam,
-                stage: m?.stage, date: m?.date
-            };
-        }
-    });
-
-    await setDoc(doc(db, "matches", "_results"), existingResults);
-    await bumpDataVersion();
-    renderGroupButtons();
     const btn = document.getElementById('admin-save-results');
-    btn.textContent = '✓ Sparat!';
-    setTimeout(() => { btn.textContent = 'Spara resultat'; }, 2000);
+    await withBusy(btn, async () => {
+        const inputs = document.querySelectorAll('.admin-score');
+        const updates = {};
+        inputs.forEach(input => {
+            const matchId = input.dataset.match;
+            if (!updates[matchId]) updates[matchId] = {};
+            updates[matchId][input.dataset.side] = input.value !== '' ? parseInt(input.value) : undefined;
+        });
+
+        Object.entries(updates).forEach(([matchId, scores]) => {
+            if (scores.home !== undefined && scores.away !== undefined) {
+                const m = allMatches.find(m2 => String(m2.id) === matchId);
+                existingResults[matchId] = {
+                    homeScore: scores.home, awayScore: scores.away,
+                    homeTeam: m?.homeTeam, awayTeam: m?.awayTeam,
+                    stage: m?.stage, date: m?.date
+                };
+            }
+        });
+
+        await setDoc(doc(db, "matches", "_results"), existingResults);
+        await bumpDataVersion();
+        renderGroupButtons();
+        btn.textContent = '✓ Sparat!';
+        setTimeout(() => { btn.textContent = 'Spara resultat'; }, 2000);
+    });
 }
 
 function renderTeamRenames() {
@@ -241,6 +271,7 @@ function renderTeamRenames() {
 }
 
 async function saveTeamRenames() {
+    const btn = document.getElementById('admin-save-renames');
     const inputs = document.querySelectorAll('.admin-rename-input');
     const renames = {};
     inputs.forEach(input => {
@@ -251,34 +282,35 @@ async function saveTeamRenames() {
 
     if (Object.keys(renames).length === 0) return;
 
-    // Rename in match documents
-    const snap = await getDocs(collection(db, "matches"));
-    for (const matchDoc of snap.docs) {
-        if (matchDoc.id.startsWith('_')) continue;
-        const data = matchDoc.data();
-        let changed = false;
-        if (renames[data.homeTeam]) { data.homeTeam = renames[data.homeTeam]; changed = true; }
-        if (renames[data.awayTeam]) { data.awayTeam = renames[data.awayTeam]; changed = true; }
-        if (changed) await setDoc(doc(db, "matches", matchDoc.id), data);
-    }
+    await withBusy(btn, async () => {
+        // Rename in match documents
+        const snap = await getDocs(collection(db, "matches"));
+        for (const matchDoc of snap.docs) {
+            if (matchDoc.id.startsWith('_')) continue;
+            const data = matchDoc.data();
+            let changed = false;
+            if (renames[data.homeTeam]) { data.homeTeam = renames[data.homeTeam]; changed = true; }
+            if (renames[data.awayTeam]) { data.awayTeam = renames[data.awayTeam]; changed = true; }
+            if (changed) await setDoc(doc(db, "matches", matchDoc.id), data);
+        }
 
-    // Rename in results
-    const resultsSnap = await getDoc(doc(db, "matches", "_results"));
-    if (resultsSnap.exists()) {
-        const results = resultsSnap.data();
-        let changed = false;
-        Object.values(results).forEach(r => {
-            if (renames[r.homeTeam]) { r.homeTeam = renames[r.homeTeam]; changed = true; }
-            if (renames[r.awayTeam]) { r.awayTeam = renames[r.awayTeam]; changed = true; }
-        });
-        if (changed) await setDoc(doc(db, "matches", "_results"), results);
-    }
+        // Rename in results
+        const resultsSnap = await getDoc(doc(db, "matches", "_results"));
+        if (resultsSnap.exists()) {
+            const results = resultsSnap.data();
+            let changed = false;
+            Object.values(results).forEach(r => {
+                if (renames[r.homeTeam]) { r.homeTeam = renames[r.homeTeam]; changed = true; }
+                if (renames[r.awayTeam]) { r.awayTeam = renames[r.awayTeam]; changed = true; }
+            });
+            if (changed) await setDoc(doc(db, "matches", "_results"), results);
+        }
 
-    await bumpDataVersion();
-    const btn = document.getElementById('admin-save-renames');
-    btn.textContent = '✓ Sparat!';
-    btn.style.background = '#28a745';
-    setTimeout(() => { btn.textContent = 'Spara namnändringar'; btn.style.background = ''; }, 2000);
+        await bumpDataVersion();
+        btn.textContent = '✓ Sparat!';
+        btn.style.background = '#28a745';
+        setTimeout(() => { btn.textContent = 'Spara namnändringar'; btn.style.background = ''; }, 2000);
+    });
 }
 
 async function renderScoringConfig() {
@@ -309,15 +341,17 @@ async function renderScoringConfig() {
 }
 
 async function saveScoringConfig() {
-    const inputs = document.querySelectorAll('.admin-scoring-input');
-    const scoring = {};
-    inputs.forEach(input => { scoring[input.dataset.key] = parseInt(input.value) || 0; });
-    await setDoc(doc(db, "matches", "_settings"), { scoring }, { merge: true });
-    await bumpDataVersion();
     const btn = document.getElementById('admin-save-scoring');
-    btn.textContent = '✓ Sparat!';
-    btn.style.background = '#28a745';
-    setTimeout(() => { btn.textContent = 'Spara poänginställningar'; btn.style.background = ''; }, 2000);
+    await withBusy(btn, async () => {
+        const inputs = document.querySelectorAll('.admin-scoring-input');
+        const scoring = {};
+        inputs.forEach(input => { scoring[input.dataset.key] = parseInt(input.value) || 0; });
+        await setDoc(doc(db, "matches", "_settings"), { scoring }, { merge: true });
+        await bumpDataVersion();
+        btn.textContent = '✓ Sparat!';
+        btn.style.background = '#28a745';
+        setTimeout(() => { btn.textContent = 'Spara poänginställningar'; btn.style.background = ''; }, 2000);
+    });
 }
 
 export async function checkTipsLocked() {
