@@ -18,7 +18,7 @@ applyStoredTheme();
 
 // Loading screen: hide after minimum duration (to cover font/layout flashes)
 const _loaderStart = Date.now();
-const MIN_LOADER_MS = 900;
+const MIN_LOADER_MS = 500;
 function hideLoader() {
     const elapsed = Date.now() - _loaderStart;
     const wait = Math.max(0, MIN_LOADER_MS - elapsed);
