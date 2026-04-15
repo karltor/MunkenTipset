@@ -539,11 +539,18 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
     </div>`;
     const tippersLineInner = (icon, names, suffix, color) => {
         if (names.length === 0) return '';
-        if (names.length <= 3) {
-            const joined = names.length <= 2 ? names.join(' & ') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+        // Shorten "Stansen Brankvist" → "Stansen B" to keep the line compact
+        const shortName = (n) => {
+            const parts = String(n || '').trim().split(/\s+/);
+            if (parts.length <= 1) return n;
+            return parts[0] + ' ' + (parts[1][0] || '').toUpperCase();
+        };
+        const shortNames = names.map(shortName);
+        if (shortNames.length <= 3) {
+            const joined = shortNames.length <= 2 ? shortNames.join(' & ') : shortNames.slice(0, -1).join(', ') + ' & ' + shortNames[shortNames.length - 1];
             return `<div style="font-size:12px; color:${color};">${icon} ${joined} ${suffix}</div>`;
         }
-        let displayNames = [...names].sort(() => 0.5 - Math.random());
+        let displayNames = [...shortNames].sort(() => 0.5 - Math.random());
         const MAX_NAMES = 10;
         let tooltipText;
         if (displayNames.length > MAX_NAMES) {
@@ -552,7 +559,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             tooltipText = displayNames.join(', ');
         }
         return `<div class="tipper-hover" style="font-size:12px; color:${color}; cursor:default; display:inline-block;">
-            ${icon} ${names.length} st ${suffix}
+            ${icon} ${shortNames.length} st ${suffix}
             <span class="tipper-tooltip">${tooltipText}</span>
         </div>`;
     };
