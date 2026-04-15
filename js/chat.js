@@ -8,6 +8,7 @@ import { getKnockoutRounds, isTwoLegged } from './tournament-config.js';
 
 /* ── state ─────────────────────────────────────────── */
 let unsubMessages = null;   // onSnapshot unsubscribe handle
+let unsubMeta = null;        // onSnapshot unsubscribe handle for _meta
 let meta = null;             // { shadowbanned:[], muted:[], chatNames:{} }
 let isAdmin = false;
 let adminMode = false;       // admin moderation mode active
@@ -75,6 +76,14 @@ export async function initChat() {
         renderMessages();
     });
 
+    // Live listener on _meta so mute/shadow/chatName changes from admin take
+    // effect immediately without the affected user needing to reload.
+    unsubMeta = onSnapshot(doc(db, "chat", "_meta"), (snap) => {
+        meta = snap.exists() ? snap.data() : { shadowbanned: [], muted: [], chatNames: {} };
+        updateMuteState();
+        renderMessages();
+    });
+
     // Build match sidebar from cached data (no reads)
     buildMatchSidebar();
 
@@ -94,6 +103,10 @@ export function destroyChat() {
     if (unsubMessages) {
         unsubMessages();
         unsubMessages = null;
+    }
+    if (unsubMeta) {
+        unsubMeta();
+        unsubMeta = null;
     }
     adminMode = false;
     replyingToMsg = null;
@@ -400,7 +413,9 @@ function renderMessages() {
 
 function resolveName(m) {
     if (meta?.chatNames?.[m.uid]) {
-        return meta.chatNames[m.uid].split(' ')[0];
+        // Admin-set names are used verbatim — they've deliberately chosen the
+        // display (e.g. "Karl T."), so we must not truncate to first word.
+        return meta.chatNames[m.uid];
     }
     return m.name || 'Anonym';
 }
