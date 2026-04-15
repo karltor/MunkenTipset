@@ -3,8 +3,14 @@ import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/
 
 const EMAIL_PREF_KEY = 'emailPref'; // 'often' | 'few' | 'none'
 
-// Load the user's current email preference from Firestore
-export async function loadEmailPref() {
+// Load the user's current email preference from Firestore.
+// If `prefetchedUserData` is supplied (from app.js' initial user-doc read),
+// we skip the network round-trip entirely — this matters on slow connections
+// where every extra getDoc adds seconds to the critical path.
+export async function loadEmailPref(prefetchedUserData) {
+    if (prefetchedUserData !== undefined) {
+        return (prefetchedUserData && prefetchedUserData[EMAIL_PREF_KEY]) || null;
+    }
     const userId = auth.currentUser?.uid;
     if (!userId) return null;
     const snap = await getDoc(doc(db, "users", userId));
