@@ -5,6 +5,7 @@ import { loadTournamentConfig, getTournamentName, hasStageType, getSpecialQuesti
 import { initWizard, getGroupPicks, setWizardLocked } from './wizard.js';
 import { initBracket, setBracketLocked } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
+import { showAllTips } from './compare.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
 import { initSpecialTips, setSpecialLocked } from './special-tips.js';
 import { loadResults } from './results.js';
@@ -51,6 +52,19 @@ function applyTabVisibility() {
     const wizardBtn = document.querySelector('.tab-btn[data-target="wizard-tab"]');
     const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
     const specialBtn = document.querySelector('.tab-btn[data-target="special-tab"]');
+    const allTipsBtn = document.getElementById('all-tipsters-tab-btn');
+
+    // When admin has locked tipping, the tip-tabs are replaced by a single
+    // "Alla tipsare" shortcut — users can't edit tips anyway, so we declutter
+    // the tab row and surface the compare-view instead.
+    if (globalTipsLocked) {
+        if (wizardBtn) wizardBtn.style.display = 'none';
+        if (bracketBtn) bracketBtn.style.display = 'none';
+        if (specialBtn) specialBtn.style.display = 'none';
+        if (allTipsBtn) allTipsBtn.style.display = '';
+        return;
+    }
+
     if (wizardBtn) {
         wizardBtn.style.display = (hasGroups || hasLeague) ? '' : 'none';
         if (hasLeague && !hasGroups) wizardBtn.textContent = '🎯 Tippa Tabell';
@@ -63,6 +77,7 @@ function applyTabVisibility() {
             if (cfg?.label) specialBtn.textContent = '⭐ ' + cfg.label;
         }
     }
+    if (allTipsBtn) allTipsBtn.style.display = 'none';
 }
 
 // Logga ut
@@ -70,12 +85,15 @@ document.getElementById('logout-btn').addEventListener('click', () => signOut(au
 
 // Tab-logik
 document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        const target = e.target.dataset.target;
-        if (e.target.classList.contains('locked')) return;
+    btn.addEventListener('click', async (e) => {
+        const btnEl = e.currentTarget;
+        const target = btnEl.dataset.target;
+        const action = btnEl.dataset.action;
+        if (btnEl.classList.contains('locked')) return;
+        if (!target) return;
 
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-        e.target.classList.add('active');
+        btnEl.classList.add('active');
         document.getElementById(target).classList.add('active');
 
         // Destroy chat listener when leaving chat tab (saves reads)
@@ -84,7 +102,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (target === 'bracket-tab') initBracket(getGroupPicks(), globalTipsLocked);
         if (target === 'special-tab') initSpecialTips(globalTipsLocked);
         if (target === 'results-tab') loadResults(allMatchesData);
-        if (target === 'start-tab') loadCommunityStats();
+        if (target === 'start-tab') {
+            // "Alla tipsare" button: load stats first (populates compare cache),
+            // then jump straight into the compare view.
+            await loadCommunityStats();
+            if (action === 'show-all-tips') showAllTips();
+        }
         if (target === 'chat-tab') initChat();
     });
 });
@@ -362,6 +385,10 @@ function applyLiveLock() {
     lockTab('bracket-tab', 'Tipsraderna är låsta av admin.');
     lockTab('special-tab', 'Tipsraderna är låsta av admin.');
 
+    // Hide the (now-locked) tip-tab buttons and reveal the "Alla tipsare"
+    // shortcut instead.
+    applyTabVisibility();
+
     // If user is currently editing tips, kick them to start tab
     const activeTab = document.querySelector('.tab-content.active')?.id;
     if (['wizard-tab', 'bracket-tab', 'special-tab'].includes(activeTab)) {
@@ -383,6 +410,17 @@ function applyLiveUnlock(user) {
 
     unlockTab('wizard-tab');
     unlockTab('special-tab');
+
+    // If the "Alla tipsare" shortcut was the active tab, transfer the active
+    // state to the regular Start button before we hide it.
+    const allTipsBtn = document.getElementById('all-tipsters-tab-btn');
+    if (allTipsBtn?.classList.contains('active')) {
+        allTipsBtn.classList.remove('active');
+        document.querySelector('.tab-btn[data-target="start-tab"]')?.classList.add('active');
+    }
+
+    // Restore the original tip-tab buttons and hide the "Alla tipsare" shortcut.
+    applyTabVisibility();
     // Bracket depends on whether user has done groups — re-evaluate async
     (async () => {
         if (!hasStageType('round-robin-groups')) {
