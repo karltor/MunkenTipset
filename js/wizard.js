@@ -24,15 +24,21 @@ let onGroupsComplete = null;
 let tipsLocked = false;
 let savedScores = {}; // Preserve scores across mode switches: { matchId: { h, a } }
 
-export async function initWizard(matchesData, onComplete, locked) {
+export async function initWizard(matchesData, onComplete, locked, prefetchedUserData) {
     allMatches = matchesData;
     onGroupsComplete = onComplete;
     tipsLocked = locked;
     const userId = auth.currentUser.uid;
 
-    // Read all tips from the user doc (single read)
-    const userSnap = await getDoc(doc(db, "users", userId));
-    const userData = userSnap.exists() ? userSnap.data() : {};
+    // Reuse the user doc that app.js already fetched. Falling back to a fresh
+    // read only if the caller didn't supply it keeps this module decoupled.
+    let userData;
+    if (prefetchedUserData) {
+        userData = prefetchedUserData;
+    } else {
+        const userSnap = await getDoc(doc(db, "users", userId));
+        userData = userSnap.exists() ? userSnap.data() : {};
+    }
     existingGroupPicks = userData.groupPicks || null;
     const storedTips = userData.matchTips || {};
 
@@ -428,12 +434,12 @@ async function saveAndNext() {
 
     const standings = calcFullStandings(groupMatches);
 
-    // Safety: if existingGroupPicks is missing, re-read from Firestore to avoid data loss
-    if (!existingGroupPicks) {
-        const freshSnap = await getDoc(doc(db, "users", userId));
-        const freshData = freshSnap.exists() ? freshSnap.data() : {};
-        existingGroupPicks = freshData.groupPicks || {};
-    }
+    // First save for this user — initialise the in-memory picks map.
+    // We don't re-fetch: the write below uses dot-notation (`groupPicks.${letter}`)
+    // so other fields on the user doc can't be clobbered, and a fresh getDoc
+    // here would add a full network round-trip to every early save (painful on
+    // slow connections like an iPad on mobile data).
+    if (!existingGroupPicks) existingGroupPicks = {};
 
     const groupData = {
         first: standings[0]?.name, second: standings[1]?.name,

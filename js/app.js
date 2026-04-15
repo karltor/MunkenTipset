@@ -219,6 +219,17 @@ onAuthStateChanged(auth, async (user) => {
     // Ensure user doc exists with email + display name (single write, fire-and-forget)
     setDoc(doc(db, "users", user.uid), { email: user.email, name: user.displayName || user.email }, { merge: true });
 
+    // Show welcome/email popup IMMEDIATELY after loader hides — don't wait for
+    // matches/stats to load. emailPref is derived from the userData we already
+    // fetched above, so this is a zero-round-trip operation even on slow links.
+    const emailPref = await loadEmailPref(userData);
+    if (!localStorage.getItem(WELCOME_DISMISSED_KEY)) {
+        showWelcomePopup(emailPref);
+    } else if (!emailPref) {
+        // Welcome already dismissed but email pref never set — show just the email popup
+        showEmailPrefOnly();
+    }
+
     // Load matches — cached in localStorage, only re-fetched when dataVersion changes
     let matchesCached;
     try {
@@ -239,7 +250,8 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     if (allMatchesData.length > 0) {
-        initWizard(allMatchesData, onGroupsComplete, locked);
+        // Pass the already-fetched userData so initWizard doesn't re-read the same doc
+        initWizard(allMatchesData, onGroupsComplete, locked, userData);
     }
 
     if (isAdmin) initAdmin(allMatchesData);
@@ -250,15 +262,6 @@ onAuthStateChanged(auth, async (user) => {
     const activeTabOnLoad = document.querySelector('.tab-content.active')?.id;
     if (activeTabOnLoad === 'start-tab') {
         loadCommunityStats(settings);
-    }
-
-    // Show welcome popup for first-time visitors, or email pref if not set
-    const emailPref = await loadEmailPref();
-    if (!localStorage.getItem(WELCOME_DISMISSED_KEY)) {
-        showWelcomePopup(emailPref);
-    } else if (!emailPref) {
-        // Welcome already dismissed but email pref never set — show just the email popup
-        showEmailPrefOnly();
     }
 });
 
