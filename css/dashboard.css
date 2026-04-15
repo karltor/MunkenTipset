@@ -315,6 +315,34 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .stat-bar-fill { height: 20px; background: linear-gradient(90deg, var(--color-progress-from), var(--color-progress-to)); border-radius: 4px; min-width: 2px; transition: width 0.3s; display: flex; align-items: center; padding-left: 6px; color: white; font-weight: 600; font-size: 11px; }
 .stat-bar-label { min-width: 120px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
 .stat-bar-pct { min-width: 40px; text-align: right; color: #999; font-size: 12px; }
+
+/* Recent-result cards — each info line is a flex row with a points badge
+   aligned to the right, so the reader can see at-a-glance how many points
+   the tip-category (own tip / exact tippers / winner tippers) earned. */
+.result-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.result-row-main { flex: 1; min-width: 0; text-align: center; }
+.result-row-badge { flex: 0 0 auto; }
+.result-points-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+/* Champions grid — compact 2/3-column layout for "Tippade mästare".
+   Each row is a small pill with an inline gradient fill indicating
+   percentage, so we pack many teams into minimal vertical space. */
+.champ-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 4px 10px; }
+.champ-row { display: grid; grid-template-columns: 18px 16px 1fr auto; align-items: center; gap: 6px; font-size: 12px; padding: 3px 8px; border-radius: 4px; border: 1px solid #eee; background-color: #fafafa; background-repeat: no-repeat; }
+.champ-rank { color: #999; font-size: 10px; font-weight: 700; text-align: right; }
+.champ-flag { font-size: 13px; line-height: 1; }
+.champ-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #222; }
+.champ-pct { color: #333; font-weight: 700; font-size: 11px; }
 .user-tip-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.15s; }
 .user-tip-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
 .user-tip-card h4 { margin: 0 0 8px; }

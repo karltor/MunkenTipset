@@ -1,7 +1,7 @@
 import { db, auth } from './config.js';
 import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
-import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate, renderStatBar, renderTippersSummary, renderTippersLine } from './scoring.js';
+import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
 import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType, isTwoLegged, getSpecialQuestionsConfig, hasSpecialQuestions } from './tournament-config.js';
 
@@ -129,7 +129,7 @@ export async function loadCommunityStats(prefetchedSettings) {
             }
         }
 
-        _saveStatsCache(dataVersion, { results, bracket, users, matchDocs });
+        _saveStatsCache(dataVersion, { results, bracket, users, matchDocs, scoring });
     }
 
     window._cachedMatchDocs = matchDocs;
@@ -516,6 +516,46 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
     const recentResults = pastResults.length > 0 ? pastResults.slice(0, 4) : relevantMatches.slice(0, 4);
 
     // ── RECENT RESULTS (4 senaste) ──────────────────────────────
+    //
+    // Helper: compute points for a (tipH, tipA) vs (h, a) per the admin-configured
+    // scoring rules (1X2, home goals, away goals, exact bonus).
+    const calcTipPoints = (tipH, tipA, h, a) => {
+        if (tipH == null || tipA == null) return 0;
+        let p = 0;
+        if (sign(tipH - tipA) === sign(h - a)) p += scoring.matchResult || 0;
+        if (tipH === h) p += scoring.matchHomeGoals || 0;
+        if (tipA === a) p += scoring.matchAwayGoals || 0;
+        if ((scoring.exactScore || 0) > 0 && tipH === h && tipA === a) p += scoring.exactScore;
+        return p;
+    };
+    const pointsBadge = (pts) => {
+        const bg = pts === 0 ? '#dc3545' : (pts >= (scoring.matchResult || 0) + (scoring.matchHomeGoals || 0) + (scoring.matchAwayGoals || 0) ? '#28a745' : '#17a2b8');
+        return `<span class="result-points-badge" style="background:${bg};">${pts} POÄNG</span>`;
+    };
+    const renderRow = (content, badge) => `<div class="result-row">
+        <div class="result-row-main">${content}</div>
+        ${badge ? `<div class="result-row-badge">${badge}</div>` : ''}
+    </div>`;
+    const tippersLineInner = (icon, names, suffix, color) => {
+        if (names.length === 0) return '';
+        if (names.length <= 3) {
+            const joined = names.length <= 2 ? names.join(' & ') : names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+            return `<div style="font-size:12px; color:${color};">${icon} ${joined} ${suffix}</div>`;
+        }
+        let displayNames = [...names].sort(() => 0.5 - Math.random());
+        const MAX_NAMES = 10;
+        let tooltipText;
+        if (displayNames.length > MAX_NAMES) {
+            tooltipText = displayNames.slice(0, MAX_NAMES).join(', ') + ` <br><span style="color:#aaa;">(och ${displayNames.length - MAX_NAMES} fler)</span>`;
+        } else {
+            tooltipText = displayNames.join(', ');
+        }
+        return `<div class="tipper-hover" style="font-size:12px; color:${color}; cursor:default; display:inline-block;">
+            ${icon} ${names.length} st ${suffix}
+            <span class="tipper-tooltip">${tooltipText}</span>
+        </div>`;
+    };
+
     if (recentResults.length > 0) {
         html += `<h3 class="dashboard-section-title">Senaste resultat</h3>`;
         recentResults.forEach(match => {
@@ -536,7 +576,11 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 <span style="flex:1; text-align:left; ${aw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
             </div>`;
 
-            // My tip
+            // Max possible points for a score-tip on this match (exact tippers get this)
+            const maxScorePts = (scoring.matchResult || 0) + (scoring.matchHomeGoals || 0) + (scoring.matchAwayGoals || 0) + (scoring.exactScore || 0);
+            const winnerOnlyPts = scoring.matchResult || 0;
+
+            // My tip row
             if (me) {
                 if (!match._isKnockout) {
                     const myTip = me.matchTips[match.matchId];
@@ -544,7 +588,11 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         const myExact = myTip.homeScore === h && myTip.awayScore === a2;
                         const myWinner = !myExact && sign(myTip.homeScore - myTip.awayScore) === sign(h - a2);
                         const tipStyle = myExact ? 'color:#28a745; font-weight:700;' : (myWinner ? 'color:#17a2b8;' : 'color:#dc3545;');
-                        html += `<div style="font-size:12px; ${tipStyle} margin-top:6px; text-align:center;">Ditt tips: ${myTip.homeScore} - ${myTip.awayScore}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`;
+                        const myPts = calcTipPoints(myTip.homeScore, myTip.awayScore, h, a2);
+                        html += renderRow(
+                            `<div style="font-size:12px; ${tipStyle}">Ditt tips: ${myTip.homeScore} - ${myTip.awayScore}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`,
+                            pointsBadge(myPts)
+                        );
                     }
                 } else if (me.knockoutScores || me.knockoutPicks) {
                     const roundKey = match._koRoundKey;
@@ -561,7 +609,11 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                             const myExact = tipH === h && tipA === a2;
                             const myWinner = !myExact && sign(tipH - tipA) === sign(h - a2);
                             const tipStyle = myExact ? 'color:#28a745; font-weight:700;' : (myWinner ? 'color:#17a2b8;' : 'color:#dc3545;');
-                            html += `<div style="font-size:12px; ${tipStyle} margin-top:6px; text-align:center;">Ditt tips: ${tipH} – ${tipA}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`;
+                            const myPts = calcTipPoints(tipH, tipA, h, a2);
+                            html += renderRow(
+                                `<div style="font-size:12px; ${tipStyle}">Ditt tips: ${tipH} – ${tipA}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`,
+                                pointsBadge(myPts)
+                            );
                         }
                     }
 
@@ -574,15 +626,19 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         if (picked) {
                             const correct = picked === match._winner;
                             const advStyle = correct ? 'color:#28a745; font-weight:700;' : 'color:#dc3545;';
-                            html += `<div style="font-size:12px; ${advStyle} margin-top:2px; text-align:center;">Tippat vidare: ${f(picked)}${picked}${correct ? ' ✓' : ''}</div>`;
+                            const advPts = correct ? (scoring[`ko_${roundKey}`] || 0) : 0;
+                            html += renderRow(
+                                `<div style="font-size:12px; ${advStyle}">Tippat vidare: ${f(picked)}${picked}${correct ? ' ✓' : ''}</div>`,
+                                pointsBadge(advPts)
+                            );
                         }
                     }
                 }
             }
 
-            // Tippers analysis
+            // Tippers analysis — build exact + winner lists, then render each with its points badge
+            const exactTippers = [], winnerTippers = [];
             if (!match._isKnockout) {
-                const exactTippers = [], winnerTippers = [];
                 users.forEach(u => {
                     if (u.userId === currentUserId) return;
                     const tip = u.matchTips[match.matchId];
@@ -590,12 +646,10 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                     if (tip.homeScore === h && tip.awayScore === a2) exactTippers.push(u.name);
                     else if (sign(tip.homeScore - tip.awayScore) === sign(h - a2)) winnerTippers.push(u.name);
                 });
-                html += renderTippersSummary(exactTippers, winnerTippers);
             } else {
                 const roundKey = match._koRoundKey;
                 const mi = match._koMatchIdx;
                 const leg = match._koLeg;
-                const exactTippers = [], winnerTippers = [];
                 users.forEach(u => {
                     if (u.userId === currentUserId) return;
                     const tip = u.knockoutScores?.[roundKey]?.[mi];
@@ -610,7 +664,15 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         }
                     }
                 });
-                html += renderTippersSummary(exactTippers, winnerTippers);
+            }
+            if (exactTippers.length > 0) {
+                html += renderRow(tippersLineInner('🎯', exactTippers, 'tippade exakt rätt', '#28a745'), pointsBadge(maxScorePts));
+            }
+            if (winnerTippers.length > 0) {
+                html += renderRow(tippersLineInner('✓', winnerTippers, 'tippade rätt vinnare', '#17a2b8'), pointsBadge(winnerOnlyPts));
+            }
+            if (exactTippers.length === 0 && winnerTippers.length === 0) {
+                html += `<div style="font-size:12px; color:#999; margin-top:4px; text-align:center;">Ingen annan tippade rätt</div>`;
             }
 
             html += `</div>`;
@@ -762,12 +824,24 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
     });
     if (Object.keys(champCounts).length > 0) {
         html += `<h3 class="dashboard-section-title">🏆 Tippade mästare</h3>`;
-        html += `<div class="stat-card">`;
+        html += `<div class="stat-card" style="padding:12px;">`;
+        html += `<div class="champ-grid">`;
         const totalC = Object.values(champCounts).reduce((a, b) => a + b, 0);
-        Object.entries(champCounts).sort((a, b) => b[1] - a[1]).forEach(([team, count]) => {
-            html += renderStatBar(team, Math.round((count / totalC) * 100));
+        const sorted = Object.entries(champCounts).sort((a, b) => b[1] - a[1]);
+        const maxPct = Math.round((sorted[0][1] / totalC) * 100) || 1;
+        sorted.forEach(([team, count], i) => {
+            const pct = Math.round((count / totalC) * 100);
+            // Fill length is relative to the top-picked team so the bar is visible even at 5%
+            const fillLen = Math.max(6, Math.round((pct / maxPct) * 100));
+            const bg = `linear-gradient(90deg, rgba(23,162,184,0.22), rgba(40,167,69,0.22) ${fillLen}%, transparent ${fillLen}%)`;
+            html += `<div class="champ-row" style="background-image:${bg};">
+                <span class="champ-rank">${i + 1}</span>
+                <span class="champ-flag">${f(team)}</span>
+                <span class="champ-name">${team}</span>
+                <span class="champ-pct">${pct}%</span>
+            </div>`;
         });
-        html += `</div>`;
+        html += `</div></div>`;
     }
 
     // Alla tipsare link (only if tips visible)

@@ -108,7 +108,7 @@ function renderGroupTables(allMatches, results) {
                 <td>${t.gd > 0 ? '+' + t.gd : t.gd}</td><td><strong>${t.pts}</strong></td></tr>`;
         });
         html += `</tbody></table>`;
-        if (hasAnyResult) html += `<div style="padding: 8px 12px; border-top: 1px solid #eee;">${matchListHtml}</div>`;
+        if (matchListHtml) html += `<div style="padding: 8px 12px; border-top: 1px solid #eee;">${matchListHtml}</div>`;
         html += `</div>`;
     });
     html += '</div>';
