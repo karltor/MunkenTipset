@@ -1,6 +1,7 @@
 import { db, auth } from './config.js';
 import { collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { f } from './wizard.js';
+import { teamImg } from './team-data.js';
 import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
 import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType, isTwoLegged, getSpecialQuestionsConfig, hasSpecialQuestions } from './tournament-config.js';
@@ -834,9 +835,10 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             // Fill length is relative to the top-picked team so the bar is visible even at 5%
             const fillLen = Math.max(6, Math.round((pct / maxPct) * 100));
             const bg = `linear-gradient(90deg, rgba(23,162,184,0.22), rgba(40,167,69,0.22) ${fillLen}%, transparent ${fillLen}%)`;
+            const flagHtml = teamImg(team, { size: 18, height: 14, style: 'margin:0; vertical-align:middle; flex:0 0 auto;' });
             html += `<div class="champ-row" style="background-image:${bg};">
                 <span class="champ-rank">${i + 1}</span>
-                <span class="champ-flag">${f(team)}</span>
+                <span class="champ-flag">${flagHtml}</span>
                 <span class="champ-name">${team}</span>
                 <span class="champ-pct">${pct}%</span>
             </div>`;
