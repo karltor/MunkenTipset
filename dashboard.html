@@ -99,16 +99,6 @@
         </div>
     </div>
 
-    <!-- Poänginfo modal -->
-    <div id="scoring-info-overlay" class="scoring-info-overlay" style="display:none;">
-        <div class="scoring-info-card" id="scoring-info-card">
-            <button class="scoring-info-close" id="scoring-info-close" aria-label="Stäng">×</button>
-            <h2 style="margin-top:0;">Så räknas poängen</h2>
-            <p class="scoring-info-sub">Admin har ställt in följande poängregler för tipset. Endast regler som faktiskt ger poäng visas.</p>
-            <div id="scoring-info-content"></div>
-        </div>
-    </div>
-
     <nav class="navbar">
         <h1 class="logo-text">MunkenTipset 2026</h1>
         <div>
@@ -126,7 +116,7 @@
             <button class="tab-btn" data-target="bracket-tab" id="bracket-tab-btn" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
             <button class="tab-btn" data-target="special-tab" id="special-tab-btn" style="border-color: #e67e22; color: #1a1a1a; display:none;">⭐ Specialtips</button>
             <button class="tab-btn" data-target="start-tab" data-action="show-all-tips" id="all-tipsters-tab-btn" style="border-color: #6c757d; color: #1a1a1a; display:none;">👥 Alla tipsare</button>
-            <button class="tab-btn" data-target="start-tab" data-action="show-scoring-info" id="scoring-info-tab-btn" style="border-color: #17a2b8; color: #1a1a1a; display:none;">ℹ️ Poänginfo</button>
+            <button class="tab-btn" data-target="scoring-info-tab" id="scoring-info-tab-btn" style="border-color: #17a2b8; color: #1a1a1a; display:none;">ℹ️ Poänginfo</button>
             <button class="tab-btn" data-target="results-tab" style="border-color: #6f42c1; color: #1a1a1a;">📊 Matchresultat</button>
             <button class="tab-btn" data-target="chat-tab" style="border-color: #17a2b8; color: #1a1a1a;">💬 Chatt</button>
         </div>
@@ -189,6 +179,19 @@
         <!-- START TAB -->
         <div id="start-tab" class="tab-content active">
             <div id="community-stats"></div>
+        </div>
+
+        <!-- POÄNGINFO TAB -->
+        <div id="scoring-info-tab" class="tab-content">
+            <div class="stat-card" style="margin-bottom:16px;">
+                <h2 style="margin-top:0;">Så räknas poängen</h2>
+                <p style="color:#666; font-size:13px; margin:0;">
+                    Admin har ställt in poängreglerna för tipset. Endast regler som faktiskt ger poäng visas här.
+                </p>
+            </div>
+            <div id="scoring-info-content" class="scoring-info-grid">
+                <p style="text-align:center; color:#999;">Laddar...</p>
+            </div>
         </div>
 
         <!-- WIZARD TAB -->
@@ -311,6 +314,17 @@
                         <label class="settings-radio"><input type="radio" name="email-pref" value="none"> <strong>Inga mejl</strong> — Jag kollar hemsidan själv</label>
                     </div>
                     <button class="btn" id="settings-save-email-pref" style="margin-top:12px; width:100%;">Spara</button>
+                </div>
+                <div class="admin-section" style="margin-bottom:16px;">
+                    <h4 style="margin:0 0 4px; font-size:14px;">Utseende</h4>
+                    <p style="font-size:12px; color:#666; margin:0 0 10px;">Välj ljust eller mörkt läge. Inställningen sparas i din webbläsare.</p>
+                    <div class="settings-toggle-row">
+                        <span class="settings-toggle-label">Mörkt läge</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settings-dark-mode-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
                 </div>
                 <div class="admin-section" style="margin-bottom:0;">
                     <h4 style="margin:0 0 4px; font-size:14px;">Välkomstpopupen</h4>

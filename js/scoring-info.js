@@ -1,7 +1,12 @@
 import { db } from './config.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { DEFAULT_SCORING, buildDefaultScoring } from './scoring.js';
-import { getKnockoutRounds, getSpecialQuestionsConfig, hasSpecialQuestions } from './tournament-config.js';
+import {
+    getKnockoutRounds,
+    getSpecialQuestionsConfig,
+    hasSpecialQuestions,
+    getChampionLabel,
+} from './tournament-config.js';
 
 let _cachedScoring = null;
 
@@ -18,101 +23,96 @@ async function fetchScoring() {
     return _cachedScoring;
 }
 
-// Public: clear cache (e.g. when admin bumps dataVersion)
 export function invalidateScoringInfoCache() {
     _cachedScoring = null;
 }
 
-function fmtP(n) { return `${n} p`; }
+// Convert e.g. "Ditt VM-Guld 2026" → "Rätt VM-Guld 2026"
+function championRuleLabel() {
+    const raw = (getChampionLabel() || '').trim();
+    if (!raw) return 'Rätt turneringsvinnare';
+    if (/^ditt\s+/i.test(raw)) return raw.replace(/^ditt\s+/i, 'Rätt ');
+    if (/^din\s+/i.test(raw)) return raw.replace(/^din\s+/i, 'Rätt ');
+    return 'Rätt ' + raw.charAt(0).toLowerCase() + raw.slice(1);
+}
 
-// Build list of active (non-zero) scoring rules grouped by category.
+// Build list of active (non-zero) scoring rules.
 function buildActiveRules(scoring) {
     const rules = [];
 
     if (scoring.matchResult > 0) {
-        rules.push({
-            label: 'Rätt 1X2',
-            desc: 'Du tippade rätt vinnare eller oavgjort i en match.',
-            pts: scoring.matchResult,
-        });
+        rules.push({ label: 'Rätt 1X2', desc: 'Du tippade rätt vinnare eller oavgjort i en match.', pts: scoring.matchResult });
     }
     if (scoring.matchHomeGoals > 0) {
-        rules.push({
-            label: 'Rätt antal hemmamål',
-            desc: 'Antal mål du tippade på hemmalaget stämmer.',
-            pts: scoring.matchHomeGoals,
-        });
+        rules.push({ label: 'Rätt antal hemmamål', desc: 'Antal mål du tippade på hemmalaget stämmer.', pts: scoring.matchHomeGoals });
     }
     if (scoring.matchAwayGoals > 0) {
-        rules.push({
-            label: 'Rätt antal bortamål',
-            desc: 'Antal mål du tippade på bortalaget stämmer.',
-            pts: scoring.matchAwayGoals,
-        });
+        rules.push({ label: 'Rätt antal bortamål', desc: 'Antal mål du tippade på bortalaget stämmer.', pts: scoring.matchAwayGoals });
     }
     if (scoring.exactScore > 0) {
-        rules.push({
-            label: 'Exakt resultat (bonus)',
-            desc: 'Extra bonus när hela matchresultatet är exakt rätt.',
-            pts: scoring.exactScore,
-        });
+        rules.push({ label: 'Exakt resultat (bonus)', desc: 'Extra bonus när hela matchresultatet är exakt rätt.', pts: scoring.exactScore });
     }
     if (scoring.groupWinner > 0) {
-        rules.push({
-            label: 'Rätt gruppetta',
-            desc: 'Det lag du tippade som gruppetta vann gruppen.',
-            pts: scoring.groupWinner,
-        });
+        rules.push({ label: 'Rätt gruppetta', desc: 'Det lag du tippade som gruppetta vann gruppen.', pts: scoring.groupWinner });
     }
     if (scoring.groupRunnerUp > 0) {
-        rules.push({
-            label: 'Rätt grupptvåa',
-            desc: 'Det lag du tippade som grupptvåa slutade tvåa.',
-            pts: scoring.groupRunnerUp,
-        });
+        rules.push({ label: 'Rätt grupptvåa', desc: 'Det lag du tippade som grupptvåa slutade tvåa.', pts: scoring.groupRunnerUp });
     }
     if (scoring.groupThird > 0) {
-        rules.push({
-            label: 'Rätt grupptrea',
-            desc: 'Det lag du tippade som grupptrea slutade trea.',
-            pts: scoring.groupThird,
-        });
+        rules.push({ label: 'Rätt grupptrea', desc: 'Det lag du tippade som grupptrea slutade trea.', pts: scoring.groupThird });
     }
 
-    // Knockout advancement per round
+    // Knockout: non-final rounds award per team that advanced to that round.
+    // The final round instead awards for picking the actual champion — label it
+    // with the tournament's champion label so it reads "Rätt VM-Guld 2026".
     const koRounds = getKnockoutRounds();
-    koRounds.forEach(r => {
+    const finalIdx = koRounds.length - 1;
+    koRounds.forEach((r, i) => {
         const pts = scoring[`ko_${r.key}`];
-        if (pts && pts > 0) {
+        if (!pts || pts <= 0) return;
+        if (i === finalIdx) {
             rules.push({
-                label: `Rätt lag vidare till ${r.label.toLowerCase()}`,
+                label: championRuleLabel(),
+                desc: 'Du tippade rätt lag som vinner hela turneringen.',
+                pts,
+            });
+        } else {
+            rules.push({
+                label: `Rätt lag till ${r.label.toLowerCase()}`,
                 desc: 'Per lag du tippade som tog sig vidare till denna runda.',
                 pts,
             });
         }
     });
 
-    // Special questions (each question can have its own point value)
+    // Special questions — group by points. If all share the same value we show
+    // a single compact row; otherwise one row per points-value cluster.
     if (hasSpecialQuestions()) {
         const sp = getSpecialQuestionsConfig();
-        (sp?.questions || []).forEach(q => {
-            const pts = Number(q.points || 0);
-            if (pts > 0) {
+        const questions = (sp?.questions || []).filter(q => Number(q.points || 0) > 0);
+        if (questions.length > 0) {
+            const byPts = new Map();
+            questions.forEach(q => {
+                const p = Number(q.points);
+                if (!byPts.has(p)) byPts.set(p, []);
+                byPts.get(p).push(q);
+            });
+            [...byPts.entries()].sort((a, b) => b[0] - a[0]).forEach(([pts, qs]) => {
                 rules.push({
-                    label: q.label || q.question || 'Specialfråga',
-                    desc: 'Rätt svar på denna specialfråga.',
+                    label: qs.length > 1 ? `Specialfrågor (${qs.length} st)` : 'Specialfråga',
+                    desc: qs.length > 1
+                        ? `Varje rätt svar på en specialfråga ger ${pts} p.`
+                        : '',
                     pts,
                 });
-            }
-        });
+            });
+        }
     }
 
     return rules;
 }
 
-// Build a realistic 2-match example using only the active scoring rules.
-// Scenario 1: rätt vinnare + rätt ena lagets mål (inte exakt)
-// Scenario 2: fel vinnare men rätt antal bortamål
+// Two-match worked example using only the active scoring rules.
 function buildExample(scoring) {
     const hasSign = scoring.matchResult > 0;
     const hasHome = scoring.matchHomeGoals > 0;
@@ -121,61 +121,48 @@ function buildExample(scoring) {
 
     const matches = [];
 
-    // Match 1 — Sverige 2–1 Norge. Tips: 3–1.
-    const m1 = {
-        home: 'Sverige', away: 'Norge',
-        realH: 2, realA: 1,
-        tipH: 3, tipA: 1,
-        breakdown: [],
-        points: 0,
-    };
-    const m1SignCorrect = Math.sign(m1.tipH - m1.tipA) === Math.sign(m1.realH - m1.realA);
-    const m1HomeCorrect = m1.tipH === m1.realH;
-    const m1AwayCorrect = m1.tipA === m1.realA;
-    const m1ExactCorrect = m1HomeCorrect && m1AwayCorrect;
+    // Match 1: Sverige 2–1 Norge. Tips: 3–1.
+    // Rätt vinnare + rätt bortamål, fel hemmamål (inte exakt).
+    const m1 = { home: 'Sverige', away: 'Norge', realH: 2, realA: 1, tipH: 3, tipA: 1, breakdown: [], points: 0 };
+    const m1SignOK = Math.sign(m1.tipH - m1.tipA) === Math.sign(m1.realH - m1.realA);
+    const m1HomeOK = m1.tipH === m1.realH;
+    const m1AwayOK = m1.tipA === m1.realA;
+    const m1ExactOK = m1HomeOK && m1AwayOK;
     if (hasSign) {
-        m1.breakdown.push({ ok: m1SignCorrect, txt: m1SignCorrect ? `Rätt 1X2 (du tippade hemmaseger)` : 'Fel 1X2', pts: m1SignCorrect ? scoring.matchResult : 0 });
-        if (m1SignCorrect) m1.points += scoring.matchResult;
+        m1.breakdown.push({ ok: m1SignOK, txt: 'Rätt 1X2 (du tippade hemmaseger)', pts: m1SignOK ? scoring.matchResult : 0 });
+        if (m1SignOK) m1.points += scoring.matchResult;
     }
     if (hasHome) {
-        m1.breakdown.push({ ok: m1HomeCorrect, txt: m1HomeCorrect ? `Rätt antal hemmamål (${m1.realH})` : `Fel antal hemmamål (du tippade ${m1.tipH}, rätt var ${m1.realH})`, pts: m1HomeCorrect ? scoring.matchHomeGoals : 0 });
-        if (m1HomeCorrect) m1.points += scoring.matchHomeGoals;
+        m1.breakdown.push({ ok: m1HomeOK, txt: `Fel antal hemmamål (du tippade ${m1.tipH}, rätt var ${m1.realH})`, pts: 0 });
     }
     if (hasAway) {
-        m1.breakdown.push({ ok: m1AwayCorrect, txt: m1AwayCorrect ? `Rätt antal bortamål (${m1.realA})` : `Fel antal bortamål`, pts: m1AwayCorrect ? scoring.matchAwayGoals : 0 });
-        if (m1AwayCorrect) m1.points += scoring.matchAwayGoals;
+        m1.breakdown.push({ ok: m1AwayOK, txt: `Rätt antal bortamål (${m1.realA})`, pts: scoring.matchAwayGoals });
+        m1.points += scoring.matchAwayGoals;
     }
     if (hasExact) {
-        m1.breakdown.push({ ok: m1ExactCorrect, txt: m1ExactCorrect ? 'Exakt resultat (bonus)' : 'Inte exakt resultat', pts: m1ExactCorrect ? scoring.exactScore : 0 });
-        if (m1ExactCorrect) m1.points += scoring.exactScore;
+        m1.breakdown.push({ ok: m1ExactOK, txt: 'Inte exakt resultat', pts: 0 });
     }
     matches.push(m1);
 
-    // Match 2 — Danmark 0–2 Finland. Tips: 2–2.
-    // Fel vinnare (du tippade oavgjort, Finland vann) men rätt antal bortamål.
-    const m2 = {
-        home: 'Danmark', away: 'Finland',
-        realH: 0, realA: 2,
-        tipH: 2, tipA: 2,
-        breakdown: [],
-        points: 0,
-    };
-    const m2SignCorrect = Math.sign(m2.tipH - m2.tipA) === Math.sign(m2.realH - m2.realA);
-    const m2HomeCorrect = m2.tipH === m2.realH;
-    const m2AwayCorrect = m2.tipA === m2.realA;
-    const m2ExactCorrect = m2HomeCorrect && m2AwayCorrect;
+    // Match 2: Danmark 0–2 Finland. Tips: 2–2.
+    // Fel vinnare men rätt antal bortamål.
+    const m2 = { home: 'Danmark', away: 'Finland', realH: 0, realA: 2, tipH: 2, tipA: 2, breakdown: [], points: 0 };
+    const m2SignOK = Math.sign(m2.tipH - m2.tipA) === Math.sign(m2.realH - m2.realA);
+    const m2HomeOK = m2.tipH === m2.realH;
+    const m2AwayOK = m2.tipA === m2.realA;
+    const m2ExactOK = m2HomeOK && m2AwayOK;
     if (hasSign) {
-        m2.breakdown.push({ ok: m2SignCorrect, txt: `Fel 1X2 (du tippade oavgjort, Finland vann)`, pts: 0 });
+        m2.breakdown.push({ ok: m2SignOK, txt: 'Fel 1X2 (du tippade oavgjort, Finland vann)', pts: 0 });
     }
     if (hasHome) {
-        m2.breakdown.push({ ok: m2HomeCorrect, txt: `Fel antal hemmamål (du tippade ${m2.tipH}, rätt var ${m2.realH})`, pts: 0 });
+        m2.breakdown.push({ ok: m2HomeOK, txt: `Fel antal hemmamål (du tippade ${m2.tipH}, rätt var ${m2.realH})`, pts: 0 });
     }
     if (hasAway) {
-        m2.breakdown.push({ ok: m2AwayCorrect, txt: `Rätt antal bortamål (${m2.realA})`, pts: scoring.matchAwayGoals });
+        m2.breakdown.push({ ok: m2AwayOK, txt: `Rätt antal bortamål (${m2.realA})`, pts: scoring.matchAwayGoals });
         m2.points += scoring.matchAwayGoals;
     }
     if (hasExact) {
-        m2.breakdown.push({ ok: m2ExactCorrect, txt: 'Inte exakt resultat', pts: 0 });
+        m2.breakdown.push({ ok: m2ExactOK, txt: 'Inte exakt resultat', pts: 0 });
     }
     matches.push(m2);
 
@@ -183,30 +170,32 @@ function buildExample(scoring) {
     return { matches, total };
 }
 
-function renderRulesHtml(rules) {
+function renderRulesPanel(rules) {
+    let html = `<div class="scoring-info-card-panel"><h3>Aktiva poängregler</h3>`;
     if (rules.length === 0) {
-        return `<p style="color:#888; font-size:13px;">Inga aktiva poängregler är inställda ännu.</p>`;
+        html += `<p style="color:#888; font-size:13px;">Inga aktiva poängregler är inställda ännu.</p>`;
+    } else {
+        html += `<div class="scoring-rules-list">`;
+        rules.forEach(r => {
+            html += `<div class="scoring-rule">
+                <div>
+                    <div class="scoring-rule-label">${r.label}</div>
+                    ${r.desc ? `<div class="scoring-rule-desc">${r.desc}</div>` : ''}
+                </div>
+                <div class="scoring-rule-pts">+${r.pts} p</div>
+            </div>`;
+        });
+        html += `</div>`;
     }
-    let html = `<div class="scoring-rules-list">`;
-    rules.forEach(r => {
-        html += `<div class="scoring-rule">
-            <div>
-                <div class="scoring-rule-label">${r.label}</div>
-                <div class="scoring-rule-desc">${r.desc}</div>
-            </div>
-            <div class="scoring-rule-pts">+${r.pts} p</div>
-        </div>`;
-    });
     html += `</div>`;
     return html;
 }
 
-function renderExampleHtml(example, scoring) {
+function renderExamplePanel(example, scoring) {
     const hasMatchScoring = scoring.matchResult > 0 || scoring.matchHomeGoals > 0 || scoring.matchAwayGoals > 0 || scoring.exactScore > 0;
     if (!hasMatchScoring) return '';
 
-    let html = `<div class="scoring-example">`;
-    html += `<h3>Räkneexempel — 2 matcher</h3>`;
+    let html = `<div class="scoring-info-card-panel"><h3>Räkneexempel — 2 matcher</h3>`;
     example.matches.forEach(m => {
         html += `<div class="scoring-example-match">
             <div class="scoring-example-match-head">
@@ -228,42 +217,15 @@ function renderExampleHtml(example, scoring) {
     return html;
 }
 
-export async function openScoringInfo() {
-    const overlay = document.getElementById('scoring-info-overlay');
-    const content = document.getElementById('scoring-info-content');
-    if (!overlay || !content) return;
+export async function renderScoringInfoTab() {
+    const container = document.getElementById('scoring-info-content');
+    if (!container) return;
 
-    content.innerHTML = `<p style="text-align:center; color:#999;">Laddar...</p>`;
-    overlay.style.display = 'flex';
+    container.innerHTML = `<p style="text-align:center; color:#999; grid-column: 1 / -1;">Laddar...</p>`;
 
     const scoring = await fetchScoring();
     const rules = buildActiveRules(scoring);
     const example = buildExample(scoring);
 
-    let html = renderRulesHtml(rules);
-    html += renderExampleHtml(example, scoring);
-    content.innerHTML = html;
-}
-
-export function closeScoringInfo() {
-    const overlay = document.getElementById('scoring-info-overlay');
-    if (overlay) overlay.style.display = 'none';
-}
-
-// Wire up close handlers once on import
-export function initScoringInfo() {
-    const overlay = document.getElementById('scoring-info-overlay');
-    const closeBtn = document.getElementById('scoring-info-close');
-    if (closeBtn) closeBtn.addEventListener('click', closeScoringInfo);
-    if (overlay) {
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeScoringInfo();
-        });
-    }
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            const o = document.getElementById('scoring-info-overlay');
-            if (o && o.style.display !== 'none') closeScoringInfo();
-        }
-    });
+    container.innerHTML = renderRulesPanel(rules) + renderExamplePanel(example, scoring);
 }

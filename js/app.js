@@ -6,17 +6,19 @@ import { initWizard, getGroupPicks, setWizardLocked } from './wizard.js';
 import { initBracket, setBracketLocked } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
 import { showAllTips } from './compare.js';
-import { openScoringInfo, initScoringInfo, invalidateScoringInfoCache } from './scoring-info.js';
+import { renderScoringInfoTab, invalidateScoringInfoCache } from './scoring-info.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
 import { initSpecialTips, setSpecialLocked } from './special-tips.js';
 import { loadResults } from './results.js';
 import { applyStoredTheme } from './admin-theme.js';
+import { getColorMode, applyColorMode } from './color-mode.js';
 import { loadEmailPref, showEmailPrefPopup, initSettingsTab, WELCOME_DISMISSED_KEY } from './user-settings.js';
 import { initChat, destroyChat, setChatAdmin } from './chat.js';
 import { toggleChatAdminPanel } from './chat-admin.js';
 
-// Apply saved theme immediately before anything renders
+// Apply saved theme and color mode immediately before anything renders
 applyStoredTheme();
+applyColorMode(getColorMode());
 
 // Loading screen: hide after minimum duration (to cover font/layout flashes)
 const _loaderStart = Date.now();
@@ -121,12 +123,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (btnEl.classList.contains('locked')) return;
         if (!target) return;
 
-        // Poänginfo opens a modal without switching the active tab
-        if (action === 'show-scoring-info') {
-            openScoringInfo();
-            return;
-        }
-
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
         btnEl.classList.add('active');
         document.getElementById(target).classList.add('active');
@@ -137,6 +133,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (target === 'bracket-tab') initBracket(getGroupPicks(), globalTipsLocked);
         if (target === 'special-tab') initSpecialTips(globalTipsLocked);
         if (target === 'results-tab') loadResults(allMatchesData);
+        if (target === 'scoring-info-tab') renderScoringInfoTab();
         if (target === 'start-tab') {
             // "Alla tipsare" button: load stats first (populates compare cache),
             // then jump straight into the compare view.
@@ -146,9 +143,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (target === 'chat-tab') initChat();
     });
 });
-
-// Hook up Poänginfo modal close handlers
-initScoringInfo();
 
 // Admin button → toggle admin tab
 document.getElementById('admin-btn').addEventListener('click', () => {
@@ -453,15 +447,24 @@ function applyLiveUnlock(user) {
     unlockTab('wizard-tab');
     unlockTab('special-tab');
 
-    // If the "Alla tipsare" shortcut was the active tab, transfer the active
-    // state to the regular Start button before we hide it.
+    // If one of the lock-only shortcut buttons was active, transfer the active
+    // state to the regular Start button before we hide them.
     const allTipsBtn = document.getElementById('all-tipsters-tab-btn');
-    if (allTipsBtn?.classList.contains('active')) {
-        allTipsBtn.classList.remove('active');
-        document.querySelector('.tab-btn[data-target="start-tab"]')?.classList.add('active');
+    const scoringInfoBtn = document.getElementById('scoring-info-tab-btn');
+    [allTipsBtn, scoringInfoBtn].forEach(b => {
+        if (b?.classList.contains('active')) {
+            b.classList.remove('active');
+            document.querySelector('.tab-btn[data-target="start-tab"]')?.classList.add('active');
+        }
+    });
+    // If the scoring-info tab itself was active, swap content back to start
+    const scoringInfoTab = document.getElementById('scoring-info-tab');
+    if (scoringInfoTab?.classList.contains('active')) {
+        scoringInfoTab.classList.remove('active');
+        document.getElementById('start-tab')?.classList.add('active');
     }
 
-    // Restore the original tip-tab buttons and hide the "Alla tipsare" shortcut.
+    // Restore the original tip-tab buttons and hide the shortcut buttons.
     applyTabVisibility();
     // Bracket depends on whether user has done groups — re-evaluate async
     (async () => {

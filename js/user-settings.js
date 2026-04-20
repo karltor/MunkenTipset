@@ -1,5 +1,6 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+import { getColorMode, setColorMode } from './color-mode.js';
 
 const EMAIL_PREF_KEY = 'emailPref'; // 'often' | 'few' | 'none'
 export const WELCOME_DISMISSED_KEY = 'munkentipset_welcome_dismissed';
@@ -42,6 +43,15 @@ export async function initSettingsTab() {
         btn.style.background = '#28a745';
         setTimeout(() => { btn.textContent = 'Spara'; btn.style.background = ''; }, 2000);
     });
+
+    // Dark mode toggle
+    const darkToggle = document.getElementById('settings-dark-mode-toggle');
+    if (darkToggle) {
+        darkToggle.checked = getColorMode() === 'dark';
+        darkToggle.addEventListener('change', () => {
+            setColorMode(darkToggle.checked ? 'dark' : 'light');
+        });
+    }
 
     // Welcome popup toggle
     const welcomeToggle = document.getElementById('settings-welcome-toggle');

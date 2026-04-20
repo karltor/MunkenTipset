@@ -57,3 +57,25 @@
     --color-table-header-bg: #1a1a1a;
     --color-table-header-text: #ffffff;
 }
+
+/* ── Dark mode: tells UA form controls to render with dark colors and patches
+   a handful of hard-coded colors that would otherwise be unreadable. The
+   color-mode JS module also sets the --color-* vars inline on :root, which
+   covers the rest of the theme. ─────────────────────────────────────────── */
+:root[data-color-mode="dark"] {
+    color-scheme: dark;
+}
+:root[data-color-mode="dark"] body {
+    color: var(--color-text);
+}
+:root[data-color-mode="dark"] .tabs .tab-btn:not(.active) {
+    color: #dcdcdc !important;
+}
+:root[data-color-mode="dark"] .stat-card h3 {
+    color: var(--color-text);
+    border-bottom-color: color-mix(in srgb, var(--color-text) 18%, transparent);
+}
+:root[data-color-mode="dark"] .admin-nav-btn,
+:root[data-color-mode="dark"] .results-sub-btn {
+    color: #dcdcdc;
+}
