@@ -5,16 +5,16 @@
    ────────────────────────────────────────────────────────── */
 :root {
     /* ── Typsnitt ── */
-    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-heading: 'Playfair Display', serif;
+    --font-body: 'Trebuchet MS', sans-serif;
+    --font-heading: 'Trebuchet MS', sans-serif;
 
     /* ── Sidans bakgrund ── */
-    --color-page-bg: #f4f7f6;
+    --color-page-bg: #ebebeb;
     --color-text: #2c3e50;
 
     /* ── Navbar ── */
-    --color-navbar-bg: #1a1a1a;
-    --color-navbar-text: #ffffff;
+    --color-navbar-bg: #adadad;
+    --color-navbar-text: #000000;
 
     /* ── Knappar ── */
     --color-btn-primary: #28a745;
@@ -22,12 +22,12 @@
     --color-btn-warning: #ffc107;
 
     /* ── Flikar / Tabs ── */
-    --color-tab-active-bg: #1a1a1a;
-    --color-tab-active-text: #ffffff;
+    --color-tab-active-bg: #ffffff;
+    --color-tab-active-text: #000000;
 
     /* ── Kort & paneler ── */
     --color-card-bg: #ffffff;
-    --color-card-border: #eaeaea;
+    --color-card-border: #d6d6d6;
     --color-card-shadow: rgba(0, 0, 0, 0.05);
 
     /* ── Slutspelsbakgrund (bracket) ── */
