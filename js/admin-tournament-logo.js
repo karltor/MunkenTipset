@@ -1,13 +1,39 @@
 /**
  * Logo picker + auto-generated background color suggestions.
  *
- * The list below controls which *-logo.webp files are selectable as
- * tournament title images. To add a new logo: drop the .webp in the
- * repo root with "-logo" in the filename, then add an entry here.
+ * Discovery: the picker reads the repo root via GitHub's public API and
+ * surfaces every file whose name matches `*-logo.(webp|png|svg|jpg)`.
+ * Admin can also type any filename manually if the API is unavailable
+ * or they're testing a file that isn't in the default branch yet.
  */
-export const AVAILABLE_LOGOS = [
-    { file: 'nyamunken-logo.webp', label: 'Nya Munken' },
-];
+const GH_REPO = 'karltor/MunkenTipset';
+const LOGO_PATTERN = /-logo\.(webp|png|svg|jpe?g)$/i;
+let _cachedLogos = null;
+
+function prettyLabel(filename) {
+    return filename
+        .replace(LOGO_PATTERN, '')
+        .replace(/[-_]+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, c => c.toUpperCase()) || filename;
+}
+
+export async function discoverLogos() {
+    if (_cachedLogos) return _cachedLogos;
+    try {
+        const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/`, {
+            headers: { 'Accept': 'application/vnd.github+json' },
+        });
+        if (!res.ok) throw new Error('api');
+        const files = await res.json();
+        _cachedLogos = files
+            .filter(f => f.type === 'file' && LOGO_PATTERN.test(f.name))
+            .map(f => ({ file: f.name, label: prettyLabel(f.name) }));
+    } catch {
+        _cachedLogos = [];
+    }
+    return _cachedLogos;
+}
 
 // ── Color extraction ───────────────────────────────────────────────
 // Samples non-transparent pixels and returns the dominant RGB plus a

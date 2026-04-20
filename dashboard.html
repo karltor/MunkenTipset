@@ -140,7 +140,13 @@
                         logoEl.textContent = cfg.name;
                     }
                     if (lc.navbarBg) {
-                        document.documentElement.style.setProperty('--color-navbar-bg', lc.navbarBg);
+                        // Respect per-user theme override from Utseende
+                        var userNav = null;
+                        try {
+                            var tRaw = localStorage.getItem('munkentipset_theme');
+                            userNav = tRaw ? (JSON.parse(tRaw)['--color-navbar-bg'] || null) : null;
+                        } catch(e) {}
+                        if (!userNav) document.documentElement.style.setProperty('--color-navbar-bg', lc.navbarBg);
                     }
                 }
                 var stages = cfg.stages || [];
