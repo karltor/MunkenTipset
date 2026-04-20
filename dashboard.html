@@ -129,9 +129,19 @@
                 var cfg = cached && cached.config;
                 if (!cfg) return;
                 if (cfg.name) {
-                    var logo = document.querySelector('.logo-text');
-                    if (logo) logo.textContent = cfg.name;
                     document.title = cfg.name;
+                }
+                var logoEl = document.querySelector('.logo-text');
+                if (logoEl) {
+                    var lc = cfg.logo || {};
+                    if (lc.type === 'image' && lc.image) {
+                        logoEl.innerHTML = '<img src="' + lc.image + '" alt="' + (cfg.name || 'logo') + '" class="logo-img">';
+                    } else if (cfg.name) {
+                        logoEl.textContent = cfg.name;
+                    }
+                    if (lc.navbarBg) {
+                        document.documentElement.style.setProperty('--color-navbar-bg', lc.navbarBg);
+                    }
                 }
                 var stages = cfg.stages || [];
                 var hasGroups = false, hasKnockout = false, hasLeague = false, hasSpecial = false;

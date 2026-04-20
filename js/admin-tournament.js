@@ -6,6 +6,7 @@ import { bumpDataVersion } from './admin.js';
 import { getConfig, getGroupLetters, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { renderBracketBuilder, saveBracketFromBuilder } from './admin-tournament-bracket.js';
 import { renderGroupBuilder } from './admin-tournament-groups.js';
+import { AVAILABLE_LOGOS, generateBgSuggestions, pickTextColor } from './admin-tournament-logo.js';
 
 // ── All possible knockout rounds ───────────────────────────────────
 const ALL_KO_ROUNDS = [
@@ -33,6 +34,9 @@ export let editState = {
     scoring: {},
     specialLabel: 'Specialtips',
     specialQuestions: [], // { id, text, type, options[], points, correctAnswer }
+    logoType: 'text', // 'text' | 'image'
+    logoImage: '',    // filename of selected *-logo.webp
+    navbarBg: '',     // optional navbar bg override (hex)
 };
 
 function loadStateFromConfig() {
@@ -58,6 +62,10 @@ function loadStateFromConfig() {
     editState.hasSpecial = !!sp;
     editState.specialLabel = sp?.label || 'Specialtips';
     editState.specialQuestions = sp?.questions ? JSON.parse(JSON.stringify(sp.questions)) : [];
+    const logo = cfg.logo || {};
+    editState.logoType = logo.type === 'image' ? 'image' : 'text';
+    editState.logoImage = logo.image || (AVAILABLE_LOGOS[0]?.file || '');
+    editState.navbarBg = logo.navbarBg || '';
 }
 
 function getActiveKoRounds() {
@@ -100,7 +108,10 @@ function buildTournamentConfig() {
             questions: editState.specialQuestions,
         });
     }
-    return { name: editState.name, championLabel: editState.championLabel, year: editState.year, stages };
+    const logo = { type: editState.logoType === 'image' ? 'image' : 'text' };
+    if (logo.type === 'image' && editState.logoImage) logo.image = editState.logoImage;
+    if (editState.navbarBg) logo.navbarBg = editState.navbarBg;
+    return { name: editState.name, championLabel: editState.championLabel, year: editState.year, logo, stages };
 }
 
 // ── Render ──────────────────────────────────────────────────────────
@@ -127,6 +138,33 @@ export function renderTournamentTab() {
     html += `<label style="font-size:13px;">Namn</label><input id="tc-name" value="${editState.name}" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `<label style="font-size:13px;">Mästaretitel</label><input id="tc-champ" value="${editState.championLabel}" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `</div>`;
+
+    // ─── Logo / titel-typ ───
+    html += `<div style="background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:12px;">`;
+    html += `<div style="font-size:13px; font-weight:600; margin-bottom:8px;">Titel i navbaren</div>`;
+    html += `<div style="display:flex; gap:16px; margin-bottom:10px;">`;
+    html += `<label style="font-size:13px; cursor:pointer;"><input type="radio" name="tc-logo-type" value="text" ${editState.logoType === 'text' ? 'checked' : ''}> Text (namnet ovan)</label>`;
+    html += `<label style="font-size:13px; cursor:pointer;"><input type="radio" name="tc-logo-type" value="image" ${editState.logoType === 'image' ? 'checked' : ''}> Bild</label>`;
+    html += `</div>`;
+    html += `<div id="tc-logo-image-config" style="display:${editState.logoType === 'image' ? 'block' : 'none'};">`;
+    html += `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">`;
+    html += `<label style="font-size:13px;">Bild:</label>`;
+    html += `<select id="tc-logo-image" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
+    AVAILABLE_LOGOS.forEach(l => {
+        html += `<option value="${l.file}" ${editState.logoImage === l.file ? 'selected' : ''}>${l.label} (${l.file})</option>`;
+    });
+    html += `</select>`;
+    html += `</div>`;
+    html += `<div style="font-size:12px; color:#666; margin-bottom:8px;">Förhandsvisning (klicka en färg nedan för att prova den som navbar-bakgrund):</div>`;
+    html += `<div id="tc-logo-preview" style="display:inline-block; padding:10px 16px; border-radius:8px; background:${editState.navbarBg || '#1a1a1a'}; transition:background 0.2s;"></div>`;
+    html += `<div style="font-size:12px; font-weight:600; margin:12px 0 6px;">Föreslagna bakgrundsfärger</div>`;
+    html += `<div id="tc-bg-suggestions" style="display:flex; gap:8px; flex-wrap:wrap;"><span style="color:#999; font-size:12px;">Laddar förslag…</span></div>`;
+    html += `<div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">`;
+    html += `<label style="font-size:12px;">Egen färg:</label>`;
+    html += `<input type="color" id="tc-navbar-bg" value="${editState.navbarBg || '#1a1a1a'}" style="width:40px; height:30px; border:1px solid #ddd; border-radius:6px; cursor:pointer; padding:0;">`;
+    html += `<button class="btn" id="tc-navbar-bg-reset" style="background:#6c757d; font-size:11px; padding:4px 10px;">Återställ till tema</button>`;
+    html += `</div>`;
+    html += `</div></div>`;
 
     // Format toggles
     html += `<div style="display:flex; gap:16px; margin-bottom:12px;">`;
@@ -203,6 +241,45 @@ export function renderTournamentTab() {
     renderTwoLeggedCheckboxes();
     renderTeamRoster();
     renderSpecialQuestions();
+    renderLogoPreview();
+    refreshBgSuggestions();
+}
+
+function renderLogoPreview() {
+    const el = document.getElementById('tc-logo-preview');
+    if (!el) return;
+    const src = editState.logoImage;
+    const bg = editState.navbarBg || '#1a1a1a';
+    el.style.background = bg;
+    el.innerHTML = src
+        ? `<img src="${src}" alt="logo" style="height:48px; display:block;">`
+        : `<span style="color:${pickTextColor(bg)}; font-family: var(--font-heading); font-size:24px;">${editState.name || 'MunkenTipset'}</span>`;
+}
+
+async function refreshBgSuggestions() {
+    const el = document.getElementById('tc-bg-suggestions');
+    if (!el) return;
+    if (!editState.logoImage) {
+        el.innerHTML = '<span style="color:#999; font-size:12px;">Välj en bild först.</span>';
+        return;
+    }
+    const suggestions = await generateBgSuggestions(editState.logoImage);
+    el.innerHTML = suggestions.map(s =>
+        `<button type="button" class="tc-bg-swatch" data-bg="${s.bg}" title="${s.label}" style="display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #ddd; border-radius:8px; background:white; cursor:pointer; font-size:12px;">
+            <span style="display:inline-block; width:20px; height:20px; border-radius:4px; background:${s.bg}; border:1px solid rgba(0,0,0,0.1);"></span>
+            ${s.label}
+        </button>`
+    ).join('');
+    el.querySelectorAll('.tc-bg-swatch').forEach(btn => {
+        btn.addEventListener('click', () => applyNavbarBg(btn.dataset.bg));
+    });
+}
+
+function applyNavbarBg(hex) {
+    editState.navbarBg = hex;
+    const picker = document.getElementById('tc-navbar-bg');
+    if (picker) picker.value = hex;
+    renderLogoPreview();
 }
 
 function renderTwoLeggedCheckboxes() {
@@ -350,6 +427,39 @@ function attachListeners(container) {
     document.getElementById('tc-save-config').addEventListener('click', saveConfig);
     // Clear
     document.getElementById('clear-all-btn').addEventListener('click', clearAllData);
+
+    // Logo type toggle
+    container.querySelectorAll('input[name="tc-logo-type"]').forEach(r => {
+        r.addEventListener('change', e => {
+            editState.logoType = e.target.value === 'image' ? 'image' : 'text';
+            document.getElementById('tc-logo-image-config').style.display =
+                editState.logoType === 'image' ? 'block' : 'none';
+            renderLogoPreview();
+            if (editState.logoType === 'image') refreshBgSuggestions();
+        });
+    });
+    // Logo image select
+    const logoSel = document.getElementById('tc-logo-image');
+    if (logoSel) logoSel.addEventListener('change', e => {
+        editState.logoImage = e.target.value;
+        renderLogoPreview();
+        refreshBgSuggestions();
+    });
+    // Navbar bg color picker
+    const bgPicker = document.getElementById('tc-navbar-bg');
+    if (bgPicker) bgPicker.addEventListener('input', e => applyNavbarBg(e.target.value));
+    const bgReset = document.getElementById('tc-navbar-bg-reset');
+    if (bgReset) bgReset.addEventListener('click', () => {
+        editState.navbarBg = '';
+        if (bgPicker) bgPicker.value = '#1a1a1a';
+        renderLogoPreview();
+    });
+    // Also update preview when name changes
+    const nameInput = document.getElementById('tc-name');
+    if (nameInput) nameInput.addEventListener('input', e => {
+        editState.name = e.target.value;
+        renderLogoPreview();
+    });
 }
 
 async function saveConfig() {
@@ -384,6 +494,7 @@ async function switchTournament(presetKey) {
         editState.hasSpecial = false; editState.specialLabel = 'Specialtips'; editState.specialQuestions = [];
         editState.koStart = p.koStart; editState.twoLegged = { ...p.twoLegged };
         editState.teams = []; editState.groupAssignments = {};
+        editState.logoType = 'text'; editState.logoImage = AVAILABLE_LOGOS[0]?.file || ''; editState.navbarBg = '';
         if (p.groupLetters) {
             editState.groupLetters = p.groupLetters.split(',');
             editState.teamsPerGroup = p.teamsPerGroup;
