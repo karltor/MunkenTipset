@@ -6,6 +6,7 @@ import { initWizard, getGroupPicks, setWizardLocked } from './wizard.js';
 import { initBracket, setBracketLocked } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
 import { showAllTips } from './compare.js';
+import { openScoringInfo, initScoringInfo, invalidateScoringInfoCache } from './scoring-info.js';
 import { initAdmin, checkTipsLocked } from './admin.js';
 import { initSpecialTips, setSpecialLocked } from './special-tips.js';
 import { loadResults } from './results.js';
@@ -78,6 +79,7 @@ function applyTabVisibility() {
     const bracketBtn = document.querySelector('.tab-btn[data-target="bracket-tab"]');
     const specialBtn = document.querySelector('.tab-btn[data-target="special-tab"]');
     const allTipsBtn = document.getElementById('all-tipsters-tab-btn');
+    const scoringInfoBtn = document.getElementById('scoring-info-tab-btn');
 
     // When admin has locked tipping, the tip-tabs are replaced by a single
     // "Alla tipsare" shortcut — users can't edit tips anyway, so we declutter
@@ -87,6 +89,7 @@ function applyTabVisibility() {
         if (bracketBtn) bracketBtn.style.display = 'none';
         if (specialBtn) specialBtn.style.display = 'none';
         if (allTipsBtn) allTipsBtn.style.display = '';
+        if (scoringInfoBtn) scoringInfoBtn.style.display = '';
         return;
     }
 
@@ -103,6 +106,7 @@ function applyTabVisibility() {
         }
     }
     if (allTipsBtn) allTipsBtn.style.display = 'none';
+    if (scoringInfoBtn) scoringInfoBtn.style.display = 'none';
 }
 
 // Logga ut
@@ -116,6 +120,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         const action = btnEl.dataset.action;
         if (btnEl.classList.contains('locked')) return;
         if (!target) return;
+
+        // Poänginfo opens a modal without switching the active tab
+        if (action === 'show-scoring-info') {
+            openScoringInfo();
+            return;
+        }
 
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
         btnEl.classList.add('active');
@@ -136,6 +146,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (target === 'chat-tab') initChat();
     });
 });
+
+// Hook up Poänginfo modal close handlers
+initScoringInfo();
 
 // Admin button → toggle admin tab
 document.getElementById('admin-btn').addEventListener('click', () => {
@@ -468,6 +481,10 @@ function applyLiveUnlock(user) {
 }
 
 async function applyLiveDataRefresh(newDataVersion) {
+    // Scoring rules may have changed — drop the Poänginfo cache so the next
+    // modal open re-reads them from Firestore.
+    invalidateScoringInfoCache();
+
     // Note: we intentionally do NOT call invalidateStatsCache() or clear the
     // matches localStorage cache here. Both caches are keyed on dataVersion,
     // so the next read will self-invalidate via the stale-version check.
