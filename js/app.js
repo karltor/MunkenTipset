@@ -56,11 +56,17 @@ function applyBranding() {
     }
     document.title = name;
     if (logo.navbarBg) {
-        document.documentElement.style.setProperty('--color-navbar-bg', logo.navbarBg);
+        // User's own theme override (from Utseende) takes precedence so they can
+        // change the navbar color back without admin re-saving the tournament.
+        let userOverride = null;
+        try {
+            const raw = localStorage.getItem('munkentipset_theme');
+            userOverride = raw ? JSON.parse(raw)['--color-navbar-bg'] : null;
+        } catch {}
+        if (!userOverride) {
+            document.documentElement.style.setProperty('--color-navbar-bg', logo.navbarBg);
+        }
     }
-    // Note: when no navbarBg is set we don't remove the property — that would
-    // also wipe any per-user theme override. Admin must use the theme editor
-    // to clear user overrides.
 }
 
 function applyTabVisibility() {

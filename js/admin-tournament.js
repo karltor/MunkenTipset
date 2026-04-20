@@ -6,7 +6,7 @@ import { bumpDataVersion } from './admin.js';
 import { getConfig, getGroupLetters, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { renderBracketBuilder, saveBracketFromBuilder } from './admin-tournament-bracket.js';
 import { renderGroupBuilder } from './admin-tournament-groups.js';
-import { AVAILABLE_LOGOS, generateBgSuggestions, pickTextColor } from './admin-tournament-logo.js';
+import { discoverLogos, generateBgSuggestions, pickTextColor } from './admin-tournament-logo.js';
 
 // ── All possible knockout rounds ───────────────────────────────────
 const ALL_KO_ROUNDS = [
@@ -64,7 +64,7 @@ function loadStateFromConfig() {
     editState.specialQuestions = sp?.questions ? JSON.parse(JSON.stringify(sp.questions)) : [];
     const logo = cfg.logo || {};
     editState.logoType = logo.type === 'image' ? 'image' : 'text';
-    editState.logoImage = logo.image || (AVAILABLE_LOGOS[0]?.file || '');
+    editState.logoImage = logo.image || '';
     editState.navbarBg = logo.navbarBg || '';
 }
 
@@ -147,14 +147,12 @@ export function renderTournamentTab() {
     html += `<label style="font-size:13px; cursor:pointer;"><input type="radio" name="tc-logo-type" value="image" ${editState.logoType === 'image' ? 'checked' : ''}> Bild</label>`;
     html += `</div>`;
     html += `<div id="tc-logo-image-config" style="display:${editState.logoType === 'image' ? 'block' : 'none'};">`;
-    html += `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">`;
-    html += `<label style="font-size:13px;">Bild:</label>`;
-    html += `<select id="tc-logo-image" style="padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
-    AVAILABLE_LOGOS.forEach(l => {
-        html += `<option value="${l.file}" ${editState.logoImage === l.file ? 'selected' : ''}>${l.label} (${l.file})</option>`;
-    });
-    html += `</select>`;
+    html += `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">`;
+    html += `<label style="font-size:13px;">Filnamn:</label>`;
+    html += `<input type="text" id="tc-logo-image" value="${editState.logoImage || ''}" placeholder="t.ex. min-logo.webp" style="flex:1; min-width:200px; padding:4px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;">`;
     html += `</div>`;
+    html += `<div style="font-size:11px; color:#888; margin-bottom:10px;">Hittade i repot (klicka för att välja):</div>`;
+    html += `<div id="tc-logo-discover" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;"><span style="color:#999; font-size:12px;">Söker…</span></div>`;
     html += `<div style="font-size:12px; color:#666; margin-bottom:8px;">Förhandsvisning (klicka en färg nedan för att prova den som navbar-bakgrund):</div>`;
     html += `<div id="tc-logo-preview" style="display:inline-block; padding:10px 16px; border-radius:8px; background:${editState.navbarBg || '#1a1a1a'}; transition:background 0.2s;"></div>`;
     html += `<div style="font-size:12px; font-weight:600; margin:12px 0 6px;">Föreslagna bakgrundsfärger</div>`;
@@ -242,6 +240,35 @@ export function renderTournamentTab() {
     renderTeamRoster();
     renderSpecialQuestions();
     renderLogoPreview();
+    refreshBgSuggestions();
+    renderDiscoveredLogos();
+}
+
+async function renderDiscoveredLogos() {
+    const el = document.getElementById('tc-logo-discover');
+    if (!el) return;
+    const logos = await discoverLogos();
+    if (!logos.length) {
+        el.innerHTML = '<span style="color:#999; font-size:12px;">Inga *-logo-filer hittades. Skriv filnamnet manuellt ovan.</span>';
+        return;
+    }
+    el.innerHTML = logos.map(l =>
+        `<button type="button" class="tc-logo-chip" data-file="${l.file}" style="display:flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid ${editState.logoImage === l.file ? '#17a2b8' : '#ddd'}; border-radius:999px; background:${editState.logoImage === l.file ? '#e6f7f9' : 'white'}; cursor:pointer; font-size:12px;">
+            <img src="${l.file}" alt="" style="height:20px; width:auto; display:block;">
+            ${l.file}
+        </button>`
+    ).join('');
+    el.querySelectorAll('.tc-logo-chip').forEach(btn => {
+        btn.addEventListener('click', () => selectLogoFile(btn.dataset.file));
+    });
+}
+
+function selectLogoFile(file) {
+    editState.logoImage = file;
+    const input = document.getElementById('tc-logo-image');
+    if (input) input.value = file;
+    renderLogoPreview();
+    renderDiscoveredLogos(); // re-render chips to update active state
     refreshBgSuggestions();
 }
 
@@ -438,13 +465,20 @@ function attachListeners(container) {
             if (editState.logoType === 'image') refreshBgSuggestions();
         });
     });
-    // Logo image select
-    const logoSel = document.getElementById('tc-logo-image');
-    if (logoSel) logoSel.addEventListener('change', e => {
-        editState.logoImage = e.target.value;
-        renderLogoPreview();
-        refreshBgSuggestions();
-    });
+    // Logo image filename input
+    const logoInput = document.getElementById('tc-logo-image');
+    if (logoInput) {
+        let logoDebounce;
+        logoInput.addEventListener('input', e => {
+            editState.logoImage = e.target.value.trim();
+            renderLogoPreview();
+            clearTimeout(logoDebounce);
+            logoDebounce = setTimeout(() => {
+                renderDiscoveredLogos();
+                refreshBgSuggestions();
+            }, 350);
+        });
+    }
     // Navbar bg color picker
     const bgPicker = document.getElementById('tc-navbar-bg');
     if (bgPicker) bgPicker.addEventListener('input', e => applyNavbarBg(e.target.value));
@@ -494,7 +528,7 @@ async function switchTournament(presetKey) {
         editState.hasSpecial = false; editState.specialLabel = 'Specialtips'; editState.specialQuestions = [];
         editState.koStart = p.koStart; editState.twoLegged = { ...p.twoLegged };
         editState.teams = []; editState.groupAssignments = {};
-        editState.logoType = 'text'; editState.logoImage = AVAILABLE_LOGOS[0]?.file || ''; editState.navbarBg = '';
+        editState.logoType = 'text'; editState.logoImage = ''; editState.navbarBg = '';
         if (p.groupLetters) {
             editState.groupLetters = p.groupLetters.split(',');
             editState.teamsPerGroup = p.teamsPerGroup;
