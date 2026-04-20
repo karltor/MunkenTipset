@@ -1,7 +1,7 @@
 import { auth, db } from './config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 import { collection, getDocs, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { loadTournamentConfig, getTournamentName, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
+import { loadTournamentConfig, getTournamentName, getLogo, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { initWizard, getGroupPicks, setWizardLocked } from './wizard.js';
 import { initBracket, setBracketLocked } from './bracket.js';
 import { loadCommunityStats } from './stats.js';
@@ -42,6 +42,26 @@ let currentDataVersion = 0;
 let liveUnsub = null;
 let pendingDataRefresh = null;
 const LIVE_REFRESH_DEBOUNCE_MS = 1500;
+
+function applyBranding() {
+    const name = getTournamentName();
+    const logo = getLogo();
+    const el = document.querySelector('.logo-text');
+    if (el) {
+        if (logo.type === 'image' && logo.image) {
+            el.innerHTML = `<img src="${logo.image}" alt="${name}" class="logo-img">`;
+        } else {
+            el.textContent = name;
+        }
+    }
+    document.title = name;
+    if (logo.navbarBg) {
+        document.documentElement.style.setProperty('--color-navbar-bg', logo.navbarBg);
+    }
+    // Note: when no navbarBg is set we don't remove the property — that would
+    // also wipe any per-user theme override. Admin must use the theme editor
+    // to clear user overrides.
+}
 
 function applyTabVisibility() {
     const hasGroups = hasStageType('round-robin-groups');
@@ -158,11 +178,7 @@ onAuthStateChanged(auth, async (user) => {
     // Apply cached config immediately to prevent tab flicker
     // (tournament-config.js pre-loads from localStorage synchronously)
     applyTabVisibility();
-    const cachedName = getTournamentName();
-    if (cachedName !== 'MunkenTipset') {
-        document.querySelector('.logo-text').textContent = cachedName;
-        document.title = cachedName;
-    }
+    applyBranding();
 
     // Check lock status + get settings first (1 read — reused everywhere)
     const { locked, settings } = await checkTipsLocked();
@@ -184,9 +200,7 @@ onAuthStateChanged(auth, async (user) => {
     const userData = userSnap.data() || {};
 
     // Re-apply branding and tab visibility with confirmed config
-    const tName = getTournamentName();
-    document.querySelector('.logo-text').textContent = tName;
-    document.title = tName;
+    applyBranding();
     applyTabVisibility();
 
     // Admin check
@@ -473,9 +487,7 @@ async function applyLiveDataRefresh(newDataVersion) {
 
         // Re-apply tab visibility (tournament structure may have changed)
         applyTabVisibility();
-        const tName = getTournamentName();
-        document.querySelector('.logo-text').textContent = tName;
-        document.title = tName;
+        applyBranding();
     }
 
     // Refresh the visible data tab — but NEVER disrupt a user mid-tipping

@@ -198,3 +198,10 @@ export function getTournamentYear() {
 export function getChampionLabel() {
     return getConfig().championLabel || 'Mästare';
 }
+
+// ── Convenience: logo ───────────────────────────────────────────────
+// logo: { type: "text" | "image", image: "file.webp", navbarBg: "#hex" }
+export function getLogo() {
+    const cfg = getConfig();
+    return cfg.logo || { type: 'text' };
+}
