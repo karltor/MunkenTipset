@@ -46,41 +46,11 @@ async function withBusy(btns, fn) {
 }
 
 // Bump dataVersion in _settings so clients know to invalidate their stats cache.
-// Also regenerate the aggregate `_tips` doc so regular users can read a single
-// document instead of `getDocs(users)` (O(N) → O(1) reads per dashboard load).
-// Admin absorbs the one-time cost of reading all users on save.
+// The next dashboard load after a bump does a full users-collection fetch,
+// which is how new tippers become visible for everyone else.
 export async function bumpDataVersion() {
     const dataVersion = Date.now();
     await setDoc(doc(db, "matches", "_settings"), { dataVersion }, { merge: true });
-    // Fire-and-forget aggregate refresh: failure falls back to client getDocs(users).
-    refreshTipsAggregate(dataVersion).catch(err => {
-        console.warn('refreshTipsAggregate failed (clients will fall back to full users fetch):', err);
-    });
-}
-
-// Write a compact `matches/_tips` doc containing every user's tips, keyed by
-// the current dataVersion. Clients read this single doc instead of the whole
-// users collection. If the doc is missing or stale, clients fall back to
-// `getDocs(users)` so correctness is preserved.
-async function refreshTipsAggregate(dataVersion) {
-    const usersSnap = await getDocs(collection(db, "users"));
-    const users = [];
-    usersSnap.docs.forEach(userDoc => {
-        const d = userDoc.data();
-        const u = {
-            userId: userDoc.id,
-            name: d.name || userDoc.id,
-            groupPicks: d.groupPicks || null,
-            knockoutPicks: d.knockout || null,
-            knockoutScores: d.knockoutScores || null,
-            matchTips: d.matchTips || {},
-            specialPicks: d.specialPicks || null
-        };
-        if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0 || u.specialPicks) {
-            users.push(u);
-        }
-    });
-    await setDoc(doc(db, "matches", "_tips"), { dataVersion, users });
 }
 
 export async function initAdmin(matchesData) {
