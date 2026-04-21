@@ -58,6 +58,13 @@ function isSpecialDone(u) {
     return !!u.specialPicks?.completedAt;
 }
 
+// Prefer the user's self-chosen notification address (from settings) over the
+// account email — lets people route admin updates to a private inbox without
+// needing to log into their work mail.
+function recipientEmail(u) {
+    return (u.notificationEmail && u.notificationEmail.trim()) || u.email || '';
+}
+
 async function loadUserCompletionTable() {
     const btn = document.getElementById('admin-load-user-status');
     btn.disabled = true;
@@ -67,7 +74,7 @@ async function loadUserCompletionTable() {
     const users = usersSnap.docs
         .filter(d => !d.id.startsWith('fake_'))
         .map(d => ({ uid: d.id, ...d.data() }))
-        .filter(u => u.email);
+        .filter(u => recipientEmail(u));
 
     const hasGroups = hasStageType('round-robin-groups');
     const hasKnockout = hasStageType('single-elimination');
@@ -85,7 +92,7 @@ async function loadUserCompletionTable() {
     });
     annotated.sort((a, b) => {
         if (a.allDone !== b.allDone) return a.allDone ? 1 : -1;
-        return (a.u.name || a.u.email).localeCompare(b.u.name || b.u.email, 'sv');
+        return (a.u.name || recipientEmail(a.u)).localeCompare(b.u.name || recipientEmail(b.u), 'sv');
     });
 
     const cell = (val) => val === null
@@ -107,11 +114,11 @@ async function loadUserCompletionTable() {
     const incompleteEmails = [];
     annotated.forEach(({ u, g, k, s, allDone }) => {
         if (allDone) doneCount++;
-        else incompleteEmails.push(u.email);
+        else incompleteEmails.push(recipientEmail(u));
         const rowBg = allDone ? '' : 'background:rgba(220,53,69,0.04);';
         html += `<tr style="border-bottom:1px solid #eee; ${rowBg}">`;
         html += `<td style="padding:6px; font-weight:600;">${escapeHtml(u.name || '—')}</td>`;
-        html += `<td style="padding:6px; color:#666; font-size:12px;">${escapeHtml(u.email)}</td>`;
+        html += `<td style="padding:6px; color:#666; font-size:12px;">${escapeHtml(recipientEmail(u))}</td>`;
         if (hasGroups) html += cell(g);
         if (hasKnockout) html += cell(k);
         if (hasSpecial) html += cell(s);
@@ -212,10 +219,12 @@ async function loadEmailLists() {
 
     usersSnap.docs.forEach(d => {
         const data = d.data();
-        if (!data.email || d.id.startsWith('fake_')) return;
+        if (d.id.startsWith('fake_')) return;
+        const recipient = recipientEmail(data);
+        if (!recipient) return;
         const pref = data.emailPref || null;
-        if (pref === 'often') often.push(data.email);
-        else if (pref === 'few') few.push(data.email);
+        if (pref === 'often') often.push(recipient);
+        else if (pref === 'few') few.push(recipient);
     });
 
     often.sort();

@@ -3,7 +3,15 @@ import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/
 import { getColorMode, setColorMode } from './color-mode.js';
 
 const EMAIL_PREF_KEY = 'emailPref'; // 'often' | 'few' | 'none'
+const NOTIFICATION_EMAIL_KEY = 'notificationEmail';
 export const WELCOME_DISMISSED_KEY = 'munkentipset_welcome_dismissed';
+
+// RFC 5322-ish pragmatic check — rejects obvious typos without being picky about
+// unusual but valid addresses. The backend (admin's mail client) does final delivery.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(s) {
+    return typeof s === 'string' && EMAIL_REGEX.test(s.trim());
+}
 
 // Load the user's current email preference from Firestore.
 // If `prefetchedUserData` is supplied (from app.js' initial user-doc read),
@@ -28,7 +36,11 @@ export async function saveEmailPref(pref) {
 
 // Initialize the settings tab (radio buttons + welcome toggle)
 export async function initSettingsTab() {
-    const pref = await loadEmailPref();
+    const userId = auth.currentUser?.uid;
+    const snap = userId ? await getDoc(doc(db, "users", userId)) : null;
+    const userData = snap?.exists() ? snap.data() : {};
+
+    const pref = userData[EMAIL_PREF_KEY] || null;
     if (pref) {
         const radio = document.querySelector(`#settings-email-pref input[value="${pref}"]`);
         if (radio) radio.checked = true;
@@ -43,6 +55,8 @@ export async function initSettingsTab() {
         btn.style.background = '#28a745';
         setTimeout(() => { btn.textContent = 'Spara'; btn.style.background = ''; }, 2000);
     });
+
+    initNotificationEmailField(userData);
 
     // Dark mode toggle
     const darkToggle = document.getElementById('settings-dark-mode-toggle');
@@ -68,6 +82,64 @@ export async function initSettingsTab() {
             }
         });
     }
+}
+
+function initNotificationEmailField(userData) {
+    const input = document.getElementById('settings-notification-email');
+    const errorEl = document.getElementById('settings-notification-email-error');
+    const saveBtn = document.getElementById('settings-save-notification-email');
+    const defaultEl = document.getElementById('settings-notification-email-default');
+    if (!input || !saveBtn) return;
+
+    const accountEmail = auth.currentUser?.email || userData.email || '';
+    if (defaultEl) defaultEl.textContent = accountEmail;
+
+    input.value = userData[NOTIFICATION_EMAIL_KEY] || '';
+    input.placeholder = accountEmail || 'din.privata@mejl.com';
+
+    const showError = (msg) => {
+        if (!errorEl) return;
+        errorEl.textContent = msg;
+        errorEl.style.display = msg ? 'block' : 'none';
+    };
+
+    input.addEventListener('input', () => showError(''));
+
+    saveBtn.addEventListener('click', async () => {
+        const raw = input.value.trim();
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
+
+        if (raw && !isValidEmail(raw)) {
+            showError('Ogiltig mejladress — kontrollera stavningen.');
+            input.focus();
+            return;
+        }
+        showError('');
+
+        saveBtn.disabled = true;
+        const originalText = saveBtn.textContent;
+        try {
+            // Empty string clears the override and falls back to the account email.
+            await setDoc(
+                doc(db, "users", userId),
+                { [NOTIFICATION_EMAIL_KEY]: raw || null },
+                { merge: true }
+            );
+            input.value = raw;
+            saveBtn.textContent = '✓ Sparat!';
+            saveBtn.style.background = '#28a745';
+        } catch {
+            saveBtn.textContent = 'Kunde inte spara';
+            saveBtn.style.background = '#dc3545';
+        } finally {
+            setTimeout(() => {
+                saveBtn.textContent = originalText;
+                saveBtn.style.background = '';
+                saveBtn.disabled = false;
+            }, 2000);
+        }
+    });
 }
 
 function showWelcomeAgain() {
