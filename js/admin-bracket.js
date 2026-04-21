@@ -115,18 +115,19 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
 
         // Aggregate display
         html += `<div class="abt-aggregate" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; color:#888; margin-top:6px; text-align:center;"></div>`;
-
-        // Penalty winner picker (shown when aggregate is tied)
-        const pw = match.penaltyWinner || '';
-        html += `<div class="abt-penalty-pick" data-round="${round}" data-match="${matchIdx}" style="display:none; margin-top:6px; text-align:center;">
-            <div style="font-size:10px; color:#ffc107; font-weight:600; margin-bottom:4px;">Straffvinnare:</div>
-            <div style="display:flex; gap:6px; justify-content:center;">
-                <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="1" style="font-size:11px; padding:4px 10px; background:${pw === (match.team1 || '') ? '#28a745' : '#444'};">${f(match.team1 || 'Lag 1')}${match.team1 || 'Lag 1'}</button>
-                <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="2" style="font-size:11px; padding:4px 10px; background:${pw === (match.team2 || '') ? '#28a745' : '#444'};">${f(match.team2 || 'Lag 2')}${match.team2 || 'Lag 2'}</button>
-            </div>
-            <input type="hidden" class="abt-penalty-winner" data-round="${round}" data-match="${matchIdx}" value="${pw}">
-        </div>`;
     }
+
+    // Penalty winner picker — rendered for both single- and two-leg matches.
+    // Shown by updateAggregates() when the (aggregated) score is tied.
+    const pw = match.penaltyWinner || '';
+    html += `<div class="abt-penalty-pick" data-round="${round}" data-match="${matchIdx}" style="display:none; margin-top:6px; text-align:center;">
+        <div style="font-size:10px; color:#ffc107; font-weight:600; margin-bottom:4px;">Lika — välj straffvinnare:</div>
+        <div style="display:flex; gap:6px; justify-content:center;">
+            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="1" style="font-size:11px; padding:4px 10px; background:${pw === (match.team1 || '') ? '#28a745' : '#444'};">${f(match.team1 || 'Lag 1')}${match.team1 || 'Lag 1'}</button>
+            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="2" style="font-size:11px; padding:4px 10px; background:${pw === (match.team2 || '') ? '#28a745' : '#444'};">${f(match.team2 || 'Lag 2')}${match.team2 || 'Lag 2'}</button>
+        </div>
+        <input type="hidden" class="abt-penalty-winner" data-round="${round}" data-match="${matchIdx}" value="${pw}">
+    </div>`;
 
     html += `</div>`;
     return html;
@@ -276,6 +277,7 @@ export async function renderAdminBracket() {
 }
 
 function updateAggregates(container) {
+    // Two-legged matches: compute aggregate, show picker on tied aggregate.
     container.querySelectorAll('.abt-aggregate').forEach(el => {
         const round = el.dataset.round, matchIdx = el.dataset.match;
         const s1 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value;
@@ -297,6 +299,21 @@ function updateAggregates(container) {
         } else {
             el.innerHTML = '';
             if (penaltyEl) penaltyEl.style.display = 'none';
+        }
+    });
+
+    // Single-leg matches: show picker when both scores entered and tied.
+    // Identified by a penalty-pick element whose card has no .abt-aggregate.
+    container.querySelectorAll('.abt-penalty-pick').forEach(el => {
+        const round = el.dataset.round, matchIdx = el.dataset.match;
+        const hasAgg = !!container.querySelector(`.abt-aggregate[data-round="${round}"][data-match="${matchIdx}"]`);
+        if (hasAgg) return;
+        const s1 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="1"]`)?.value;
+        const s2 = container.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${matchIdx}"][data-side="2"]`)?.value;
+        if (s1 !== '' && s2 !== '' && s1 !== undefined && s2 !== undefined && parseInt(s1) === parseInt(s2)) {
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
         }
     });
 }
@@ -363,7 +380,12 @@ function autoAdvanceWinners(rounds, matchCounts, koRounds) {
                 const s2El = document.querySelector(`.admin-bracket-score[data-round="${round}"][data-match="${i}"][data-side="2"]`);
                 if (!t1El || !t2El || !s1El || !s2El || s1El.value === '' || s2El.value === '') continue;
                 const s1 = parseInt(s1El.value), s2 = parseInt(s2El.value);
-                winner = s1 > s2 ? t1El.value : (s2 > s1 ? t2El.value : '');
+                if (s1 > s2) winner = t1El.value;
+                else if (s2 > s1) winner = t2El.value;
+                else {
+                    const pw = document.querySelector(`.abt-penalty-winner[data-round="${round}"][data-match="${i}"]`)?.value || '';
+                    if (pw) winner = pw;
+                }
             }
 
             if (winner) {
@@ -433,7 +455,20 @@ async function saveAdminBracket(rounds, matchCounts, koRounds) {
                 }
             } else {
                 if (match.score1 !== undefined && match.score2 !== undefined) {
-                    match.winner = match.score1 > match.score2 ? t1 : (match.score2 > match.score1 ? t2 : '');
+                    if (match.score1 > match.score2) {
+                        match.winner = t1;
+                    } else if (match.score2 > match.score1) {
+                        match.winner = t2;
+                    } else {
+                        // Tied — read penalty winner selection
+                        const pw = document.querySelector(`.abt-penalty-winner[data-round="${round}"][data-match="${i}"]`)?.value || '';
+                        if (pw) {
+                            match.winner = pw;
+                            match.penaltyWinner = pw;
+                        } else {
+                            match.winner = '';
+                        }
+                    }
                 }
             }
 
