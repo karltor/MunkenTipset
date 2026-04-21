@@ -63,7 +63,7 @@ body { font-family: var(--font-body); margin: 0; background-color: var(--color-p
 
 /* Mode selector */
 .mode-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 700px; margin: 2rem auto; }
-.mode-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; cursor: pointer; border: 3px solid transparent; transition: all 0.2s; }
+.mode-card { background: var(--color-card-bg); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; cursor: pointer; border: 3px solid transparent; transition: all 0.2s; }
 .mode-card:hover { border-color: #28a745; transform: translateY(-2px); }
 .mode-card h3 { font-size: 1.4rem; margin-top: 0; }
 .mode-card p { color: #666; font-size: 0.95rem; }
@@ -95,7 +95,7 @@ body { font-family: var(--font-body); margin: 0; background-color: var(--color-p
 .score-input { width: 35px; height: 35px; text-align: center; border: 2px solid #ddd; font-weight: bold; font-size: 1.1rem; border-radius: 6px; }
 .score-input:disabled { background: #f0f0f0; color: #999; cursor: not-allowed; border-color: #e0e0e0; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.team-chip { padding: 8px 12px; background: white; border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; margin-bottom: 4px; }
+.team-chip { padding: 8px 12px; background: var(--color-card-bg); border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; margin-bottom: 4px; }
 .team-chip:hover { border-color: #aaa; }
 .team-chip.rank-1 { border-color: #ffc107; background: #fffdf5; }
 .team-chip.rank-1::after { content: '🏆 1:a'; }
@@ -115,7 +115,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 }
 .casual-team-card {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 16px 10px; background: white; border: 3px solid #e0e0e0; border-radius: 12px;
+    padding: 16px 10px; background: var(--color-card-bg); border: 3px solid #e0e0e0; border-radius: 12px;
     cursor: pointer; transition: all 0.2s; min-height: 80px;
 }
 .casual-team-card:hover { border-color: #aaa; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
@@ -169,7 +169,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* Tables */
 .tables-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-.group-table-card { background: white; border-radius: 12px; border: 1px solid #eee; overflow: hidden; }
+.group-table-card { background: var(--color-card-bg); border-radius: 12px; border: 1px solid #eee; overflow: hidden; }
 .group-table-header { background: var(--color-table-header-bg); color: var(--color-table-header-text); padding: 10px; text-align: center; font-weight: bold; font-family: var(--font-heading); }
 .group-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .group-table td, .group-table th { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
@@ -264,7 +264,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .mtt-tooltip {
     display: none; position: absolute; left: 0; top: 100%;
     z-index: 100; min-width: 320px;
-    background: white; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+    background: var(--color-card-bg); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.18);
     border: 1px solid #e0e0e0; overflow: hidden;
 }
 .mtt-row:hover .mtt-tooltip { display: block; }
@@ -349,7 +349,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .champ-flag img { display: block; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
 .champ-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #222; }
 .champ-pct { color: #333; font-weight: 700; font-size: 11px; }
-.user-tip-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.15s; }
+.user-tip-card { background: var(--color-card-bg); border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.15s; }
 .user-tip-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
 .user-tip-card h4 { margin: 0 0 8px; }
 .user-tip-card .tip-summary { font-size: 13px; color: #666; }
@@ -361,7 +361,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .admin-nav-btn.active { background: #1a1a1a; color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .admin-sub-content { display: none; }
 .admin-sub-content.active { display: block; }
-.admin-card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.admin-card { background: var(--color-card-bg); padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
 
 /* Admin layout */
 .admin-top-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
@@ -401,7 +401,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .bb-team { flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; max-width: 180px; }
 .group-pool { background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 10px; padding: 12px; margin-bottom: 4px; }
 .group-pool-teams { display: flex; flex-wrap: wrap; gap: 6px; min-height: 32px; }
-.group-drop-zone { background: white; border: 2px dashed #dee2e6; border-radius: 10px; padding: 10px; min-height: 80px; transition: all 0.15s; }
+.group-drop-zone { background: var(--color-card-bg); border: 2px dashed #dee2e6; border-radius: 10px; padding: 10px; min-height: 80px; transition: all 0.15s; }
 .group-drop-zone.drag-over { border-color: #ffc107; background: #fffbf0; }
 .group-drop-zone.group-full { border-color: #28a745; border-style: solid; }
 .group-drop-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
@@ -419,14 +419,14 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .theme-row-label { font-size: 13px; font-weight: 600; display: block; }
 .theme-row-desc { font-size: 11px; color: #888; display: block; margin-top: 1px; }
 .theme-color-wrapper { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.theme-color-input { width: 40px; height: 32px; border: 1px solid #ddd; border-radius: 6px; padding: 2px; cursor: pointer; background: white; }
+.theme-color-input { width: 40px; height: 32px; border: 1px solid #ddd; border-radius: 6px; padding: 2px; cursor: pointer; background: var(--color-card-bg); }
 .theme-font-select { padding: 5px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; max-width: 180px; }
 .theme-reset-single { background: none; border: none; color: #dc3545; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; font-weight: 700; }
 .theme-reset-single:hover { color: #a71d2a; }
 
 /* Admin bracket full width */
 .admin-bracket-fullwidth {
-    background: white;
+    background: var(--color-card-bg);
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.05);
@@ -438,7 +438,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 }
 
 /* Admin match rows */
-.admin-match-row { background: white; padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; display: flex; align-items: center; font-size: 13px; border: 1px solid #eee; }
+.admin-match-row { background: var(--color-card-bg); padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; display: flex; align-items: center; font-size: 13px; border: 1px solid #eee; }
 .admin-match-row.done { opacity: 0.55; }
 .admin-match-row.overdue { border-color: #dc3545; background: #fff5f5; }
 .admin-match-label { font-size: 11px; color: #999; min-width: 100px; }
@@ -447,7 +447,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .admin-score-group { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .admin-score { width: 44px; height: 32px; font-size: 15px; text-align: center; border: 1px solid #ddd; border-radius: 4px; }
 .admin-sep { color: #999; font-weight: 700; }
-.admin-group-btn { padding: 4px 10px; border: 2px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-weight: 600; font-size: 12px; }
+.admin-group-btn { padding: 4px 10px; border: 2px solid #ddd; border-radius: 6px; background: var(--color-card-bg); cursor: pointer; font-weight: 600; font-size: 12px; }
 .admin-group-btn.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 .admin-group-btn.overdue { border-color: #dc3545; color: #dc3545; animation: overdueGlow 2s ease infinite; }
 .admin-group-btn.overdue.active { background: #dc3545; color: white; border-color: #dc3545; }
@@ -457,7 +457,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* ── Admin Scoring Config ── */
 .scoring-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-.scoring-section { background: white; border-radius: 6px; padding: 10px; border: 1px solid #eee; }
+.scoring-section { background: var(--color-card-bg); border-radius: 6px; padding: 10px; border: 1px solid #eee; }
 .scoring-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
 .scoring-row label { flex: 1; }
 
@@ -470,7 +470,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .mm-field input:focus, .mm-field select:focus { outline: none; border-color: #28a745; box-shadow: 0 0 0 2px rgba(40,167,69,0.15); }
 
 .mm-filter-bar { display: flex; flex-wrap: wrap; gap: 4px; }
-.mm-filter-btn { padding: 4px 10px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 11px; font-weight: 600; color: #555; }
+.mm-filter-btn { padding: 4px 10px; border: 1px solid #ddd; border-radius: 6px; background: var(--color-card-bg); cursor: pointer; font-size: 11px; font-weight: 600; color: #555; }
 .mm-filter-btn.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
 
 .mm-table-wrap { max-height: 500px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }
@@ -501,7 +501,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 }
 @keyframes mmFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .mm-modal {
-    background: white; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    background: var(--color-card-bg); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
     width: 90%; max-width: 480px; animation: mmSlideUp 0.2s ease;
 }
 @keyframes mmSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -538,7 +538,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     opacity: 0.7;
 }
 .sq-question-card {
-    background: white;
+    background: var(--color-card-bg);
     border: 1px solid #e1e5eb;
     border-radius: 10px;
     padding: 14px 16px;
@@ -701,8 +701,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* Match card */
 .abt-match {
-    background: #fff;
-    border: 1px solid #d0d0d0;
+    background: var(--color-card-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-card-border);
     border-radius: 6px;
     padding: 4px;
     width: 170px;
@@ -712,7 +713,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     display: flex;
     gap: 3px;
 }
-.abt-team-row + .abt-team-row { border-top: 1px solid #eee; }
+.abt-team-row + .abt-team-row { border-top: 1px solid var(--color-card-border); }
 .abt-input {
     flex: 1;
     padding: 5px 6px;
@@ -721,20 +722,22 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     font-size: 12px;
     font-weight: 600;
     background: transparent;
+    color: inherit;
     min-width: 0;
 }
-.abt-input:focus { outline: none; background: #f0f7ff; }
+.abt-input:focus { outline: none; background: color-mix(in srgb, #1976d2 15%, var(--color-card-bg)); }
 .abt-score {
     width: 28px;
     text-align: center;
     border: none;
-    border-left: 1px solid #eee;
+    border-left: 1px solid var(--color-card-border);
     font-size: 12px;
     font-weight: 700;
     background: transparent;
+    color: inherit;
     padding: 5px 2px;
 }
-.abt-score:focus { outline: none; background: #fff8e1; }
+.abt-score:focus { outline: none; background: color-mix(in srgb, #ffc107 18%, var(--color-card-bg)); }
 
 /* ── Results bracket (br-*) ─────────────────────────── */
 .br-tree {
@@ -971,7 +974,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 /* Border/hover use currentColor so the cogwheel stays visible on both dark and light navbars. */
 .btn-settings { background: transparent; color: var(--color-navbar-text); font-size: 18px; padding: 4px 10px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 6px; margin-right: 6px; }
 .btn-settings:hover { background: color-mix(in srgb, currentColor 15%, transparent); }
-.settings-radio { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid #eee; background: white; }
+.settings-radio { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid #eee; background: var(--color-card-bg); }
 .settings-radio:hover { border-color: #aaa; }
 .settings-radio input[type="radio"] { margin-top: 3px; accent-color: #1a1a1a; }
 
@@ -981,7 +984,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #ccc; border-radius: 24px; transition: background 0.2s; }
-.toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #ffffff; border-radius: 50%; transition: transform 0.2s; }
 .toggle-switch input:checked + .toggle-slider { background: #1a1a1a; }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 

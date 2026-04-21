@@ -24,7 +24,7 @@ export async function loadResults(allMatches) {
     if (bracket && bracket.teams && bracket.teams.length > 0) {
         knockoutContainer.innerHTML = renderOfficialBracket(bracket);
     } else {
-        knockoutContainer.innerHTML = '<div style="background:white; padding: 2rem; border-radius: 12px; text-align: center; color: #999;">Slutspelet har inte startats ännu.</div>';
+        knockoutContainer.innerHTML = '<div style="background:var(--color-card-bg); padding: 2rem; border-radius: 12px; text-align: center; color: color-mix(in srgb, var(--color-text) 60%, transparent);">Slutspelet har inte startats ännu.</div>';
     }
 
     // Hide groups sub-tab when no group stage exists

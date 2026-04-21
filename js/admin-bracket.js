@@ -76,10 +76,10 @@ function dateSelectors(round, matchIdx, dateStr, legSuffix) {
         + `<option value="custom"${isCustomTime ? ' selected' : ''}>Annan…</option>`;
 
     return `<div class="abt-date-row" style="display:flex; gap:3px; margin-top:3px;">
-        <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
-        <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:1;">${monthOpts}</select>
-        <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
-        <input type="text" class="abt-date-time-custom" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} placeholder="HH:MM" value="${isCustomTime ? time : ''}" style="font-size:11px; padding:2px; border:1px solid #ddd; border-radius:4px; flex:0 0 50px; display:${isCustomTime ? 'block' : 'none'};">
+        <select class="abt-date-day" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid var(--color-card-border); background:var(--color-card-bg); color:inherit; border-radius:4px; flex:0 0 42px;">${dayOpts}</select>
+        <select class="abt-date-month" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid var(--color-card-border); background:var(--color-card-bg); color:inherit; border-radius:4px; flex:1;">${monthOpts}</select>
+        <select class="abt-date-time" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} style="font-size:11px; padding:2px; border:1px solid var(--color-card-border); background:var(--color-card-bg); color:inherit; border-radius:4px; flex:0 0 58px;">${timeOpts}</select>
+        <input type="text" class="abt-date-time-custom" data-round="${round}" data-match="${matchIdx}" ${suffix ? `data-leg="2"` : ''} placeholder="HH:MM" value="${isCustomTime ? time : ''}" style="font-size:11px; padding:2px; border:1px solid var(--color-card-border); background:var(--color-card-bg); color:inherit; border-radius:4px; flex:0 0 50px; display:${isCustomTime ? 'block' : 'none'};">
     </div>`;
 }
 
@@ -102,19 +102,19 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
     if (twoLeg) {
         const t2 = match.team2 || 'Lag 2';
         const t1 = match.team1 || 'Lag 1';
-        html += `<div style="font-size:10px; color:#b38600; font-weight:600; margin-top:8px; margin-bottom:2px; border-top:1px dashed #ddd; padding-top:6px;">MATCH 2 (retur)</div>`;
+        html += `<div style="font-size:10px; color:#b38600; font-weight:600; margin-top:8px; margin-bottom:2px; border-top:1px dashed var(--color-card-border); padding-top:6px;">MATCH 2 (retur)</div>`;
         html += `<div class="abt-team-row">
-            <span class="abt-input" style="flex:1; padding:4px 8px; color:#888; font-size:12px;">${f(t2)}${t2}</span>
+            <span class="abt-input" style="flex:1; padding:4px 8px; color:color-mix(in srgb, var(--color-text) 55%, transparent); font-size:12px;">${f(t2)}${t2}</span>
             <input type="number" class="admin-bracket-score-leg2 abt-score" data-round="${round}" data-match="${matchIdx}" data-side="1" value="${match.score1_leg2 ?? ''}" placeholder="-">
         </div>
         <div class="abt-team-row">
-            <span class="abt-input" style="flex:1; padding:4px 8px; color:#888; font-size:12px;">${f(t1)}${t1}</span>
+            <span class="abt-input" style="flex:1; padding:4px 8px; color:color-mix(in srgb, var(--color-text) 55%, transparent); font-size:12px;">${f(t1)}${t1}</span>
             <input type="number" class="admin-bracket-score-leg2 abt-score" data-round="${round}" data-match="${matchIdx}" data-side="2" value="${match.score2_leg2 ?? ''}" placeholder="-">
         </div>`;
         html += dateSelectors(round, matchIdx, match.date_leg2 || '', '[data-leg="2"]');
 
         // Aggregate display
-        html += `<div class="abt-aggregate" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; color:#888; margin-top:6px; text-align:center;"></div>`;
+        html += `<div class="abt-aggregate" data-round="${round}" data-match="${matchIdx}" style="font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent); margin-top:6px; text-align:center;"></div>`;
     }
 
     // Penalty winner picker — rendered for both single- and two-leg matches.
@@ -123,8 +123,8 @@ function renderMatchCard(round, matchIdx, match, side, twoLeg) {
     html += `<div class="abt-penalty-pick" data-round="${round}" data-match="${matchIdx}" style="display:none; margin-top:6px; text-align:center;">
         <div style="font-size:10px; color:#ffc107; font-weight:600; margin-bottom:4px;">Lika — välj straffvinnare:</div>
         <div style="display:flex; gap:6px; justify-content:center;">
-            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="1" style="font-size:11px; padding:4px 10px; background:${pw === (match.team1 || '') ? '#28a745' : '#444'};">${f(match.team1 || 'Lag 1')}${match.team1 || 'Lag 1'}</button>
-            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="2" style="font-size:11px; padding:4px 10px; background:${pw === (match.team2 || '') ? '#28a745' : '#444'};">${f(match.team2 || 'Lag 2')}${match.team2 || 'Lag 2'}</button>
+            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="1" style="font-size:11px; padding:4px 10px; background:${pw === (match.team1 || '') ? '#28a745' : 'color-mix(in srgb, var(--color-text) 25%, var(--color-card-bg))'};">${f(match.team1 || 'Lag 1')}${match.team1 || 'Lag 1'}</button>
+            <button type="button" class="btn abt-penalty-btn" data-round="${round}" data-match="${matchIdx}" data-side="2" style="font-size:11px; padding:4px 10px; background:${pw === (match.team2 || '') ? '#28a745' : 'color-mix(in srgb, var(--color-text) 25%, var(--color-card-bg))'};">${f(match.team2 || 'Lag 2')}${match.team2 || 'Lag 2'}</button>
         </div>
         <input type="hidden" class="abt-penalty-winner" data-round="${round}" data-match="${matchIdx}" value="${pw}">
     </div>`;
@@ -263,7 +263,8 @@ export async function renderAdminBracket() {
             if (hiddenInput) hiddenInput.value = team;
             // Highlight selected button
             container.querySelectorAll(`.abt-penalty-btn[data-round="${round}"][data-match="${matchIdx}"]`).forEach(b => {
-                b.style.background = '#444';
+                b.style.background = 'color-mix(in srgb, var(--color-text) 25%, var(--color-card-bg))';
+                b.style.color = 'inherit';
             });
             btn.style.background = '#28a745';
             // Auto-advance this winner

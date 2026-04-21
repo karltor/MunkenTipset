@@ -74,7 +74,7 @@ export function showFullLeaderboard() {
 
     html += `</tbody></table></div>`;
 
-    html += `<div style="margin-top:12px; font-size:11px; color:#888;">`;
+    html += `<div style="margin-top:12px; font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent);">`;
     html += `<strong>Poängregler:</strong> `;
     html += `1X2 = ${scoring.matchResult}p/match · `;
     html += `Rätt mål = ${scoring.matchHomeGoals}p + ${scoring.matchAwayGoals}p · `;
@@ -104,7 +104,7 @@ export function showAllTips() {
 
     html += `<div class="stat-card" style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:20px;">`;
     html += `<div style="flex:1; min-width:200px;">
-        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:#555;">1. Välj vy:</label>
+        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:color-mix(in srgb, var(--color-text) 75%, transparent);">1. Välj vy:</label>
         <div class="tabs" style="border:none; margin:0; padding:0; gap:5px;">
             <button class="tab-btn active" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Grupper</button>
             <button class="tab-btn" id="btn-view-knockout" style="padding:8px 12px; font-size:13px; flex:1;">Slutspel</button>
@@ -113,12 +113,12 @@ export function showAllTips() {
     </div>`;
 
     html += `<div style="flex:2; min-width:250px;">
-        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:#555;">2. Välj tipsare att jämföra:</label>
-        <div style="max-height:140px; overflow-y:auto; border:1px solid #e0e0e0; border-radius:8px; padding:10px; background:#fbfbfb; display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px;">`;
+        <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:color-mix(in srgb, var(--color-text) 75%, transparent);">2. Välj tipsare att jämföra:</label>
+        <div style="max-height:140px; overflow-y:auto; border:1px solid var(--color-card-border); border-radius:8px; padding:10px; background:color-mix(in srgb, var(--color-text) 3%, var(--color-card-bg)); display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px;">`;
 
     sortedUsers.forEach(u => {
         const isChecked = _comparisonState.selectedUsers.includes(u.userId) ? 'checked' : '';
-        html += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; background:white; padding:4px 8px; border-radius:4px; border:1px solid #eee;">
+        html += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; background:var(--color-card-bg); padding:4px 8px; border-radius:4px; border:1px solid var(--color-card-border);">
             <input type="checkbox" class="user-compare-cb" value="${u.userId}" ${isChecked}>
             <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${u.name}">${u.name}</span>
         </label>`;
@@ -128,7 +128,7 @@ export function showAllTips() {
     html += `</div>`;
 
     html += `<div id="comparison-table-container" class="stat-card" style="padding:0; overflow-x:auto;">
-        <p style="text-align:center; color:#888; padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>
+        <p style="text-align:center; color:color-mix(in srgb, var(--color-text) 55%, transparent); padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>
     </div>`;
 
     container.innerHTML = html;
@@ -183,7 +183,7 @@ function renderComparisonTable() {
     const selectedIds = _comparisonState.selectedUsers;
 
     if (selectedIds.length === 0) {
-        container.innerHTML = `<p style="text-align:center; color:#888; padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>`;
+        container.innerHTML = `<p style="text-align:center; color:color-mix(in srgb, var(--color-text) 55%, transparent); padding:30px;">Välj minst en tipsare ovan för att se tabellen.</p>`;
         return;
     }
 
@@ -192,9 +192,9 @@ function renderComparisonTable() {
     let html = `<table class="group-table" style="width:100%; min-width:${selectedIds.length * 140 + 200}px; border-collapse: separate; border-spacing: 0;">`;
 
     html += `<thead><tr>`;
-    html += `<th style="text-align:left; position:sticky; left:0; background:#1a1a1a; color:white; z-index:2; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Fas</th>`;
+    html += `<th style="text-align:left; position:sticky; left:0; background:var(--color-table-header-bg); color:var(--color-table-header-text); z-index:2; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Fas</th>`;
     users.forEach(u => {
-        html += `<th style="background:#1a1a1a; color:white; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${u.name}</th>`;
+        html += `<th style="background:var(--color-table-header-bg); color:var(--color-table-header-text); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${u.name}</th>`;
     });
     html += `</tr></thead><tbody style="font-size:13px;">`;
 
@@ -217,7 +217,7 @@ function renderSimpleView(users) {
     getGroupLetters().forEach(letter => {
         const og = official[letter];
         html += `<tr>`;
-        html += `<td style="font-weight:700; position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">Grupp ${letter}</td>`;
+        html += `<td style="font-weight:700; position:sticky; left:0; background:color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05);">Grupp ${letter}</td>`;
         users.forEach(u => {
             const picks = u.groupPicks ? u.groupPicks[letter] : null;
             if (picks && picks.first && picks.second) {
@@ -226,14 +226,14 @@ function renderSimpleView(users) {
                     firstStyle = picks.first === og.first ? 'color:#28a745;' : 'color:#dc3545;';
                     secondStyle = picks.second === og.second ? 'color:#28a745;' : 'color:#dc3545;';
                 }
-                html += `<td style="background:white;">
+                html += `<td style="background:var(--color-card-bg);">
                     <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; padding-left:10px;">
                         <span style="white-space:nowrap; ${firstStyle}" title="Etta">🥇 ${f(picks.first)}${picks.first}</span>
                         <span style="white-space:nowrap; ${secondStyle}" title="Tvåa">🥈 ${f(picks.second)}${picks.second}</span>
                     </div>
                 </td>`;
             } else {
-                html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                html += `<td style="color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center; background:var(--color-card-bg);">-</td>`;
             }
         });
         html += `</tr>`;
@@ -249,7 +249,7 @@ function renderSimpleView(users) {
     }
 
     html += `<tr>`;
-    html += `<td style="font-weight:700; position:sticky; left:0; background:#fffdf5; z-index:1; border-right:2px solid #ddd; color:#d4a017; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">🏆 Tippade mästare</td>`;
+    html += `<td style="font-weight:700; position:sticky; left:0; background:color-mix(in srgb, #ffc107 10%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); color:#d4a017; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">🏆 Tippade mästare</td>`;
     users.forEach(u => {
         const fin = u.knockoutPicks?.[_finalKey];
         if (fin) {
@@ -257,9 +257,9 @@ function renderSimpleView(users) {
             if (finalWinners.length > 0) {
                 champColor = finalWinners.includes(fin) ? 'color:#28a745;' : 'color:#dc3545;';
             }
-            html += `<td style="background:#fffdf5; font-weight:700; ${champColor}">${f(fin)}${fin}</td>`;
+            html += `<td style="background:color-mix(in srgb, #ffc107 10%, var(--color-card-bg)); font-weight:700; ${champColor}">${f(fin)}${fin}</td>`;
         } else {
-            html += `<td style="background:#fffdf5; color:#ccc; text-align:center;">-</td>`;
+            html += `<td style="background:color-mix(in srgb, #ffc107 10%, var(--color-card-bg)); color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center;">-</td>`;
         }
     });
     html += `</tr>`;
@@ -314,7 +314,7 @@ function renderKnockoutView(users) {
         });
 
         if (teamList.length === 0) {
-            html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:#888; padding:10px; background:white;">Inga tips registrerade</td></tr>`;
+            html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:color-mix(in srgb, var(--color-text) 55%, transparent); padding:10px; background:var(--color-card-bg);">Inga tips registrerade</td></tr>`;
             return;
         }
 
@@ -329,17 +329,17 @@ function renderKnockoutView(users) {
             // Color-code the team label if results exist
             const teamCorrect = hasResults && winners.includes(team);
             const teamWrong = hasResults && !winners.includes(team);
-            let labelBg = isShared ? '#e8f5e9' : '#f4f7f6';
+            let labelBg = isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg))';
             let labelColor = '';
-            if (teamCorrect) { labelBg = '#e8f5e9'; labelColor = 'color:#28a745;'; }
-            else if (teamWrong) { labelBg = '#fce8e6'; labelColor = 'color:#dc3545;'; }
+            if (teamCorrect) { labelBg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; labelColor = 'color:#28a745;'; }
+            else if (teamWrong) { labelBg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; labelColor = 'color:#dc3545;'; }
 
-            const rowBg = isShared ? '#f0faf0' : 'white';
+            const rowBg = isShared ? 'color-mix(in srgb, #28a745 10%, var(--color-card-bg))' : 'var(--color-card-bg)';
             html += `<tr>`;
-            html += `<td style="font-weight:600; position:sticky; left:0; background:${labelBg}; ${labelColor} z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05); white-space:nowrap; font-size:12px;">${f(team)}${team}</td>`;
+            html += `<td style="font-weight:600; position:sticky; left:0; background:${labelBg}; ${labelColor} z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05); white-space:nowrap; font-size:12px;">${f(team)}${team}</td>`;
 
             users.forEach(u => {
-                if (!u.knockoutPicks) { html += `<td style="background:${rowBg}; text-align:center; color:#ccc;">-</td>`; return; }
+                if (!u.knockoutPicks) { html += `<td style="background:${rowBg}; text-align:center; color:color-mix(in srgb, var(--color-text) 35%, transparent);">-</td>`; return; }
                 const hasPick = isFinal
                     ? u.knockoutPicks[round.key] === team
                     : (u.knockoutPicks[round.key] || []).includes(team);
@@ -347,15 +347,15 @@ function renderKnockoutView(users) {
                 if (hasPick) {
                     if (hasResults) {
                         if (teamCorrect) {
-                            html += `<td style="background:#e8f5e9; text-align:center; font-size:16px;">✅</td>`;
+                            html += `<td style="background:color-mix(in srgb, #28a745 18%, var(--color-card-bg)); text-align:center; font-size:16px;">✅</td>`;
                         } else {
-                            html += `<td style="background:#fce8e6; text-align:center; font-size:16px;">❌</td>`;
+                            html += `<td style="background:color-mix(in srgb, #dc3545 18%, var(--color-card-bg)); text-align:center; font-size:16px;">❌</td>`;
                         }
                     } else {
-                        html += `<td style="background:${isShared ? '#e8f5e9' : '#fff8e1'}; text-align:center; font-size:16px;">${isShared ? '✅' : '⚡'}</td>`;
+                        html += `<td style="background:${isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, #ffc107 15%, var(--color-card-bg))'}; text-align:center; font-size:16px;">${isShared ? '✅' : '⚡'}</td>`;
                     }
                 } else {
-                    html += `<td style="background:${rowBg}; text-align:center; color:#e0e0e0;">–</td>`;
+                    html += `<td style="background:${rowBg}; text-align:center; color:color-mix(in srgb, var(--color-text) 25%, transparent);">–</td>`;
                 }
             });
             html += `</tr>`;
@@ -381,7 +381,7 @@ function renderAdvancedView(users) {
     const stages = Object.keys(groupedMatches).sort();
 
     stages.forEach(stage => {
-        html += `<tr><td colspan="${users.length + 1}" style="background:#e9ecef; font-weight:700; text-align:center; padding:6px; font-size:12px; position:sticky; left:0; z-index:1;">${stage}</td></tr>`;
+        html += `<tr><td colspan="${users.length + 1}" style="background:color-mix(in srgb, var(--color-text) 8%, var(--color-card-bg)); font-weight:700; text-align:center; padding:6px; font-size:12px; position:sticky; left:0; z-index:1;">${stage}</td></tr>`;
 
         groupedMatches[stage].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true })).forEach(m => {
             const r = results[m.id];
@@ -392,7 +392,7 @@ function renderAdvancedView(users) {
             const scorePart = hasResult
                 ? `<span style="font-weight:800; padding:0 6px; min-width:36px; text-align:center;">${r.homeScore} - ${r.awayScore}</span>`
                 : `<span class="compare-team-sep">-</span>`;
-            html += `<td class="compare-match-cell" style="position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
+            html += `<td class="compare-match-cell" style="position:sticky; left:0; background:color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
                 <div class="compare-match-date">${m.date || ''}</div>
                 <div class="compare-match-teams">
                     <span class="compare-team-flag">${f(m.homeTeam)}</span><span class="compare-team-name">${m.homeTeam}</span>
@@ -404,19 +404,19 @@ function renderAdvancedView(users) {
             users.forEach(u => {
                 const tip = u.matchTips ? u.matchTips[m.id] : null;
                 if (tip && tip.homeScore !== undefined) {
-                    let bg = 'white', color = '';
+                    let bg = 'var(--color-card-bg)', color = '';
                     if (hasResult) {
                         const exact = tip.homeScore === r.homeScore && tip.awayScore === r.awayScore;
                         const rightWinner = !exact && sign(tip.homeScore - tip.awayScore) === sign(r.homeScore - r.awayScore);
-                        if (exact) { bg = '#e8f5e9'; color = 'color:#28a745;'; }
-                        else if (rightWinner) { bg = '#e3f2fd'; color = 'color:#1976d2;'; }
-                        else { bg = '#fce8e6'; color = 'color:#dc3545;'; }
+                        if (exact) { bg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; color = 'color:#28a745;'; }
+                        else if (rightWinner) { bg = 'color-mix(in srgb, #1976d2 18%, var(--color-card-bg))'; color = 'color:#1976d2;'; }
+                        else { bg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; color = 'color:#dc3545;'; }
                     }
                     html += `<td style="font-size:16px; font-weight:800; text-align:center; background:${bg}; ${color}">
                         ${tip.homeScore} - ${tip.awayScore}
                     </td>`;
                 } else {
-                    html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                    html += `<td style="color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center; background:var(--color-card-bg);">-</td>`;
                 }
             });
             html += `</tr>`;
@@ -440,7 +440,7 @@ function renderAdvancedView(users) {
                 const l1Score = hasL1 ? `<span style="font-weight:800; padding:0 6px; min-width:36px; text-align:center;">${m.score1} - ${m.score2}</span>` : `<span class="compare-team-sep">-</span>`;
                 const l1Label = twoLeg ? ` – Match 1` : '';
                 html += `<tr>`;
-                html += `<td class="compare-match-cell" style="position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
+                html += `<td class="compare-match-cell" style="position:sticky; left:0; background:color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
                     <div class="compare-match-date">${m.date || ''}${l1Label}</div>
                     <div class="compare-match-teams">
                         <span class="compare-team-flag">${f(m.team1)}</span><span class="compare-team-name">${m.team1}</span>
@@ -451,17 +451,17 @@ function renderAdvancedView(users) {
                 users.forEach(u => {
                     const tip = u.knockoutScores?.[rd.key]?.[mi];
                     if (tip && tip.score1 != null && tip.score2 != null) {
-                        let bg = 'white', color = '';
+                        let bg = 'var(--color-card-bg)', color = '';
                         if (hasL1) {
                             const exact = tip.score1 === m.score1 && tip.score2 === m.score2;
                             const rightWinner = !exact && sign(tip.score1 - tip.score2) === sign(m.score1 - m.score2);
-                            if (exact) { bg = '#e8f5e9'; color = 'color:#28a745;'; }
-                            else if (rightWinner) { bg = '#e3f2fd'; color = 'color:#1976d2;'; }
-                            else { bg = '#fce8e6'; color = 'color:#dc3545;'; }
+                            if (exact) { bg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; color = 'color:#28a745;'; }
+                            else if (rightWinner) { bg = 'color-mix(in srgb, #1976d2 18%, var(--color-card-bg))'; color = 'color:#1976d2;'; }
+                            else { bg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; color = 'color:#dc3545;'; }
                         }
                         html += `<td style="font-size:16px; font-weight:800; text-align:center; background:${bg}; ${color}">${tip.score1} - ${tip.score2}</td>`;
                     } else {
-                        html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                        html += `<td style="color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center; background:var(--color-card-bg);">-</td>`;
                     }
                 });
                 html += `</tr>`;
@@ -471,7 +471,7 @@ function renderAdvancedView(users) {
                     const hasL2 = m.score1_leg2 !== undefined;
                     const l2Score = hasL2 ? `<span style="font-weight:800; padding:0 6px; min-width:36px; text-align:center;">${m.score1_leg2} - ${m.score2_leg2}</span>` : `<span class="compare-team-sep">-</span>`;
                     html += `<tr>`;
-                    html += `<td class="compare-match-cell" style="position:sticky; left:0; background:#f4f7f6; z-index:1; border-right:2px solid #ddd; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
+                    html += `<td class="compare-match-cell" style="position:sticky; left:0; background:color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05);">
                         <div class="compare-match-date">${m.date_leg2 || ''} – Match 2 (retur)</div>
                         <div class="compare-match-teams">
                             <span class="compare-team-flag">${f(m.team2)}</span><span class="compare-team-name">${m.team2}</span>
@@ -482,17 +482,17 @@ function renderAdvancedView(users) {
                     users.forEach(u => {
                         const tip = u.knockoutScores?.[rd.key]?.[mi];
                         if (tip && tip.score1_leg2 != null && tip.score2_leg2 != null) {
-                            let bg = 'white', color = '';
+                            let bg = 'var(--color-card-bg)', color = '';
                             if (hasL2) {
                                 const exact = tip.score1_leg2 === m.score1_leg2 && tip.score2_leg2 === m.score2_leg2;
                                 const rightWinner = !exact && sign(tip.score1_leg2 - tip.score2_leg2) === sign(m.score1_leg2 - m.score2_leg2);
-                                if (exact) { bg = '#e8f5e9'; color = 'color:#28a745;'; }
-                                else if (rightWinner) { bg = '#e3f2fd'; color = 'color:#1976d2;'; }
-                                else { bg = '#fce8e6'; color = 'color:#dc3545;'; }
+                                if (exact) { bg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; color = 'color:#28a745;'; }
+                                else if (rightWinner) { bg = 'color-mix(in srgb, #1976d2 18%, var(--color-card-bg))'; color = 'color:#1976d2;'; }
+                                else { bg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; color = 'color:#dc3545;'; }
                             }
                             html += `<td style="font-size:16px; font-weight:800; text-align:center; background:${bg}; ${color}">${tip.score1_leg2} - ${tip.score2_leg2}</td>`;
                         } else {
-                            html += `<td style="color:#ccc; text-align:center; background:white;">-</td>`;
+                            html += `<td style="color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center; background:var(--color-card-bg);">-</td>`;
                         }
                     });
                     html += `</tr>`;
@@ -502,7 +502,7 @@ function renderAdvancedView(users) {
     }
 
     if (stages.length === 0 && (!bracket?.rounds || !Object.values(bracket.rounds).some(r => r?.some(m => m.team1)))) {
-        html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:#888;">Inga matcher hittades.</td></tr>`;
+        html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:color-mix(in srgb, var(--color-text) 55%, transparent);">Inga matcher hittades.</td></tr>`;
     }
 
     return html;

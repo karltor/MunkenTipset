@@ -406,8 +406,8 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         // --- Build special tips HTML ---
         let specialHtml = '';
         if (hasSpecial && me.specialPicks && specialConfig?.questions?.length) {
-            specialHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
-            specialHtml += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin-bottom:8px;">${specialLabel.toUpperCase()}</div>`;
+            specialHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed var(--color-card-border);">';
+            specialHtml += `<div style="font-size:9px; font-weight:700; color:color-mix(in srgb, var(--color-text) 60%, transparent); text-align:center; letter-spacing:1px; margin-bottom:8px;">${specialLabel.toUpperCase()}</div>`;
             specialConfig.questions.forEach(q => {
                 const pick = me.specialPicks[q.id];
                 if (pick == null) return;
@@ -420,8 +420,8 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 }
                 const color = isResolved ? (correct ? 'color:#28a745;' : 'color:#dc3545;') : '';
                 const icon = isResolved ? (correct ? '&#10003; ' : '&#10007; ') : '';
-                specialHtml += `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:12px; border-bottom:1px solid #f1f1f1;">`;
-                specialHtml += `<span style="flex:1; color:#555;">${q.text}</span>`;
+                specialHtml += `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:12px; border-bottom:1px solid color-mix(in srgb, var(--color-text) 10%, transparent);">`;
+                specialHtml += `<span style="flex:1; color:color-mix(in srgb, var(--color-text) 75%, transparent);">${q.text}</span>`;
                 specialHtml += `<span style="font-weight:700; ${color} white-space:nowrap; margin-left:8px;">${icon}${pick}</span>`;
                 specialHtml += `</div>`;
             });
@@ -480,13 +480,17 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                     }
                     // Leg 2 result
                     if (m.score1_leg2 !== undefined) {
+                        const aggH = (m.score1 || 0) + (m.score2_leg2 || 0);
+                        const aggA = (m.score2 || 0) + (m.score1_leg2 || 0);
                         allPlayedMatches.push({
                             matchId: `ko_${rd.adminKey}_${mi}_L2`, homeTeam: m.team2, awayTeam: m.team1,
                             homeScore: m.score1_leg2, awayScore: m.score2_leg2,
                             stage: `${rd.label} – Match 2 (retur)`, date: m.date_leg2,
                             _parsed: m.date_leg2 ? parseMatchDate(m.date_leg2) : new Date(getTournamentYear(), 6, 2 + ri, mi),
                             _isKnockout: true, _koRound: rd.adminKey, _koRoundKey: rd.key,
-                            _koMatchIdx: mi, _koLeg: 2, _winner: m.winner
+                            _koMatchIdx: mi, _koLeg: 2, _winner: m.winner,
+                            _penaltyWinner: m.penaltyWinner || null,
+                            _aggHome: aggA, _aggAway: aggH  // swapped because leg 2 flips home/away
                         });
                     }
                 } else {
@@ -498,7 +502,8 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                             stage: rd.label, date: m.date,
                             _parsed: m.date ? parseMatchDate(m.date) : new Date(getTournamentYear(), 6, 1 + ri, mi),
                             _isKnockout: true, _koRound: rd.adminKey, _koRoundKey: rd.key,
-                            _koMatchIdx: mi, _koLeg: 0, _winner: m.winner
+                            _koMatchIdx: mi, _koLeg: 0, _winner: m.winner,
+                            _penaltyWinner: m.penaltyWinner || null
                         });
                     }
                 }
@@ -568,21 +573,40 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         html += `<h3 class="dashboard-section-title">Senaste resultat</h3>`;
         recentResults.forEach(match => {
             const h = match.homeScore, a2 = match.awayScore;
-            const hw = h > a2 ? 'font-weight:800;' : '', aw = a2 > h ? 'font-weight:800;' : '';
+            // Decide if this card is the *deciding* leg of a KO tie that went
+            // to penalties: single-leg with penaltyWinner set, or two-leg leg 2
+            // whose aggregate ended tied. Leg 1 of a two-legged tie is never
+            // "decided on penalties" — the winner is only known after leg 2.
+            const wonOnPens = !!match._penaltyWinner && (
+                match._koLeg === 0 ||
+                (match._koLeg === 2 && match._aggHome === match._aggAway)
+            );
+            const homeWon = h > a2 || (wonOnPens && match._penaltyWinner === match.homeTeam);
+            const awayWon = a2 > h || (wonOnPens && match._penaltyWinner === match.awayTeam);
+            const hw = homeWon ? 'font-weight:800;' : '', aw = awayWon ? 'font-weight:800;' : '';
 
             html += `<div class="stat-card result-card" style="padding:14px; margin-bottom:10px;">`;
 
             // Stage + date label
             if (match.stage) {
-                html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage}${match.date ? ' · ' + match.date : ''}</div>`;
+                html += `<div style="font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent); margin-bottom:6px; text-align:center;">${match.stage}${match.date ? ' · ' + match.date : ''}</div>`;
             }
 
-            // Score row — CENTERED with flex:1 on both sides
+            // Score row — on a penalty-decided card, append "(P)" to the winner
+            // so the card reads clearly even without a "Tippat vidare" row.
+            const homeLabel = wonOnPens && match._penaltyWinner === match.homeTeam ? `${f(match.homeTeam)}${match.homeTeam} <span style="color:#ffc107; font-weight:700;">(P)</span>` : `${f(match.homeTeam)}${match.homeTeam}`;
+            const awayLabel = wonOnPens && match._penaltyWinner === match.awayTeam ? `<span style="color:#ffc107; font-weight:700;">(P)</span> ${f(match.awayTeam)}${match.awayTeam}` : `${match.awayTeam}${f(match.awayTeam)}`;
             html += `<div style="display:flex; align-items:center;">
-                <span style="flex:1; text-align:right; ${hw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f(match.homeTeam)}${match.homeTeam}</span>
+                <span style="flex:1; text-align:right; ${hw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${homeLabel}</span>
                 <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:1.3rem; font-weight:800; letter-spacing:2px;">${h} - ${a2}</span>
-                <span style="flex:1; text-align:left; ${aw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
+                <span style="flex:1; text-align:left; ${aw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${awayLabel}</span>
             </div>`;
+            if (wonOnPens) {
+                html += `<div style="font-size:11px; color:#ffc107; text-align:center; margin-top:4px;">${match._penaltyWinner} vann på straffar</div>`;
+            } else if (match._koLeg === 2 && match._aggHome != null) {
+                // Show aggregate on the second leg of a two-leg tie
+                html += `<div style="font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent); text-align:center; margin-top:4px;">Totalt: ${match.awayTeam} ${match._aggHome} – ${match._aggAway} ${match.homeTeam}${match._winner ? ` — <strong>${match._winner} vidare</strong>` : ''}</div>`;
+            }
 
             // Max possible points for a score-tip on this match (exact tippers get this)
             const maxScorePts = (scoring.matchResult || 0) + (scoring.matchHomeGoals || 0) + (scoring.matchAwayGoals || 0) + (scoring.exactScore || 0);
