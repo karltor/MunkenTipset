@@ -24,17 +24,25 @@ function renderName(name) {
 
 // ── localStorage cache helpers ─────────────────────────────────────────────
 const STATS_CACHE_KEY = 'munkentipset_stats_cache_v2';
+// Short TTL (2 min): dataVersion only bumps on admin actions, so without a
+// time-based expiry a viewer would otherwise keep seeing yesterday's leaderboard
+// even if a teammate has tipped in the meantime. On a cache miss the next load
+// does a full users-collection fetch, which is how new tippers become visible.
+const STATS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 function _loadStatsCache() {
     try {
         const raw = localStorage.getItem(STATS_CACHE_KEY);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.savedAt && (Date.now() - parsed.savedAt) > STATS_CACHE_TTL_MS) return null;
+        return parsed;
     } catch { return null; }
 }
 
 function _saveStatsCache(dataVersion, payload) {
     try {
-        localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ dataVersion, ...payload }));
+        localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ dataVersion, savedAt: Date.now(), ...payload }));
     } catch { /* quota exceeded or localStorage unavailable */ }
 }
 
@@ -65,69 +73,37 @@ export async function loadCommunityStats(prefetchedSettings) {
         users = cached.users;
         matchDocs = cached.matchDocs;
     } else {
-        // Cache miss – fetch results, bracket, matches, and the aggregate _tips doc.
-        // The _tips doc is maintained by admin on every bumpDataVersion(), so a
-        // single read replaces getDocs(users) (O(1) instead of O(N) reads).
-        const [resultsSnap, bracketSnap, matchesColSnap, tipsSnap] = await Promise.all([
+        // Cache miss – fetch results, bracket, matches, and the users
+        // collection. We used to pre-aggregate tips into a `_tips` doc to save
+        // reads, but it was only refreshed on admin actions (bumpDataVersion),
+        // so new users who tipped between two admin actions never appeared in
+        // the leaderboard or "Alla tipsare" until admin did *something*.
+        // Reading users directly costs O(N) reads per cache miss but is always
+        // correct — and localStorage caches the result for subsequent loads
+        // within the same dataVersion.
+        const [resultsSnap, bracketSnap, matchesColSnap, usersSnap] = await Promise.all([
             getDoc(doc(db, "matches", "_results")),
             getDoc(doc(db, "matches", "_bracket")),
             getDocs(collection(db, "matches")),
-            getDoc(doc(db, "matches", "_tips"))
+            getDocs(collection(db, "users"))
         ]);
         results = resultsSnap.exists() ? resultsSnap.data() : {};
         bracket = bracketSnap.exists() ? bracketSnap.data() : null;
         matchDocs = matchesColSnap.docs.filter(d => !d.id.startsWith('_')).map(d => ({ id: d.id, ...d.data() }));
 
-        // Prefer the pre-aggregated _tips doc when fresh; fall back to the users
-        // collection if it's missing (first-time admin) or stale (dataVersion
-        // drifted because a user saved tips after the last admin bump).
-        const tipsData = tipsSnap.exists() ? tipsSnap.data() : null;
-        if (tipsData && tipsData.dataVersion === dataVersion && Array.isArray(tipsData.users)) {
-            users = tipsData.users;
-            // Always refresh the current user's own entry (+1 read) — they may
-            // have saved tips after the last admin bump, in which case _tips
-            // has a stale version of their picks. Peers' picks are fine since
-            // they can't change without dataVersion eventually drifting too.
-            const uid = auth.currentUser?.uid;
-            if (uid) {
-                try {
-                    const meSnap = await getDoc(doc(db, "users", uid));
-                    if (meSnap.exists()) {
-                        const d = meSnap.data();
-                        const freshMe = {
-                            userId: uid,
-                            name: d.name || uid,
-                            groupPicks: d.groupPicks || null,
-                            knockoutPicks: d.knockout || null,
-                            knockoutScores: d.knockoutScores || null,
-                            matchTips: d.matchTips || {},
-                            specialPicks: d.specialPicks || null
-                        };
-                        const hasTips = freshMe.groupPicks || freshMe.knockoutPicks
-                            || Object.keys(freshMe.matchTips).length > 0 || freshMe.specialPicks;
-                        const idx = users.findIndex(u => u.userId === uid);
-                        if (idx >= 0) users[idx] = freshMe;
-                        else if (hasTips) users.push(freshMe);
-                    }
-                } catch { /* noop — fall back to whatever _tips had */ }
-            }
-        } else {
-            // Fallback: one read per user doc — preserves correctness.
-            const usersSnap = await getDocs(collection(db, "users"));
-            users = [];
-            for (const userDoc of usersSnap.docs) {
-                const d = userDoc.data();
-                const u = {
-                    userId: userDoc.id,
-                    name: d.name || userDoc.id,
-                    groupPicks: d.groupPicks || null,
-                    knockoutPicks: d.knockout || null,
-                    knockoutScores: d.knockoutScores || null,
-                    matchTips: d.matchTips || {},
-                    specialPicks: d.specialPicks || null
-                };
-                if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0 || u.specialPicks) users.push(u);
-            }
+        users = [];
+        for (const userDoc of usersSnap.docs) {
+            const d = userDoc.data();
+            const u = {
+                userId: userDoc.id,
+                name: d.name || userDoc.id,
+                groupPicks: d.groupPicks || null,
+                knockoutPicks: d.knockout || null,
+                knockoutScores: d.knockoutScores || null,
+                matchTips: d.matchTips || {},
+                specialPicks: d.specialPicks || null
+            };
+            if (u.groupPicks || u.knockoutPicks || Object.keys(u.matchTips).length > 0 || u.specialPicks) users.push(u);
         }
 
         _saveStatsCache(dataVersion, { results, bracket, users, matchDocs, scoring });
