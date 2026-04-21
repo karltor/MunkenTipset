@@ -336,6 +336,7 @@ export async function clearKnockoutResults() {
         (bracket.rounds[r.adminKey] || []).forEach(m => {
             delete m.score1; delete m.score2; delete m.winner;
             delete m.score1_leg2; delete m.score2_leg2; delete m.date_leg2;
+            delete m.penaltyWinner;
         });
     });
     koRounds.slice(1).forEach(r => {

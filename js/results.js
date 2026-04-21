@@ -234,6 +234,11 @@ function renderBracketMatch(match, isFinal, twoLeg) {
             <span style="flex:1;">${match.team2 ? f(t2) : ''}${t2}</span><span style="font-weight:700; min-width:20px; text-align:right;">${s2}</span>
         </div>`;
 
+    // Single-leg penalty indicator
+    if (!twoLeg && match.penaltyWinner && s1 !== '' && s2 !== '' && s1 === s2) {
+        html += `<div style="font-size:10px; color:#ffc107; text-align:center; padding:4px 0;">${match.penaltyWinner} vidare på str.</div>`;
+    }
+
     // Show leg 2 section if round is two-legged
     if (twoLeg) {
         html += `<div style="border-top:1px dashed rgba(255,255,255,0.1); margin:3px 0;"></div>`;
