@@ -3,7 +3,7 @@ import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10
 import { f, fLarge, flags } from './wizard.js';
 import { getTeamImageUrl } from './team-data.js';
 import { invalidateStatsCache } from './stats.js';
-import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound, hasStageType, isTwoLegged, getRoundAdminKey } from './tournament-config.js';
+import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound, hasStageType, isTwoLegged, getRoundAdminKey, hasSpecialQuestions, getSpecialQuestionsConfig } from './tournament-config.js';
 import { isTipsLockedLive } from './lock-check.js';
 
 function _rounds() { return getKnockoutRounds().map(r => r.key); }
@@ -721,7 +721,7 @@ async function saveBracketRound() {
     else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }
 }
 
-function showChampion(team) {
+async function showChampion(team) {
     document.getElementById('bracket-locked').style.display = 'none';
     document.getElementById('bracket-content').style.display = 'none';
     const champ = document.getElementById('bracket-champion');
@@ -729,6 +729,30 @@ function showChampion(team) {
 
     const imgUrl = getTeamImageUrl(team, '80x60');
     const bigFlag = imgUrl ? `<img src="${imgUrl}" style="border-radius:4px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" width="80" height="60" alt="">` : '';
+
+    // Nudge users toward Specialtips (e.g. Sverigetipset) if the tournament has
+    // that stage and they haven't completed it yet — easy to miss otherwise
+    // because the bracket tab feels like the final step.
+    let specialNudgeHtml = '';
+    let specialLabel = '';
+    if (hasSpecialQuestions()) {
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+            try {
+                const snap = await getDoc(doc(db, "users", uid));
+                const specialPicks = snap.exists() ? snap.data().specialPicks : null;
+                if (!specialPicks?.completedAt) {
+                    specialLabel = getSpecialQuestionsConfig()?.label || 'Specialtips';
+                    specialNudgeHtml = `
+                        <div id="bracket-special-nudge" style="margin: 24px auto 0; max-width: 480px; background: rgba(230,126,34,0.18); border: 2px solid #e67e22; border-radius: 12px; padding: 18px 20px; text-align: center;">
+                            <div style="font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: 6px;">⭐ Glöm inte ${specialLabel}!</div>
+                            <p style="color: #ddd; font-size: 0.9rem; margin: 0 0 14px;">Du har inte tippat ${specialLabel} ännu — det ger extra poäng.</p>
+                            <button class="btn" id="btn-go-to-special" style="background: #e67e22; color: #fff;">Tippa ${specialLabel} ➡</button>
+                        </div>`;
+                }
+            } catch { /* noop — nudge is best-effort */ }
+        }
+    }
 
     champ.innerHTML = `
         <div class="bracket-bg" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
@@ -741,6 +765,7 @@ function showChampion(team) {
                     <button class="btn" style="background: rgba(255,255,255,0.1); color: white;" id="btn-back-to-start">Tillbaka till Start</button>
                     <button class="btn" style="background: rgba(255,255,255,0.1); color: white;" id="btn-edit-bracket">Ändra tips</button>
                 </div>
+                ${specialNudgeHtml}
             </div>
         </div>`;
 
@@ -753,5 +778,9 @@ function showChampion(team) {
         showBracketContent();
         currentRound = 0;
         loadRound(currentRound);
+    });
+
+    document.getElementById('btn-go-to-special')?.addEventListener('click', () => {
+        document.querySelector('.tab-btn[data-target="special-tab"]')?.click();
     });
 }
