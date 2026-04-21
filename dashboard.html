@@ -100,7 +100,21 @@
     </div>
 
     <nav class="navbar">
-        <h1 class="logo-text">MunkenTipset 2026</h1>
+        <div class="navbar-left">
+            <h1 class="logo-text">MunkenTipset 2026</h1>
+            <div id="countdown-timer" class="countdown-timer" style="display:none;" title="Tipsraderna låses 11 juni kl 20:00">
+                <span class="countdown-label">Tipset låses om</span>
+                <div class="countdown-values">
+                    <span class="countdown-unit"><span id="cd-days" class="countdown-num">0</span><span class="countdown-suffix">d</span></span>
+                    <span class="countdown-sep">:</span>
+                    <span class="countdown-unit"><span id="cd-hours" class="countdown-num">00</span><span class="countdown-suffix">h</span></span>
+                    <span class="countdown-sep">:</span>
+                    <span class="countdown-unit"><span id="cd-minutes" class="countdown-num">00</span><span class="countdown-suffix">m</span></span>
+                    <span class="countdown-sep">:</span>
+                    <span class="countdown-unit"><span id="cd-seconds" class="countdown-num">00</span><span class="countdown-suffix">s</span></span>
+                </div>
+            </div>
+        </div>
         <div>
             <span id="user-name" style="margin-right: 15px;">Laddar...</span>
             <button id="settings-btn" class="btn btn-settings" title="Inställningar">⚙</button>
