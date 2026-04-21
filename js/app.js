@@ -15,6 +15,7 @@ import { getColorMode, applyColorMode } from './color-mode.js';
 import { loadEmailPref, showEmailPrefPopup, initSettingsTab, WELCOME_DISMISSED_KEY } from './user-settings.js';
 import { initChat, destroyChat, setChatAdmin } from './chat.js';
 import { toggleChatAdminPanel } from './chat-admin.js';
+import { showCountdownIfFuture, hideCountdown } from './countdown.js';
 
 // Apply saved theme and color mode immediately before anything renders
 applyStoredTheme();
@@ -230,13 +231,17 @@ onAuthStateChanged(auth, async (user) => {
         lockTab('wizard-tab', 'Tipsraderna är låsta av admin.');
         lockTab('bracket-tab', 'Tipsraderna är låsta av admin.');
         lockTab('special-tab', 'Tipsraderna är låsta av admin.');
-    } else if (!hasStageType('round-robin-groups')) {
-        // No group stage — bracket is always available
-        unlockBracket();
-    } else if (userData.groupPicks?.completedAt) {
-        unlockBracket();
+        hideCountdown();
     } else {
-        lockBracket();
+        if (!hasStageType('round-robin-groups')) {
+            // No group stage — bracket is always available
+            unlockBracket();
+        } else if (userData.groupPicks?.completedAt) {
+            unlockBracket();
+        } else {
+            lockBracket();
+        }
+        showCountdownIfFuture();
     }
 
     // Hide loading screen now that branding, tabs AND lock state are in their final state
@@ -421,6 +426,8 @@ function applyLiveLock() {
     lockTab('bracket-tab', 'Tipsraderna är låsta av admin.');
     lockTab('special-tab', 'Tipsraderna är låsta av admin.');
 
+    hideCountdown();
+
     // Hide the (now-locked) tip-tab buttons and reveal the "Alla tipsare"
     // shortcut instead.
     applyTabVisibility();
@@ -446,6 +453,8 @@ function applyLiveUnlock(user) {
 
     unlockTab('wizard-tab');
     unlockTab('special-tab');
+
+    showCountdownIfFuture();
 
     // If one of the lock-only shortcut buttons was active, transfer the active
     // state to the regular Start button before we hide them.
