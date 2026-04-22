@@ -385,6 +385,16 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .result-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .result-row-main { flex: 1; min-width: 0; text-align: center; }
 .result-row-badge { flex: 0 0 auto; }
+/* Own-tip row: subtle banner that spans the full card width so the user can
+   spot their own line instantly, regardless of how many points they got. */
+.result-row.result-row-me {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding: 6px 14px;
+    background: color-mix(in srgb, var(--color-text) 5%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+}
 .result-points-badge {
     display: inline-block;
     font-size: 10px;

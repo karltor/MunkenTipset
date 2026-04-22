@@ -516,15 +516,25 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         if ((scoring.exactScore || 0) > 0 && tipH === h && tipA === a) p += scoring.exactScore;
         return p;
     };
-    const pointsBadge = (pts) => {
-        const bg = pts === 0 ? '#dc3545' : (pts >= (scoring.matchResult || 0) + (scoring.matchHomeGoals || 0) + (scoring.matchAwayGoals || 0) ? '#28a745' : '#17a2b8');
-        return `<span class="result-points-badge" style="background:${bg};">${pts} POÄNG</span>`;
+    // Shared points → color mapping so "Ditt tips" text and the points pill
+    // always agree. Absolute thresholds match the default 1X2/goals scoring
+    // (0=red, 1=orange, 2=gold, 3=light-green, max=dark-green) and degrade
+    // sensibly if scoring is configured differently.
+    const pointsColor = (pts, maxPts) => {
+        if (pts === 0) return '#dc3545';
+        if (maxPts > 0 && pts >= maxPts) return '#1e7e34';
+        if (pts >= 3) return '#6cbe45';
+        if (pts >= 2) return '#d4a017';
+        return '#f0932b';
     };
-    const renderRow = (content, badge) => `<div class="result-row">
+    const pointsBadge = (pts, maxPts) => {
+        return `<span class="result-points-badge" style="background:${pointsColor(pts, maxPts)};">${pts} POÄNG</span>`;
+    };
+    const renderRow = (content, badge, { mine = false } = {}) => `<div class="result-row${mine ? ' result-row-me' : ''}">
         <div class="result-row-main">${content}</div>
         ${badge ? `<div class="result-row-badge">${badge}</div>` : ''}
     </div>`;
-    const tippersLineInner = (icon, names, suffix, color) => {
+    const tippersLineInner = (names, suffix, color) => {
         if (names.length === 0) return '';
         // Shorten "Stansen Brankvist" → "Stansen B" to keep the line compact
         const shortName = (n) => {
@@ -535,7 +545,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         const shortNames = names.map(shortName);
         if (shortNames.length <= 3) {
             const joined = shortNames.length <= 2 ? shortNames.join(' & ') : shortNames.slice(0, -1).join(', ') + ' & ' + shortNames[shortNames.length - 1];
-            return `<div style="font-size:12px; color:${color};">${icon} ${joined} ${suffix}</div>`;
+            return `<div style="font-size:12px; color:${color};">${joined} ${suffix}</div>`;
         }
         let displayNames = [...shortNames].sort(() => 0.5 - Math.random());
         const MAX_NAMES = 10;
@@ -546,7 +556,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             tooltipText = displayNames.join(', ');
         }
         return `<div class="tipper-hover" style="font-size:12px; color:${color}; cursor:default; display:inline-block;">
-            ${icon} ${shortNames.length} st ${suffix}
+            ${shortNames.length} st ${suffix}
             <span class="tipper-tooltip">${tooltipText}</span>
         </div>`;
     };
@@ -599,13 +609,12 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 if (!match._isKnockout) {
                     const myTip = me.matchTips[match.matchId];
                     if (myTip) {
-                        const myExact = myTip.homeScore === h && myTip.awayScore === a2;
-                        const myWinner = !myExact && sign(myTip.homeScore - myTip.awayScore) === sign(h - a2);
-                        const tipStyle = myExact ? 'color:#28a745; font-weight:700;' : (myWinner ? 'color:#17a2b8;' : 'color:#dc3545;');
                         const myPts = calcTipPoints(myTip.homeScore, myTip.awayScore, h, a2);
+                        const tipColor = pointsColor(myPts, maxScorePts);
                         html += renderRow(
-                            `<div style="font-size:12px; ${tipStyle}">Ditt tips: ${myTip.homeScore} - ${myTip.awayScore}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`,
-                            pointsBadge(myPts)
+                            `<div style="font-size:13px; color:${tipColor}; font-weight:700;">Ditt tips: ${myTip.homeScore} - ${myTip.awayScore}</div>`,
+                            pointsBadge(myPts, maxScorePts),
+                            { mine: true }
                         );
                     }
                 } else if (me.knockoutScores || me.knockoutPicks) {
@@ -620,13 +629,12 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         if (leg === 1) { tipH = tip.score1; tipA = tip.score2; }
                         else if (leg === 2) { tipH = tip.score1_leg2; tipA = tip.score2_leg2; }
                         if (tipH != null && tipA != null) {
-                            const myExact = tipH === h && tipA === a2;
-                            const myWinner = !myExact && sign(tipH - tipA) === sign(h - a2);
-                            const tipStyle = myExact ? 'color:#28a745; font-weight:700;' : (myWinner ? 'color:#17a2b8;' : 'color:#dc3545;');
                             const myPts = calcTipPoints(tipH, tipA, h, a2);
+                            const tipColor = pointsColor(myPts, maxScorePts);
                             html += renderRow(
-                                `<div style="font-size:12px; ${tipStyle}">Ditt tips: ${tipH} – ${tipA}${myExact ? ' ✨' : (myWinner ? ' ✓' : '')}</div>`,
-                                pointsBadge(myPts)
+                                `<div style="font-size:13px; color:${tipColor}; font-weight:700;">Ditt tips: ${tipH} – ${tipA}</div>`,
+                                pointsBadge(myPts, maxScorePts),
+                                { mine: true }
                             );
                         }
                     }
@@ -639,11 +647,13 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         const picked = picks.find(t => t === origTeam1 || t === origTeam2);
                         if (picked) {
                             const correct = picked === match._winner;
-                            const advStyle = correct ? 'color:#28a745; font-weight:700;' : 'color:#dc3545;';
-                            const advPts = correct ? (scoring[`ko_${roundKey}`] || 0) : 0;
+                            const koMax = scoring[`ko_${roundKey}`] || 0;
+                            const advPts = correct ? koMax : 0;
+                            const advColor = pointsColor(advPts, koMax);
                             html += renderRow(
-                                `<div style="font-size:12px; ${advStyle}">Tippat vidare: ${f(picked)}${picked}${correct ? ' ✓' : ''}</div>`,
-                                pointsBadge(advPts)
+                                `<div style="font-size:13px; color:${advColor}; font-weight:700;">Tippat vidare: ${f(picked)}${picked}</div>`,
+                                pointsBadge(advPts, koMax),
+                                { mine: true }
                             );
                         }
                     }
@@ -680,10 +690,10 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 });
             }
             if (exactTippers.length > 0) {
-                html += renderRow(tippersLineInner('🎯', exactTippers, 'tippade exakt rätt', '#28a745'), pointsBadge(maxScorePts));
+                html += renderRow(tippersLineInner(exactTippers, 'tippade exakt rätt', pointsColor(maxScorePts, maxScorePts)), pointsBadge(maxScorePts, maxScorePts));
             }
             if (winnerTippers.length > 0) {
-                html += renderRow(tippersLineInner('✓', winnerTippers, 'tippade rätt vinnare', '#17a2b8'), pointsBadge(winnerOnlyPts));
+                html += renderRow(tippersLineInner(winnerTippers, 'tippade rätt vinnare', pointsColor(winnerOnlyPts, maxScorePts)), pointsBadge(winnerOnlyPts, maxScorePts));
             }
             if (exactTippers.length === 0 && winnerTippers.length === 0) {
                 html += `<div style="font-size:12px; color:#999; margin-top:4px; text-align:center;">Ingen annan tippade rätt</div>`;
