@@ -57,6 +57,12 @@
         }
         .btn-google:hover { background-color: #357ae8; transform: translateY(-1px); }
         .btn-google:active { transform: translateY(0); }
+        .login-hint {
+            margin-top: 0.9rem;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.4;
+        }
         #error-message {
             margin-top: 1.2rem;
             font-size: 14px;
@@ -81,6 +87,7 @@
     <div class="background"></div>
     <div class="login-card" id="login-card" style="visibility:hidden;">
         <button id="login-btn" class="btn-google">Logga in med Google</button>
+        <p class="login-hint">Tips: en liten ruta dyker upp när du klickar. Scrolla nedåt i rutan om du inte ser <strong>Fortsätt</strong>-knappen.</p>
         <div id="error-message"></div>
     </div>
 
