@@ -23,6 +23,7 @@ let existingGroupPicks = null;
 let onGroupsComplete = null;
 let tipsLocked = false;
 let savedScores = {}; // Preserve scores across mode switches: { matchId: { h, a } }
+let pendingPicks = {}; // Preserve unsaved gruppetta/grupptvåa across mode switches and group nav: { letter: { first, second } }
 
 export async function initWizard(matchesData, onComplete, locked, prefetchedUserData) {
     allMatches = matchesData;
@@ -126,6 +127,11 @@ function storeCurrentScores() {
             savedScores[m.id] = { h: hEl.value, a: aEl.value };
         }
     });
+    // Capture the current gruppetta/grupptvåa selection too so it survives mode
+    // switches and group navigation. Otherwise loadGroup() would reset selFirst/
+    // selSecond to null and only restore them from Firestore (existingGroupPicks),
+    // losing any unsaved picks the user made before switching modes.
+    pendingPicks[letter] = { first: selFirst, second: selSecond };
 }
 
 // ─── UNIFIED GROUP LOADER ────────────────────────────
@@ -145,8 +151,15 @@ function loadGroup(index) {
     if (existingGroupPicks && existingGroupPicks[letter]) {
         selFirst = existingGroupPicks[letter].first;
         selSecond = existingGroupPicks[letter].second;
-        prevFirst = selFirst; prevSecond = selSecond;
     }
+    // Pending picks (set by storeCurrentScores when leaving a group/mode)
+    // override the saved Firestore picks — they reflect the user's most
+    // recent intent, including unsaved edits made just before switching.
+    if (pendingPicks[letter]) {
+        selFirst = pendingPicks[letter].first;
+        selSecond = pendingPicks[letter].second;
+    }
+    prevFirst = selFirst; prevSecond = selSecond;
 
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
     currentTeams = Array.from(new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam])));
