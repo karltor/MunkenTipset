@@ -9,6 +9,7 @@ import { initEmailDraft } from './admin-email.js';
 import { initThemeEditor } from './admin-theme.js';
 import { initBackup } from './admin-backup.js';
 import { initTournament } from './admin-tournament.js';
+import { initAdminPot } from './admin-pot.js';
 
 import { getGroupLetters, getKnockoutRounds, getTournamentYear, getFinalRound, getChampionLabel, hasStageType } from './tournament-config.js';
 export let allMatches = [];
@@ -86,6 +87,8 @@ export async function initAdmin(matchesData) {
                 btn.classList.add('active');
                 document.querySelectorAll('.admin-sub-content').forEach(c => c.classList.remove('active'));
                 document.getElementById(btn.dataset.adminTab).classList.add('active');
+                // Lazy-load tabs that need fresh data each time
+                if (btn.dataset.adminTab === 'admin-pot') initAdminPot();
             });
         });
 

@@ -16,6 +16,7 @@ let _loadCommunityStats = null;
 let _cachedResults = null;
 let _cachedBracket = null;
 let _cachedOfficialGroupStandings = null;
+let _viewerIsPotMember = false;
 
 export function initCompareState(users, scores, scoring, loadFn, extra) {
     _cachedUsers = users;
@@ -26,7 +27,13 @@ export function initCompareState(users, scores, scoring, loadFn, extra) {
         _cachedResults = extra.results || null;
         _cachedBracket = extra.bracket || null;
         _cachedOfficialGroupStandings = extra.officialGroupStandings || null;
+        _viewerIsPotMember = !!extra.viewerIsPotMember;
     }
+}
+
+// See stats.js: only show 💰 to viewers who are themselves in the pot.
+function potMark(isPot) {
+    return (_viewerIsPotMember && isPot) ? ' <span title="I prispotten" style="font-size:0.85em;">💰</span>' : '';
 }
 
 // ── FULL LEADERBOARD VIEW ──────────────────────────
@@ -61,7 +68,7 @@ export function showFullLeaderboard() {
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
         html += `<tr style="${style}">
             <td style="text-align:left;">${medal}</td>
-            <td style="text-align:left;">${s.name}</td>
+            <td style="text-align:left;">${s.name}${potMark(s.potMember)}</td>
             <td>${s.detail.matchResult || 0}</td>
             <td>${s.detail.matchGoals || 0}</td>
             <td>${s.detail.exactScore || 0}</td>
@@ -120,7 +127,7 @@ export function showAllTips() {
         const isChecked = _comparisonState.selectedUsers.includes(u.userId) ? 'checked' : '';
         html += `<label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; background:var(--color-card-bg); padding:4px 8px; border-radius:4px; border:1px solid var(--color-card-border);">
             <input type="checkbox" class="user-compare-cb" value="${u.userId}" ${isChecked}>
-            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${u.name}">${u.name}</span>
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${u.name}">${u.name}${potMark(u.potMember)}</span>
         </label>`;
     });
 
@@ -194,7 +201,7 @@ function renderComparisonTable() {
     html += `<thead><tr>`;
     html += `<th style="text-align:left; position:sticky; left:0; background:var(--color-table-header-bg); color:var(--color-table-header-text); z-index:2; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Fas</th>`;
     users.forEach(u => {
-        html += `<th style="background:var(--color-table-header-bg); color:var(--color-table-header-text); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${u.name}</th>`;
+        html += `<th style="background:var(--color-table-header-bg); color:var(--color-table-header-text); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${u.name}${potMark(u.potMember)}</th>`;
     });
     html += `</tr></thead><tbody style="font-size:13px;">`;
 

@@ -97,6 +97,7 @@ export async function loadCommunityStats(prefetchedSettings) {
             const u = {
                 userId: userDoc.id,
                 name: d.name || userDoc.id,
+                potMember: !!d.potMember,
                 groupPicks: d.groupPicks || null,
                 knockoutPicks: d.knockout || null,
                 knockoutScores: d.knockoutScores || null,
@@ -122,6 +123,11 @@ export async function loadCommunityStats(prefetchedSettings) {
     }
 
     const currentUserId = auth.currentUser?.uid;
+    // The 💰 marker is a private signal between pot participants about who
+    // they're competing for prize money with. Only shown to viewers who are
+    // themselves in the pot; otherwise it's hidden entirely.
+    const viewerIsPotMember = users.some(u => u.userId === currentUserId && u.potMember);
+    const potMark = (isPot) => (viewerIsPotMember && isPot) ? ' <span title="I prispotten" style="font-size:0.85em;">💰</span>' : '';
     const playedMatches = Object.entries(results).filter(([, r]) => r.homeScore !== undefined);
 
     // Build official group standings from results for group winner/runner-up scoring
@@ -161,14 +167,14 @@ export async function loadCommunityStats(prefetchedSettings) {
         const isMe = s.userId === currentUserId;
         const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : `${i + 1}. `));
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
-        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${renderName(s.name)}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${renderName(s.name)}${potMark(s.potMember)}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
     }
 
     // If user is outside top 10, show separator + their row
     if (myRank >= 10) {
         const s = scores[myRank];
         html += `<tr style="border-top:2px dashed #ddd;"><td colspan="${colCount + 1}" style="text-align:center; color:#999; font-size:11px; padding:4px;">···</td></tr>`;
-        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${renderName(s.name)}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
+        html += `<tr style="background:rgba(40,167,69,0.08); font-weight:700;"><td style="text-align:left;padding-left:6px;">${myRank + 1}. ${renderName(s.name)}${potMark(s.potMember)}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
     }
 
     html += `</tbody></table>`;
@@ -868,7 +874,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
 
     // Update compare module state
     initCompareState(users, scores, scoring, loadCommunityStats, {
-        results, bracket, officialGroupStandings
+        results, bracket, officialGroupStandings, viewerIsPotMember
     });
 
     // Wire buttons

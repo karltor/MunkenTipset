@@ -368,6 +368,7 @@
             <div class="admin-nav">
                 <button class="admin-nav-btn active" data-admin-tab="admin-results">Resultat</button>
                 <button class="admin-nav-btn" data-admin-tab="admin-settings">Inställningar</button>
+                <button class="admin-nav-btn" data-admin-tab="admin-pot">Prispott</button>
                 <button class="admin-nav-btn" data-admin-tab="admin-theme">Utseende</button>
                 <button class="admin-nav-btn" data-admin-tab="admin-email">Mejlutkast</button>
                 <button class="admin-nav-btn" data-admin-tab="admin-tournament">Turnering</button>
@@ -410,6 +411,16 @@
                         <h3 style="margin-top:0;">Poänginställningar</h3>
                         <div id="admin-scoring"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ADMIN SUB: Prispott -->
+            <div id="admin-pot" class="admin-sub-content">
+                <div class="admin-card">
+                    <h3 style="margin-top:0;">Prispott</h3>
+                    <p style="color:#888; font-size:13px; margin-top:0;">Bocka i de tipsare som lagt in pengar i prispotten. Alla i potten ser ett 💰 bredvid varandras namn på leaderboard och i "Alla tipsare". Den som inte är med i potten ser inga markeringar.</p>
+                    <div id="admin-pot-summary" style="font-size:13px; margin-bottom:10px; color:#555;"></div>
+                    <div id="admin-pot-users"></div>
                 </div>
             </div>
 

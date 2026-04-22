@@ -192,7 +192,7 @@ export function calcLeaderboard(users, results, bracket, scoring, officialGroupS
             });
         }
 
-        return { userId: u.userId, name: u.name, groupPts, koPts, specialPts, total: groupPts + koPts + specialPts, detail };
+        return { userId: u.userId, name: u.name, potMember: !!u.potMember, groupPts, koPts, specialPts, total: groupPts + koPts + specialPts, detail };
     });
 }
 
