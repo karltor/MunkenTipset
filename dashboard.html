@@ -99,6 +99,47 @@
         </div>
     </div>
 
+    <!-- Tips-complete popup: shown once when a user finishes all 3 tipsrader -->
+    <div id="tips-complete-overlay" class="welcome-overlay" style="display: none;">
+        <div class="welcome-popup" id="tips-complete-card">
+            <h2>🎉 Bra! Nu är du klar</h2>
+            <p class="welcome-subtitle">
+                Du kan ändra dina tips hur mycket du vill ända fram till <strong>11 juni kl 20:00</strong>.
+            </p>
+            <div style="background: color-mix(in srgb, #ffc107 15%, transparent); border: 1px solid #ffc107; border-radius: 10px; padding: 14px 16px; margin: 16px 0; text-align: left;">
+                <p style="margin:0 0 6px; font-weight:600;">💰 Vill du satsa 100 kr på att du är bäst?</p>
+                <p style="margin:0; font-size:13px; color: color-mix(in srgb, var(--color-text) 75%, transparent);">Helt frivilligt — men om du tror att ditt tips slår alla andras så häng med i prispotten.</p>
+            </div>
+            <div class="welcome-buttons">
+                <button class="btn-welcome btn-welcome-close" id="tips-complete-no">Nej tack, tillbaka till start</button>
+                <button class="btn-welcome btn-welcome-dismiss" id="tips-complete-yes" style="background:#ffc107; color:#000; border-color:#ffc107;">Ja tack, jag är bäst! 💰</button>
+            </div>
+        </div>
+        <div class="welcome-popup" id="pot-swish-card" style="display:none;">
+            <h2>💰 Kör hårt!</h2>
+            <p class="welcome-subtitle">
+                Swisha <strong>100 kr</strong> senast <strong>11 juni kl 20:00</strong>. När Karl fått swishen bockar han av dig i listan.
+            </p>
+            <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:center; margin:12px 0;">
+                <img src="swish-qr.png" alt="Swish QR-kod" id="swish-qr-img" style="max-width:200px; border-radius:12px;" onerror="this.style.display='none'">
+                <div style="text-align:center;">
+                    <div style="font-size:12px; color:#888;">Surfar du på mobilen?</div>
+                    <div style="font-size:1.3rem; font-weight:700; margin:4px 0;">070 390 86 17</div>
+                    <div style="font-size:12px; color:#888;">Har du datorn framme? Skanna QR-koden med Swish-appen!</div>
+                </div>
+            </div>
+            <div style="background: color-mix(in srgb, #28a745 12%, transparent); border-radius:10px; padding:14px 16px; margin:16px 0; text-align:left; font-size:14px;">
+                <div style="font-weight:600; margin-bottom:6px;">Vinstpotten delas så här:</div>
+                <div>🥇 60% till 1:a</div>
+                <div>🥈 30% till 2:a</div>
+                <div>🥉 10% till 3:a</div>
+            </div>
+            <div class="welcome-buttons">
+                <button class="btn-welcome btn-welcome-close" id="pot-swish-close">Stäng</button>
+            </div>
+        </div>
+    </div>
+
     <nav class="navbar">
         <div class="navbar-left">
             <h1 class="logo-text">MunkenTipset 2026</h1>
@@ -348,7 +389,7 @@
                         </label>
                     </div>
                 </div>
-                <div class="admin-section" style="margin-bottom:0;">
+                <div class="admin-section" style="margin-bottom:16px;">
                     <h4 style="margin:0 0 4px; font-size:14px;">Välkomstpopupen</h4>
                     <p style="font-size:12px; color:#666; margin:0 0 10px;">Visa välkomstpopupen direkt när du öppnar sidan.</p>
                     <div class="settings-toggle-row">
@@ -357,6 +398,14 @@
                             <input type="checkbox" id="settings-welcome-toggle">
                             <span class="toggle-slider"></span>
                         </label>
+                    </div>
+                </div>
+                <div class="admin-section" style="margin-bottom:0;">
+                    <h4 style="margin:0 0 4px; font-size:14px;">Prispott &amp; Swish-info</h4>
+                    <p style="font-size:12px; color:#666; margin:0 0 10px;">Visa popupen om prispotten (100 kr-satsningen) igen.</p>
+                    <div class="settings-toggle-row">
+                        <span class="settings-toggle-label">Visa igen nu</span>
+                        <button class="btn" id="settings-show-pot-popup" style="font-size:12px; padding:6px 14px;">Visa popup</button>
                     </div>
                 </div>
             </div>

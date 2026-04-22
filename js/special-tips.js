@@ -10,6 +10,7 @@ import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getSpecialQuestionsConfig } from './tournament-config.js';
 import { isTipsLockedLive } from './lock-check.js';
+import { maybeShowTipsCompleteModal } from './tips-complete-modal.js';
 
 let tipsLocked = false;
 
@@ -195,6 +196,7 @@ async function saveSpecialTips(container, questions) {
         showToast('Dina specialtips har sparats!');
         // Refresh the form to show readonly state
         initSpecialTips(tipsLocked);
+        maybeShowTipsCompleteModal();
     } catch (err) {
         showToast('Fel vid sparning: ' + err.message);
     }

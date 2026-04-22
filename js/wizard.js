@@ -4,6 +4,7 @@ import { invalidateStatsCache } from './stats.js';
 import { getGroupLetters } from './tournament-config.js';
 import { countryFlags, clubCrestIds, teamImg, teamImgLarge } from './team-data.js';
 import { isTipsLockedLive } from './lock-check.js';
+import { maybeShowTipsCompleteModal } from './tips-complete-modal.js';
 
 // Flagg-hjälpare — backward-compatible exports
 // 'flags' maps team name → flag code (countries) or null (clubs handled by teamImg)
@@ -484,6 +485,7 @@ async function saveAndNext() {
     if (allGroupsDone) {
         showToast("Snyggt! Gruppspelet klart — slutspelet låses upp!");
         if (onGroupsComplete) onGroupsComplete();
+        maybeShowTipsCompleteModal();
     } else {
         // Find next untipped group, or go to next sequential group
         const letters = getGroupLetters();

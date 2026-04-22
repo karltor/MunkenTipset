@@ -1,6 +1,7 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { getColorMode, setColorMode } from './color-mode.js';
+import { showTipsCompleteModalForced } from './tips-complete-modal.js';
 
 const EMAIL_PREF_KEY = 'emailPref'; // 'often' | 'few' | 'none'
 const NOTIFICATION_EMAIL_KEY = 'notificationEmail';
@@ -81,6 +82,12 @@ export async function initSettingsTab() {
                 localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
             }
         });
+    }
+
+    // Re-show the tips-complete / pot popup on demand
+    const showPotBtn = document.getElementById('settings-show-pot-popup');
+    if (showPotBtn) {
+        showPotBtn.addEventListener('click', () => showTipsCompleteModalForced());
     }
 }
 
