@@ -86,7 +86,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-        import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
         import { firebaseConfig } from './js/config.js';
 
         const app = initializeApp(firebaseConfig);
@@ -104,8 +104,6 @@
             return e.endsWith('@nyamunken.se') && !e.startsWith('qq') && !hasThreeDigitCode(e);
         }
 
-        const errorMsg = document.getElementById('error-message');
-
         // Auto-redirect already-authenticated users straight into the dashboard
         // so the splash screen doesn't flash a "Logga in" button for them.
         onAuthStateChanged(auth, (user) => {
@@ -117,28 +115,29 @@
             }
         });
 
-        // We use signInWithRedirect instead of signInWithPopup because the
-        // Google popup window is a fixed ~500x600px and on many laptops users
-        // can't see the "Godkänn" button without scrolling. Redirect uses the
-        // full browser window so everything is visible.
-        getRedirectResult(auth).then((result) => {
-            if (result && result.user && !isAllowedEmail(result.user.email)) {
-                signOut(auth).then(() => {
-                    errorMsg.innerHTML = 'Hej! Kul att du hittade hit 👋 MunkenTipset är dock en intern sida för lärare på Nya Munken. Vill du veta mer om skolan? Kika gärna in på <a href="https://www.nyamunken.se/" target="_blank">nyamunken.se</a>!';
-                    errorMsg.style.display = 'block';
-                });
-            }
-            // Allowed users are redirected by onAuthStateChanged above.
-        }).catch((error) => {
-            errorMsg.textContent = "Ett fel uppstod: " + error.message;
-            errorMsg.style.display = 'block';
-        });
-
+        // Popup (not redirect) because the site is served from munkentipset.se
+        // but Firebase authDomain is jonas-hemsida.firebaseapp.com — with
+        // signInWithRedirect the session is set under the Firebase domain and
+        // can't be read back on munkentipset.se, so the user lands on the
+        // login page again. Popup avoids the cross-domain handoff entirely.
         document.getElementById('login-btn').addEventListener('click', () => {
+            const errorMsg = document.getElementById('error-message');
             errorMsg.style.display = 'none';
-            signInWithRedirect(auth, provider).catch((error) => {
-                errorMsg.textContent = "Ett fel uppstod: " + error.message;
-                errorMsg.style.display = 'block';
+            signInWithPopup(auth, provider).then((result) => {
+                const email = result.user.email || '';
+                if (isAllowedEmail(email)) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    signOut(auth).then(() => {
+                        errorMsg.innerHTML = 'Hej! Kul att du hittade hit 👋 MunkenTipset är dock en intern sida för lärare på Nya Munken. Vill du veta mer om skolan? Kika gärna in på <a href="https://www.nyamunken.se/" target="_blank">nyamunken.se</a>!';
+                        errorMsg.style.display = 'block';
+                    });
+                }
+            }).catch((error) => {
+                if(error.code !== 'auth/popup-closed-by-user') {
+                    errorMsg.textContent = "Ett fel uppstod: " + error.message;
+                    errorMsg.style.display = 'block';
+                }
             });
         });
     </script>
