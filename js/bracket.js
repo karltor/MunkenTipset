@@ -5,6 +5,7 @@ import { getTeamImageUrl } from './team-data.js';
 import { invalidateStatsCache } from './stats.js';
 import { getKnockoutRounds, getGroupLetters, getGroupStageConfig, getChampionLabel, getTournamentName, getFinalRound, hasStageType, isTwoLegged, getRoundAdminKey, hasSpecialQuestions, getSpecialQuestionsConfig } from './tournament-config.js';
 import { isTipsLockedLive } from './lock-check.js';
+import { maybeShowTipsCompleteModal } from './tips-complete-modal.js';
 
 function _rounds() { return getKnockoutRounds().map(r => r.key); }
 function _roundLabel(key) {
@@ -717,8 +718,10 @@ async function saveBracketRound() {
     });
     invalidateStatsCache();
 
-    if (_isFinalRound(roundKey)) { showChampion(knockoutData[roundKey]); }
-    else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }
+    if (_isFinalRound(roundKey)) {
+        showChampion(knockoutData[roundKey]);
+        maybeShowTipsCompleteModal();
+    } else { currentRound++; loadRound(currentRound); window.scrollTo(0, 0); }
 }
 
 async function showChampion(team) {
