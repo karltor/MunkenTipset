@@ -80,11 +80,12 @@ export async function initAdminPot() {
                 'Swisha 100 kr senast 11 juni kl 20:00 till 070 390 86 17.',
                 '',
                 'Tack och må bästa munk vinna!',
-                '/Karl'
+                '/Jonas'
             ].join('\n');
-            // Use BCC so recipients don't see each other's addresses.
+            // BCC so recipients don't see each other's addresses. Open in a new
+            // tab so the admin doesn't lose their place in the Prispott panel.
             const href = `mailto:?bcc=${encodeURIComponent(addrs)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = href;
+            window.open(href, '_blank');
         });
     };
 
