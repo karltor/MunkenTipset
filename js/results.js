@@ -4,54 +4,103 @@ import { f } from './wizard.js';
 import { getGroupLetters, getKnockoutRounds, getFinalRound, hasStageType, isTwoLegged } from './tournament-config.js';
 import { parseMatchDate } from './scoring.js';
 let subTabsWired = false;
+let loading = false;
+// Memoise the last render keyed on the data we rendered from so repeated tab
+// switches during the same session don't re-fetch + re-render hundreds of flag
+// images on iPad Safari (slow decoding was causing ~20s perceived stalls).
+let lastRender = { resultsKey: null, bracketKey: null, allMatches: null, results: null, bracket: null };
 
 export async function loadResults(allMatches) {
-    const groupsContainer = document.getElementById('results-groups');
-    const knockoutContainer = document.getElementById('results-knockout');
-    groupsContainer.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
-    knockoutContainer.innerHTML = '<p style="text-align:center; color:#999;">Laddar...</p>';
+    if (loading) return;
+    loading = true;
+    try {
+        const groupsContainer = document.getElementById('results-groups');
+        const knockoutContainer = document.getElementById('results-knockout');
 
-    const resultsSnap = await getDoc(doc(db, "matches", "_results"));
-    const results = resultsSnap.exists() ? resultsSnap.data() : {};
+        const resultsSnap = await getDoc(doc(db, "matches", "_results"));
+        const results = resultsSnap.exists() ? resultsSnap.data() : {};
 
-    const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
-    const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
+        const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
+        const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
 
-    // Render groups
-    groupsContainer.innerHTML = renderGroupTables(allMatches, results);
+        // Cheap change-detection so we don't re-render identical data
+        const resultsKey = JSON.stringify(results);
+        const bracketKey = JSON.stringify(bracket || null);
+        const unchanged = resultsKey === lastRender.resultsKey
+            && bracketKey === lastRender.bracketKey
+            && allMatches === lastRender.allMatches
+            && groupsContainer.dataset.rendered === '1';
 
-    // Render knockout
-    if (bracket && bracket.teams && bracket.teams.length > 0) {
-        knockoutContainer.innerHTML = renderOfficialBracket(bracket);
-    } else {
-        knockoutContainer.innerHTML = '<div style="background:var(--color-card-bg); padding: 2rem; border-radius: 12px; text-align: center; color: color-mix(in srgb, var(--color-text) 60%, transparent);">Slutspelet har inte startats ännu.</div>';
-    }
+        lastRender = { resultsKey, bracketKey, allMatches, results, bracket };
 
-    // Hide groups sub-tab when no group stage exists
-    const hasGroups = hasStageType('round-robin-groups');
-    const groupsBtn = document.querySelector('.results-sub-btn[data-sub="groups"]');
-    if (groupsBtn) groupsBtn.style.display = hasGroups ? '' : 'none';
+        // Hide groups sub-tab when no group stage exists
+        const hasGroups = hasStageType('round-robin-groups');
+        const groupsBtn = document.querySelector('.results-sub-btn[data-sub="groups"]');
+        if (groupsBtn) groupsBtn.style.display = hasGroups ? '' : 'none';
 
-    // Auto-select sub-tab: show knockout if no groups or all group matches are played
-    if (!hasGroups) {
-        setActiveSubTab('knockout');
-    } else {
-        const allGroupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
-        const allGroupsDone = allGroupMatches.length > 0 && allGroupMatches.every(m => results[m.id]);
-        if (allGroupsDone && bracket?.teams?.length > 0) {
-            setActiveSubTab('knockout');
+        // Decide which sub-tab should be active; render ONLY that one eagerly.
+        // The other one is filled lazily the first time the user opens it.
+        // This halves the flag count on iPad's initial paint.
+        let initialSub = 'groups';
+        if (!hasGroups) {
+            initialSub = 'knockout';
         } else {
-            setActiveSubTab('groups');
+            const allGroupMatches = allMatches.filter(m => m.stage?.startsWith('Grupp'));
+            const allGroupsDone = allGroupMatches.length > 0 && allGroupMatches.every(m => results[m.id]);
+            if (allGroupsDone && bracket?.teams?.length > 0) initialSub = 'knockout';
         }
-    }
 
-    // Wire sub-tab buttons once
-    if (!subTabsWired) {
-        document.querySelectorAll('.results-sub-btn').forEach(btn => {
-            btn.addEventListener('click', () => setActiveSubTab(btn.dataset.sub));
-        });
-        subTabsWired = true;
+        if (!unchanged) {
+            // Placeholders for the deferred sub-tab so a click later triggers a
+            // render on demand.
+            if (initialSub === 'groups') {
+                groupsContainer.innerHTML = renderGroupTables(allMatches, results);
+                groupsContainer.dataset.rendered = '1';
+                knockoutContainer.innerHTML = '<p style="text-align:center; color:#999; padding:2rem;">Laddar slutspelet när du öppnar fliken...</p>';
+                knockoutContainer.dataset.rendered = '';
+            } else {
+                knockoutContainer.innerHTML = (bracket && bracket.teams && bracket.teams.length > 0)
+                    ? renderOfficialBracket(bracket)
+                    : '<div style="background:var(--color-card-bg); padding: 2rem; border-radius: 12px; text-align: center; color: color-mix(in srgb, var(--color-text) 60%, transparent);">Slutspelet har inte startats ännu.</div>';
+                knockoutContainer.dataset.rendered = '1';
+                groupsContainer.innerHTML = '<p style="text-align:center; color:#999; padding:2rem;">Laddar gruppspel när du öppnar fliken...</p>';
+                groupsContainer.dataset.rendered = '';
+            }
+        }
+
+        setActiveSubTab(initialSub);
+
+        // Wire sub-tab buttons once. Each button also renders its content
+        // on first click if it hasn't been rendered yet.
+        if (!subTabsWired) {
+            document.querySelectorAll('.results-sub-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const sub = btn.dataset.sub;
+                    ensureSubTabRendered(sub);
+                    setActiveSubTab(sub);
+                });
+            });
+            subTabsWired = true;
+        }
+    } finally {
+        loading = false;
     }
+}
+
+// Render the given sub-tab on demand using the most recent data we fetched.
+function ensureSubTabRendered(which) {
+    const el = document.getElementById(which === 'groups' ? 'results-groups' : 'results-knockout');
+    if (!el || el.dataset.rendered === '1') return;
+    if (which === 'groups') {
+        if (!lastRender.allMatches || !lastRender.results) return;
+        el.innerHTML = renderGroupTables(lastRender.allMatches, lastRender.results);
+    } else {
+        const bracket = lastRender.bracket;
+        el.innerHTML = (bracket && bracket.teams && bracket.teams.length > 0)
+            ? renderOfficialBracket(bracket)
+            : '<div style="background:var(--color-card-bg); padding: 2rem; border-radius: 12px; text-align: center; color: color-mix(in srgb, var(--color-text) 60%, transparent);">Slutspelet har inte startats ännu.</div>';
+    }
+    el.dataset.rendered = '1';
 }
 
 function setActiveSubTab(which) {

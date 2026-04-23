@@ -166,16 +166,20 @@ export function getTeamImageUrl(teamName, size) {
 /**
  * Returns an <img> tag for the team (country flag or club crest).
  * Falls back to 🌍 if unknown.
+ *
+ * loading="lazy" + decoding="async" let iPad Safari defer off-screen
+ * images — critical on the Matchresultat tab where 300+ flags render
+ * at once and block initial paint for many seconds without it.
  */
 export function teamImg(teamName, opts) {
     const { size = 24, height = 18, style = '' } = opts || {};
     const flagCode = countryFlags[teamName];
     if (flagCode) {
-        return `<img src="https://flagcdn.com/${size}x${height}/${flagCode}.png" style="vertical-align:-4px; margin:0 6px; border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); ${style}" width="${size}" height="${height}" alt="">`;
+        return `<img src="https://flagcdn.com/${size}x${height}/${flagCode}.png" loading="lazy" decoding="async" style="vertical-align:-4px; margin:0 6px; border-radius:2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); ${style}" width="${size}" height="${height}" alt="">`;
     }
     const crestId = clubCrestIds[teamName];
     if (crestId) {
-        return `<img src="https://crests.football-data.org/${crestId}.svg" style="vertical-align:-4px; margin:0 6px; ${style}" width="${size}" height="${size}" alt="">`;
+        return `<img src="https://crests.football-data.org/${crestId}.svg" loading="lazy" decoding="async" style="vertical-align:-4px; margin:0 6px; ${style}" width="${size}" height="${size}" alt="">`;
     }
     return '🌍 ';
 }
@@ -186,11 +190,11 @@ export function teamImg(teamName, opts) {
 export function teamImgLarge(teamName) {
     const flagCode = countryFlags[teamName];
     if (flagCode) {
-        return `<img src="https://flagcdn.com/40x30/${flagCode}.png" style="vertical-align:-5px; margin-right:10px; border-radius:2px;" width="40" height="30" alt="">`;
+        return `<img src="https://flagcdn.com/40x30/${flagCode}.png" loading="lazy" decoding="async" style="vertical-align:-5px; margin-right:10px; border-radius:2px;" width="40" height="30" alt="">`;
     }
     const crestId = clubCrestIds[teamName];
     if (crestId) {
-        return `<img src="https://crests.football-data.org/${crestId}.svg" style="vertical-align:-5px; margin-right:10px;" width="40" height="40" alt="">`;
+        return `<img src="https://crests.football-data.org/${crestId}.svg" loading="lazy" decoding="async" style="vertical-align:-5px; margin-right:10px;" width="40" height="40" alt="">`;
     }
     return '🌍 ';
 }
