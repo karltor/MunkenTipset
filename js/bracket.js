@@ -80,16 +80,34 @@ export async function initBracket(groupPicks, tipsLocked) {
 
     const rounds = _rounds();
     const finalRoundKey = rounds.length > 0 ? rounds[rounds.length - 1] : 'final';
-    if (knockoutData[finalRoundKey] && typeof knockoutData[finalRoundKey] === 'string') { showChampion(knockoutData[finalRoundKey]); return; }
-    if (knockoutData[finalRoundKey]) { showChampion(knockoutData[finalRoundKey]); return; }
+
+    // Find earliest round whose saved picks are no longer all valid (e.g. user
+    // edited group stage so previously qualified teams are gone). We land the
+    // user there so the stale picks can be corrected.
+    let firstStaleRound = -1;
+    for (let i = 0; i < rounds.length; i++) {
+        const valid = getValidTeamsForRound(i);
+        if (!valid) continue;
+        const saved = knockoutData[rounds[i]];
+        if (saved == null) break;
+        const picks = (i === rounds.length - 1) ? (typeof saved === 'string' ? [saved] : (Array.isArray(saved) ? saved : [])) : (Array.isArray(saved) ? saved : []);
+        if (picks.some(t => !valid.has(t))) { firstStaleRound = i; break; }
+    }
+
+    if (firstStaleRound === -1) {
+        if (knockoutData[finalRoundKey] && typeof knockoutData[finalRoundKey] === 'string') { showChampion(knockoutData[finalRoundKey]); return; }
+        if (knockoutData[finalRoundKey]) { showChampion(knockoutData[finalRoundKey]); return; }
+    }
 
     currentRound = 0;
     const koRounds = getKnockoutRounds();
     for (let i = 0; i < koRounds.length - 1; i++) {
+        if (firstStaleRound !== -1 && i >= firstStaleRound) break;
         const r = koRounds[i];
         const expectedPicks = r.teams / 2;
         if (knockoutData[r.key]?.length === expectedPicks) currentRound = i + 1;
     }
+    if (firstStaleRound !== -1) currentRound = firstStaleRound;
 
     showBracketContent();
     loadRound(currentRound);
@@ -200,14 +218,37 @@ function getMatchupsForRound(roundIndex) {
     return matchups;
 }
 
+function getValidTeamsForRound(roundIndex) {
+    if (roundIndex === 0) {
+        if (knockoutOnly) {
+            const adminTeams = adminBracket?.teams;
+            if (Array.isArray(adminTeams) && adminTeams.length > 0) {
+                return new Set(adminTeams.map(t => typeof t === 'string' ? t : t?.name).filter(Boolean));
+            }
+            const adminKey = getRoundAdminKey(_rounds()[0]);
+            const adminRound = adminBracket?.rounds?.[adminKey] || [];
+            const set = new Set();
+            adminRound.forEach(m => { if (m.team1) set.add(m.team1); if (m.team2) set.add(m.team2); });
+            return set.size > 0 ? set : null;
+        }
+        return new Set(allTeamsInRound.map(t => t.name));
+    }
+    const prevKey = _rounds()[roundIndex - 1];
+    return new Set(knockoutData[prevKey] || []);
+}
+
 function loadRound(roundIndex) {
     const roundKey = _rounds()[roundIndex];
     selectedTeams = new Set();
     penaltyWinners = {};
 
+    const validTeams = getValidTeamsForRound(roundIndex);
+
     if (knockoutData[roundKey]) {
         const picks = _isFinalRound(roundKey) ? [knockoutData[roundKey]] : knockoutData[roundKey];
-        picks.forEach(t => selectedTeams.add(t));
+        picks.forEach(t => {
+            if (!validTeams || validTeams.has(t)) selectedTeams.add(t);
+        });
     }
 
     // Restore penalty winners from saved scores
