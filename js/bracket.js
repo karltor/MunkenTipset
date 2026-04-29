@@ -789,7 +789,7 @@ async function showChampion(team) {
                     specialLabel = getSpecialQuestionsConfig()?.label || 'Specialtips';
                     specialNudgeHtml = `
                         <div id="bracket-special-nudge" style="margin: 24px auto 0; max-width: 480px; background: rgba(230,126,34,0.18); border: 2px solid #e67e22; border-radius: 12px; padding: 18px 20px; text-align: center;">
-                            <div style="font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: 6px;">⭐ Glöm inte ${specialLabel}!</div>
+                            <div style="font-size: 1.05rem; font-weight: 600; color: #fff; margin-bottom: 6px;">🇸🇪 Glöm inte ${specialLabel}!</div>
                             <p style="color: #ddd; font-size: 0.9rem; margin: 0 0 14px;">Du har inte tippat ${specialLabel} ännu — det ger extra poäng.</p>
                             <button class="btn" id="btn-go-to-special" style="background: #e67e22; color: #fff;">Tippa ${specialLabel} ➡</button>
                         </div>`;

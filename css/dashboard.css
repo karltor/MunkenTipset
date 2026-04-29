@@ -156,9 +156,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .team-chip { padding: 8px 12px; background: var(--color-card-bg); border: 2px solid #e0e0e0; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; margin-bottom: 4px; }
 .team-chip:hover { border-color: #aaa; }
 .team-chip.rank-1 { border-color: #ffc107; background: #fffdf5; }
-.team-chip.rank-1::after { content: '🏆 1:a'; }
+.team-chip.rank-1::after { content: '1:a'; }
 .team-chip.rank-2 { border-color: #17a2b8; background: #f4fbff; }
-.team-chip.rank-2::after { content: '🥈 2:a'; }
+.team-chip.rank-2::after { content: '2:a'; }
 
 /* ── Casual mode: 2×2 team grid ── */
 .casual-cta {
@@ -178,9 +178,9 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 }
 .casual-team-card:hover { border-color: #aaa; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 .casual-team-card.rank-1 { border-color: #ffc107; background: #fffdf5; box-shadow: 0 0 0 2px rgba(255,193,7,0.25); }
-.casual-team-card.rank-1::after { content: '🏆 Etta'; display: block; font-size: 12px; font-weight: 700; color: #d4a017; margin-top: 6px; }
+.casual-team-card.rank-1::after { content: 'Etta'; display: block; font-size: 12px; font-weight: 700; color: #d4a017; margin-top: 6px; }
 .casual-team-card.rank-2 { border-color: #17a2b8; background: #f4fbff; box-shadow: 0 0 0 2px rgba(23,162,184,0.2); }
-.casual-team-card.rank-2::after { content: '🥈 Tvåa'; display: block; font-size: 12px; font-weight: 700; color: #138496; margin-top: 6px; }
+.casual-team-card.rank-2::after { content: 'Tvåa'; display: block; font-size: 12px; font-weight: 700; color: #138496; margin-top: 6px; }
 .casual-team-flag { font-size: 0; line-height: 1; margin-bottom: 6px; }
 .casual-team-flag img { width: 40px; height: 28px; object-fit: cover; border-radius: 3px; }
 .casual-team-name { font-size: 14px; font-weight: 700; text-align: center; }
@@ -360,7 +360,28 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 
 /* Stats */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.stat-card { background: var(--color-card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px var(--color-card-shadow); }
+.stat-card {
+    background: var(--color-card-bg);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,0.6) inset,
+        0 -1px 0 rgba(0,0,0,0.04) inset,
+        0 1px 2px rgba(0,0,0,0.04),
+        0 6px 14px -4px rgba(0,0,0,0.18),
+        0 12px 28px -8px rgba(0,0,0,0.12);
+    border: 1px solid var(--color-card-border, rgba(0,0,0,0.05));
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.stat-card:hover {
+    box-shadow:
+        0 1px 0 rgba(255,255,255,0.6) inset,
+        0 -1px 0 rgba(0,0,0,0.04) inset,
+        0 2px 4px rgba(0,0,0,0.06),
+        0 10px 20px -4px rgba(0,0,0,0.22),
+        0 18px 36px -10px rgba(0,0,0,0.16);
+    transform: translateY(-1px);
+}
 .stat-card h3 { margin-top: 0; font-size: 1.1rem; color: #333; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; }
 /* Section titles above stat-card groups — consistent typography for all
    dashboard sections (Leaderboard, Min tipsrad, Senaste resultat, etc.) */

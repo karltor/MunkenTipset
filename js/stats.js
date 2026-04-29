@@ -165,7 +165,7 @@ export async function loadCommunityStats(prefetchedSettings) {
     for (let i = 0; i < showTop; i++) {
         const s = scores[i];
         const isMe = s.userId === currentUserId;
-        const medal = i === 0 ? '🥇 ' : (i === 1 ? '🥈 ' : (i === 2 ? '🥉 ' : `${i + 1}. `));
+        const medal = `${i + 1}. `;
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
         html += `<tr style="${style}"><td style="text-align:left;padding-left:6px;">${medal}${renderName(s.name)}${potMark(s.potMember)}</td>${hasGroups ? `<td>${s.groupPts}</td>` : ''}<td>${s.koPts}</td>${hasSpecial ? `<td>${s.specialPts || 0}</td>` : ''}<td><strong>${s.total}</strong></td></tr>`;
     }

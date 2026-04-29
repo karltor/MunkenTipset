@@ -105,7 +105,7 @@ function applyTabVisibility() {
         specialBtn.style.display = hasSpecial ? '' : 'none';
         if (hasSpecial) {
             const cfg = getSpecialQuestionsConfig();
-            if (cfg?.label) specialBtn.textContent = '⭐ ' + cfg.label;
+            if (cfg?.label) specialBtn.textContent = '🇸🇪 ' + cfg.label;
         }
     }
     if (allTipsBtn) allTipsBtn.style.display = 'none';

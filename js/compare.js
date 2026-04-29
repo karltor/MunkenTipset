@@ -64,7 +64,7 @@ export function showFullLeaderboard() {
     const currentUserId = auth.currentUser?.uid;
     scores.forEach((s, i) => {
         const isMe = s.userId === currentUserId;
-        const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : `${i + 1}`));
+        const medal = `${i + 1}`;
         const style = isMe ? 'background:rgba(40,167,69,0.08); font-weight:700;' : '';
         html += `<tr style="${style}">
             <td style="text-align:left;">${medal}</td>
@@ -235,8 +235,8 @@ function renderSimpleView(users) {
                 }
                 html += `<td style="background:var(--color-card-bg);">
                     <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; padding-left:10px;">
-                        <span style="white-space:nowrap; ${firstStyle}" title="Etta">🥇 ${f(picks.first)}${picks.first}</span>
-                        <span style="white-space:nowrap; ${secondStyle}" title="Tvåa">🥈 ${f(picks.second)}${picks.second}</span>
+                        <span style="white-space:nowrap; ${firstStyle}" title="Etta">${f(picks.first)}${picks.first}</span>
+                        <span style="white-space:nowrap; ${secondStyle}" title="Tvåa">${f(picks.second)}${picks.second}</span>
                     </div>
                 </td>`;
             } else {
