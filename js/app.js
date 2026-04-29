@@ -109,7 +109,7 @@ function applyTabVisibility() {
         }
     }
     if (allTipsBtn) allTipsBtn.style.display = 'none';
-    if (scoringInfoBtn) scoringInfoBtn.style.display = 'none';
+    if (scoringInfoBtn) scoringInfoBtn.style.display = '';
 }
 
 // Logga ut
@@ -456,21 +456,12 @@ function applyLiveUnlock(user) {
 
     showCountdownIfFuture();
 
-    // If one of the lock-only shortcut buttons was active, transfer the active
-    // state to the regular Start button before we hide them.
+    // The "Alla tipsare" shortcut is hidden when unlocking — if it was active,
+    // transfer the active state back to the Start button.
     const allTipsBtn = document.getElementById('all-tipsters-tab-btn');
-    const scoringInfoBtn = document.getElementById('scoring-info-tab-btn');
-    [allTipsBtn, scoringInfoBtn].forEach(b => {
-        if (b?.classList.contains('active')) {
-            b.classList.remove('active');
-            document.querySelector('.tab-btn[data-target="start-tab"]')?.classList.add('active');
-        }
-    });
-    // If the scoring-info tab itself was active, swap content back to start
-    const scoringInfoTab = document.getElementById('scoring-info-tab');
-    if (scoringInfoTab?.classList.contains('active')) {
-        scoringInfoTab.classList.remove('active');
-        document.getElementById('start-tab')?.classList.add('active');
+    if (allTipsBtn?.classList.contains('active')) {
+        allTipsBtn.classList.remove('active');
+        document.querySelector('.tab-btn[data-target="start-tab"]')?.classList.add('active');
     }
 
     // Restore the original tip-tab buttons and hide the shortcut buttons.

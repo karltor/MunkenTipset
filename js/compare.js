@@ -5,7 +5,7 @@ import { getGroupLetters, getKnockoutRounds, getFinalRound, getTournamentName, i
 
 let _comparisonState = {
     selectedUsers: [],
-    viewMode: 'simple'
+    viewMode: 'advanced'
 };
 
 // References set by stats.js before calling
@@ -113,9 +113,9 @@ export function showAllTips() {
     html += `<div style="flex:1; min-width:200px;">
         <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:color-mix(in srgb, var(--color-text) 75%, transparent);">1. Välj vy:</label>
         <div class="tabs" style="border:none; margin:0; padding:0; gap:5px;">
-            <button class="tab-btn active" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Grupper</button>
-            <button class="tab-btn" id="btn-view-knockout" style="padding:8px 12px; font-size:13px; flex:1;">Slutspel</button>
-            <button class="tab-btn" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Matcher</button>
+            <button class="tab-btn${_comparisonState.viewMode === 'simple' ? ' active' : ''}" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Grupper</button>
+            <button class="tab-btn${_comparisonState.viewMode === 'knockout' ? ' active' : ''}" id="btn-view-knockout" style="padding:8px 12px; font-size:13px; flex:1;">Slutspel</button>
+            <button class="tab-btn${_comparisonState.viewMode === 'advanced' ? ' active' : ''}" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Matcher</button>
         </div>
     </div>`;
 
