@@ -635,8 +635,10 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
 
     if (recentResults.length > 0) {
         html += `<h3 class="dashboard-section-title">Senaste resultat</h3>`;
+        const recentFinalKey = getKnockoutRounds().slice(-1)[0]?.key;
         recentResults.forEach(match => {
             const h = match.homeScore, a2 = match.awayScore;
+            const isFinalResult = match._isKnockout && match._koRoundKey === recentFinalKey;
             // Decide if this card is the *deciding* leg of a KO tie that went
             // to penalties: single-leg with penaltyWinner set, or two-leg leg 2
             // whose aggregate ended tied. Leg 1 of a two-legged tie is never
@@ -649,10 +651,19 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             const awayWon = a2 > h || (wonOnPens && match._penaltyWinner === match.awayTeam);
             const hw = homeWon ? 'font-weight:800;' : '', aw = awayWon ? 'font-weight:800;' : '';
 
-            html += `<div class="stat-card result-card" style="padding:14px; margin-bottom:10px;">`;
+            const finalCardStyle = isFinalResult
+                ? 'padding:18px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.3), 0 4px 14px rgba(241,196,15,0.25); background:linear-gradient(180deg, rgba(241,196,15,0.12), rgba(241,196,15,0.03));'
+                : 'padding:14px; margin-bottom:10px;';
+            html += `<div class="stat-card result-card${isFinalResult ? ' result-card-final' : ''}" style="${finalCardStyle}">`;
 
-            // Stage + date label
-            if (match.stage) {
+            // Stage + date label — final gets a trophy banner with champion shoutout
+            if (isFinalResult) {
+                const champ = match._winner || (homeWon ? match.homeTeam : (awayWon ? match.awayTeam : null));
+                html += `<div style="font-size:10px; font-weight:800; letter-spacing:2px; color:#a67c00; text-align:center; margin-bottom:8px;">🏆 ${(match.stage || 'FINAL').toUpperCase()}${match.date ? ' · ' + match.date : ''}</div>`;
+                if (champ) {
+                    html += `<div style="font-size:12px; font-weight:700; color:#a67c00; text-align:center; margin-bottom:6px;">${f(champ)} ${champ} är mästare</div>`;
+                }
+            } else if (match.stage) {
                 html += `<div style="font-size:11px; color:color-mix(in srgb, var(--color-text) 55%, transparent); margin-bottom:6px; text-align:center;">${match.stage}${match.date ? ' · ' + match.date : ''}</div>`;
             }
 
@@ -660,9 +671,10 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             // so the card reads clearly even without a "Tippat vidare" row.
             const homeLabel = wonOnPens && match._penaltyWinner === match.homeTeam ? `${f(match.homeTeam)}${match.homeTeam} <span style="color:#ffc107; font-weight:700;">(P)</span>` : `${f(match.homeTeam)}${match.homeTeam}`;
             const awayLabel = wonOnPens && match._penaltyWinner === match.awayTeam ? `<span style="color:#ffc107; font-weight:700;">(P)</span> ${f(match.awayTeam)}${match.awayTeam}` : `${match.awayTeam}${f(match.awayTeam)}`;
+            const scoreFontSize = isFinalResult ? '1.55rem' : '1.3rem';
             html += `<div style="display:flex; align-items:center;">
                 <span style="flex:1; text-align:right; ${hw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${homeLabel}</span>
-                <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:1.3rem; font-weight:800; letter-spacing:2px;">${h} - ${a2}</span>
+                <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:${scoreFontSize}; font-weight:800; letter-spacing:2px;">${h} - ${a2}</span>
                 <span style="flex:1; text-align:left; ${aw} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${awayLabel}</span>
             </div>`;
             if (wonOnPens) {
