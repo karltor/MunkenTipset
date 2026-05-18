@@ -361,7 +361,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 return `<div style="${base} ${boxStyle}"><span style="${textStyle}">${icon}${f(team)} ${team}</span></div>`;
             };
 
-            koHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
+            koHtml += '<div>';
 
             // For each round transition, show ALL teams the user picked to advance
             // out of "thisRound" into "nextRound". Section labeled "Vidare till {nextRound}".
@@ -382,12 +382,41 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 koHtml += '</div>';
             }
 
-            // Guld & Silver (at the bottom) — the final pair: 2 finalists, champion
+            // Guld & Silver (at the bottom) — the final pair: 2 finalists, champion.
+            // Gold "advances" only when they actually win the final; silver
+            // "advances" only when they reach the final AND lose it (since silver
+            // means they're predicted to finish 2nd). Both stay pending until
+            // the final is decided.
+            const finalKey = finalRd?.key;
+            const finalWinnersArr = finalKey ? (officialKoWinners[finalKey] || []) : [];
+            const finalLosersArr = finalKey ? (eliminatedInRound[finalKey] || []) : [];
+            const finalDecided = finalWinnersArr.length > 0;
+            const champion = finalDecided ? finalWinnersArr[0] : null;
+
+            // True if a team got eliminated before reaching the final.
+            const outBeforeFinal = (team) => {
+                if (!team) return false;
+                if (allGroupsDone && qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team)) return true;
+                for (let ri = 0; ri < roundOrder.length - 1; ri++) {
+                    if ((eliminatedInRound[roundOrder[ri]] || []).includes(team)) return true;
+                }
+                return false;
+            };
+
+            const goldStatus = !gold ? null
+                : finalDecided
+                    ? (champion === gold ? 'advanced' : 'eliminated')
+                    : (outBeforeFinal(gold) ? 'eliminated' : 'pending');
+
+            const silverStatus = !silver ? null
+                : finalDecided
+                    ? (finalLosersArr.includes(silver) ? 'advanced' : 'eliminated')
+                    : (outBeforeFinal(silver) ? 'eliminated' : 'pending');
+
             koHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:12px;">';
             if (gold) {
-                const status = getTeamStatus(gold, finalRd.key);
-                const elim = status === 'eliminated';
-                const adv = status === 'advanced';
+                const elim = goldStatus === 'eliminated';
+                const adv = goldStatus === 'advanced';
                 const teamStyle = elim ? 'text-decoration:line-through; opacity:0.6;' : (adv ? 'color:#1e7e34;' : 'color:#333;');
                 const icon = adv ? '&#10003; ' : '';
                 koHtml += '<div style="background:#f1c40f; border-radius:4px; padding:8px; text-align:center;">';
@@ -396,9 +425,8 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                 koHtml += '</div>';
             }
             if (silver) {
-                const status = getTeamStatus(silver, sfRound.key);
-                const elim = status === 'eliminated';
-                const adv = status === 'advanced';
+                const elim = silverStatus === 'eliminated';
+                const adv = silverStatus === 'advanced';
                 const teamStyle = elim ? 'text-decoration:line-through; opacity:0.6;' : (adv ? 'color:#1e7e34;' : 'color:#333;');
                 const icon = adv ? '&#10003; ' : '';
                 koHtml += '<div style="background:#d1d8e0; border-radius:4px; padding:8px; text-align:center;">';
@@ -414,8 +442,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         // --- Build special tips HTML ---
         let specialHtml = '';
         if (hasSpecial && me.specialPicks && specialConfig?.questions?.length) {
-            specialHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed var(--color-card-border);">';
-            specialHtml += `<div style="font-size:9px; font-weight:700; color:color-mix(in srgb, var(--color-text) 60%, transparent); text-align:center; letter-spacing:1px; margin-bottom:8px;">${specialLabel.toUpperCase()}</div>`;
+            specialHtml += '<div>';
             specialConfig.questions.forEach(q => {
                 const pick = me.specialPicks[q.id];
                 if (pick == null) return;
@@ -436,12 +463,26 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             specialHtml += '</div>';
         }
 
-        // Order: groups first during group stage, knockout first after groups are done
+        // Assemble sections with clear divider + section label between each.
+        // Order: groups first during group stage, knockout first after groups are done.
+        const sectionHeader = (label) => `<h4 style="margin:0 0 10px; padding:0; font-size:11px; font-weight:800; color:#5a6573; letter-spacing:1.2px; text-transform:uppercase;">${label}</h4>`;
+        const sections = [];
+        if (groupHtml) sections.push({ label: 'Grupptipset', body: groupHtml });
+        const koSection = koHtml ? { label: 'Slutspelstipset', body: koHtml } : null;
+        const specialSection = specialHtml ? { label: specialLabel, body: specialHtml } : null;
         if (allGroupsDone) {
-            html += koHtml + groupHtml + specialHtml;
+            // ko first, then group already in array, then special
+            if (koSection) sections.unshift(koSection);
         } else {
-            html += groupHtml + koHtml + specialHtml;
+            if (koSection) sections.push(koSection);
         }
+        if (specialSection) sections.push(specialSection);
+        sections.forEach((s, i) => {
+            const wrapStyle = i > 0
+                ? 'margin-top:20px; padding-top:16px; border-top:2px solid #e1e5eb;'
+                : '';
+            html += `<div style="${wrapStyle}">${sectionHeader(s.label)}${s.body}</div>`;
+        });
 
         html += '</div>';
     }
