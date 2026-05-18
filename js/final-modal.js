@@ -29,24 +29,25 @@ function f(team) {
 // a final result is detected, so the cost is acceptable.
 async function fetchScoresAndChampion() {
     try {
-        const [bracketSnap, settingsSnap, matchesSnap, usersSnap] = await Promise.all([
+        // Results live in the aggregated `matches/_results` doc, not on each
+        // match-collection doc. Reading individual match docs here would give
+        // an empty results map and the leaderboard would be missing all
+        // group-stage points.
+        const [bracketSnap, settingsSnap, resultsSnap, matchesSnap, usersSnap] = await Promise.all([
             getDoc(doc(db, "matches", "_bracket")),
             getDoc(doc(db, "matches", "_settings")),
+            getDoc(doc(db, "matches", "_results")),
             getDocs(collection(db, "matches")),
             getDocs(collection(db, "users")),
         ]);
         const bracket = bracketSnap.exists() ? bracketSnap.data() : null;
         const settings = settingsSnap.exists() ? settingsSnap.data() : {};
-        const scoring = settings.scoring || DEFAULT_SCORING || buildDefaultScoring();
+        const scoring = { ...(DEFAULT_SCORING || buildDefaultScoring()), ...(settings.scoring || {}) };
+        const results = resultsSnap.exists() ? resultsSnap.data() : {};
 
-        const results = {};
-        const matchDocs = [];
-        matchesSnap.docs.forEach(d => {
-            if (d.id.startsWith('_')) return;
-            const data = d.data();
-            matchDocs.push({ id: d.id, ...data });
-            if (data.homeScore !== undefined) results[d.id] = data;
-        });
+        const matchDocs = matchesSnap.docs
+            .filter(d => !d.id.startsWith('_'))
+            .map(d => ({ id: d.id, ...d.data() }));
 
         const users = [];
         usersSnap.docs.forEach(d => {
