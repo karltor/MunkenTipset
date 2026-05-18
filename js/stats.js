@@ -321,70 +321,89 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             const sfPicks = sfRound ? (ko[sfRound.key] || []) : [];
             const silver = Array.isArray(sfPicks) ? sfPicks.find(t => t !== gold) : null;
 
-            // Build eliminated-per-round: teams in round N but not in round N+1
-            const eliminatedPerRound = [];
-            for (let ri = 0; ri <= koRoundsAll.length - 3; ri++) {
-                const thisRound = koRoundsAll[ri];
-                const nextRound = koRoundsAll[ri + 1];
-                const thisPicks = ko[thisRound.key] || [];
-                const nextPicks = typeof ko[nextRound.key] === 'string' ? [ko[nextRound.key]] : (ko[nextRound.key] || []);
-                const eliminated = (Array.isArray(thisPicks) ? thisPicks : [thisPicks]).filter(t => !nextPicks.includes(t));
-                if (eliminated.length > 0) {
-                    eliminatedPerRound.push({ round: nextRound, statusRoundKey: thisRound.key, eliminated });
+            // Status for a team based on the round it must win to advance.
+            // statusRoundKey = the round the team participates in;
+            // if they win it, they're in officialKoWinners[statusRoundKey].
+            // Returns 'advanced' | 'eliminated' | 'pending'.
+            const roundOrder = koRoundsAll.map(r => r.key);
+            const getTeamStatus = (team, statusRoundKey) => {
+                if (!team) return 'pending';
+                const thisIdx = roundOrder.indexOf(statusRoundKey);
+                // If groups are done and team didn't qualify for knockout,
+                // they're eliminated regardless of round.
+                if (allGroupsDone && qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team)) {
+                    return 'eliminated';
                 }
-            }
-
-            const getStatusColor = (team, roundKey) => {
-                if (!team) return '';
-                const winners = officialKoWinners[roundKey] || [];
-                const roundOrder = koRoundsAll.map(r => r.key);
-                const thisIdx = roundOrder.indexOf(roundKey);
-                // Only check group-stage elimination if ALL groups are done
-                if (allGroupsDone) {
-                    const eliminatedInGroups = qualifiedForKnockout.size > 0 && !qualifiedForKnockout.has(team);
-                    if (eliminatedInGroups) return 'color:#dc3545;';
-                }
-                const eliminatedBefore = new Set();
+                // Eliminated in an earlier knockout round
                 for (let ri = 0; ri < thisIdx; ri++) {
-                    (eliminatedInRound[roundOrder[ri]] || []).forEach(t => eliminatedBefore.add(t));
+                    if ((eliminatedInRound[roundOrder[ri]] || []).includes(team)) return 'eliminated';
                 }
-                if (winners.length > 0 && winners.includes(team)) return 'color:#28a745;';
-                if (eliminatedBefore.has(team)) return 'color:#dc3545;';
-                if (winners.length > 0 && !winners.includes(team)) {
-                    if ((eliminatedInRound[roundKey] || []).includes(team)) return 'color:#dc3545;';
+                const winners = officialKoWinners[statusRoundKey] || [];
+                if (winners.includes(team)) return 'advanced';
+                if ((eliminatedInRound[statusRoundKey] || []).includes(team)) return 'eliminated';
+                return 'pending';
+            };
+
+            const renderTeamPill = (team, status) => {
+                const base = 'border-radius:4px; padding:3px 6px; display:flex; align-items:center; gap:4px; border:1px solid;';
+                let boxStyle, textStyle, icon = '';
+                if (status === 'advanced') {
+                    boxStyle = 'background:rgba(40,167,69,0.12); border-color:#28a745;';
+                    textStyle = 'font-size:11px; font-weight:700; color:#1e7e34;';
+                    icon = '&#10003; ';
+                } else if (status === 'eliminated') {
+                    boxStyle = 'background:#f4f6f9; border-color:#e1e5eb;';
+                    textStyle = 'font-size:11px; color:#999; text-decoration:line-through;';
+                } else {
+                    boxStyle = 'background:#f4f6f9; border-color:#e1e5eb;';
+                    textStyle = 'font-size:11px; color:#444;';
                 }
-                return '';
+                return `<div style="${base} ${boxStyle}"><span style="${textStyle}">${icon}${f(team)} ${team}</span></div>`;
             };
 
             koHtml += '<div style="margin-top:16px; padding-top:12px; border-top:1px dashed #ddd;">';
 
-            // Eliminated teams per round (ÅF → KF → SF, ascending)
-            eliminatedPerRound.forEach(({ round, statusRoundKey, eliminated }) => {
-                koHtml += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">UTSLAGNA I ${round.label.toUpperCase()}</div>`;
+            // For each round transition, show ALL teams the user picked to advance
+            // out of "thisRound" into "nextRound". Section labeled "Vidare till {nextRound}".
+            // Last transition (e.g. SF → Final) is rendered as Guld/Silver below.
+            for (let i = 0; i <= koRoundsAll.length - 3; i++) {
+                const thisRound = koRoundsAll[i];
+                const nextRound = koRoundsAll[i + 1];
+                const rawPicks = ko[thisRound.key];
+                if (rawPicks == null) continue;
+                const picks = Array.isArray(rawPicks) ? rawPicks : [rawPicks];
+                if (picks.length === 0) continue;
+
+                koHtml += `<div style="font-size:9px; font-weight:700; color:#9ba4b5; text-align:center; letter-spacing:1px; margin:8px 0 4px;">VIDARE TILL ${nextRound.label.toUpperCase()}</div>`;
                 koHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">';
-                eliminated.forEach(team => {
-                    const c = getStatusColor(team, statusRoundKey);
-                    koHtml += '<div style="background:#f4f6f9; border:1px solid #e1e5eb; border-radius:4px; padding:3px 6px; display:flex; align-items:center; gap:4px;">';
-                    koHtml += '<span style="font-size:11px; color:#444; ' + c + '">' + f(team) + ' ' + team + '</span>';
-                    koHtml += '</div>';
+                picks.forEach(team => {
+                    koHtml += renderTeamPill(team, getTeamStatus(team, thisRound.key));
                 });
                 koHtml += '</div>';
-            });
+            }
 
-            // Guld & Silver (at the bottom)
+            // Guld & Silver (at the bottom) — the final pair: 2 finalists, champion
             koHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:12px;">';
             if (gold) {
-                const c = getStatusColor(gold, finalRd.key);
+                const status = getTeamStatus(gold, finalRd.key);
+                const elim = status === 'eliminated';
+                const adv = status === 'advanced';
+                const teamStyle = elim ? 'text-decoration:line-through; opacity:0.6;' : (adv ? 'color:#1e7e34;' : 'color:#333;');
+                const icon = adv ? '&#10003; ' : '';
                 koHtml += '<div style="background:#f1c40f; border-radius:4px; padding:8px; text-align:center;">';
                 koHtml += '<div style="font-size:9px; font-weight:800; color:#a67c00; letter-spacing:1px; margin-bottom:4px;">GULD</div>';
-                koHtml += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(gold) + ' ' + gold + '</div>';
+                koHtml += `<div style="font-size:13px; font-weight:800; ${teamStyle}">${icon}${f(gold)} ${gold}</div>`;
                 koHtml += '</div>';
             }
             if (silver) {
-                const c = getStatusColor(silver, sfRound.key);
+                const status = getTeamStatus(silver, sfRound.key);
+                const elim = status === 'eliminated';
+                const adv = status === 'advanced';
+                const teamStyle = elim ? 'text-decoration:line-through; opacity:0.6;' : (adv ? 'color:#1e7e34;' : 'color:#333;');
+                const icon = adv ? '&#10003; ' : '';
                 koHtml += '<div style="background:#d1d8e0; border-radius:4px; padding:8px; text-align:center;">';
                 koHtml += '<div style="font-size:9px; font-weight:800; color:#6b7c93; letter-spacing:1px; margin-bottom:4px;">SILVER</div>';
-                koHtml += '<div style="font-size:13px; font-weight:800; color:#333; ' + c + '">' + f(silver) + ' ' + silver + '</div>';
+                koHtml += `<div style="font-size:13px; font-weight:800; ${teamStyle}">${icon}${f(silver)} ${silver}</div>`;
                 koHtml += '</div>';
             }
             koHtml += '</div>';
@@ -793,15 +812,39 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         html += `<div style="font-size:12px; color:#555; margin-top:6px; text-align:center;">Ditt tips: <strong>${tip.score1_leg2} – ${tip.score2_leg2}</strong></div>`;
                     }
 
-                    // Show advancement pick (on leg 2 or single-leg)
+                    // Show how far the user has picked each team. Shows the
+                    // furthest round each team appears in the user's picks so
+                    // they can see exactly which lag they want to hålla koll på.
                     if (me.knockoutPicks && (leg === 2 || leg === 0)) {
-                        const picks = typeof me.knockoutPicks[roundKey] === 'string' ? [me.knockoutPicks[roundKey]] : (me.knockoutPicks[roundKey] || []);
-                        // For leg 2, homeTeam/awayTeam are swapped; check both original teams
+                        const koRoundsAll = getKnockoutRounds();
+                        const finalKey = koRoundsAll[koRoundsAll.length - 1]?.key;
+                        const furthestLabel = (team) => {
+                            if (!team) return null;
+                            // Champion pick (string)
+                            const champ = me.knockoutPicks[finalKey];
+                            if (champ && champ === team) return 'Mästare';
+                            // Walk from deepest → shallowest array round
+                            for (let ri = koRoundsAll.length - 2; ri >= 0; ri--) {
+                                const rk = koRoundsAll[ri].key;
+                                const picks = me.knockoutPicks[rk];
+                                const arr = Array.isArray(picks) ? picks : (picks ? [picks] : []);
+                                if (arr.includes(team)) {
+                                    const nextRound = koRoundsAll[ri + 1];
+                                    return nextRound ? nextRound.label : null;
+                                }
+                            }
+                            return null;
+                        };
                         const origTeam1 = leg === 2 ? match.awayTeam : match.homeTeam;
                         const origTeam2 = leg === 2 ? match.homeTeam : match.awayTeam;
-                        const picked = picks.find(t => t === origTeam1 || t === origTeam2);
-                        if (picked) {
-                            html += `<div style="font-size:12px; color:#888; margin-top:2px; text-align:center;">Tippat vidare: ${f(picked)}<strong>${picked}</strong></div>`;
+                        const f1 = furthestLabel(origTeam1);
+                        const f2 = furthestLabel(origTeam2);
+                        if (f1 || f2) {
+                            html += '<div style="font-size:11px; color:#888; margin-top:4px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">';
+                            if (f1) html += `<span>${f(origTeam1)}<strong>${origTeam1}</strong> → ${f1}</span>`;
+                            if (f1 && f2) html += '<span style="color:#ccc;">·</span>';
+                            if (f2) html += `<span>${f(origTeam2)}<strong>${origTeam2}</strong> → ${f2}</span>`;
+                            html += '</div>';
                         }
                     }
                 }
