@@ -652,7 +652,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             const hw = homeWon ? 'font-weight:800;' : '', aw = awayWon ? 'font-weight:800;' : '';
 
             const finalCardStyle = isFinalResult
-                ? 'padding:18px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.3), 0 4px 14px rgba(241,196,15,0.25); background:linear-gradient(180deg, rgba(241,196,15,0.12), rgba(241,196,15,0.03));'
+                ? 'padding:18px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.3), 0 4px 14px rgba(241,196,15,0.25);'
                 : 'padding:14px; margin-bottom:10px;';
             html += `<div class="stat-card result-card${isFinalResult ? ' result-card-final' : ''}" style="${finalCardStyle}">`;
 
@@ -839,7 +839,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         upcomingMatches.forEach(match => {
             const isFinalMatch = match._isKnockout && match._koRoundKey === finalRoundKey;
             const cardStyle = isFinalMatch
-                ? 'padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18); background:linear-gradient(180deg, rgba(241,196,15,0.08), rgba(241,196,15,0.02));'
+                ? 'padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18);'
                 : 'padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;';
             html += `<div class="stat-card upcoming-card${isFinalMatch ? ' upcoming-card-final' : ''}" style="${cardStyle}">`;
 
