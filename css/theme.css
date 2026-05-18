@@ -9,16 +9,16 @@
     --font-heading: 'Trebuchet MS', sans-serif;
 
     /* ── Sidans bakgrund ── */
-    --color-page-bg: #ebebeb;
+    --color-page-bg: #dfeed4;
     --color-text: #2c3e50;
 
     /* ── Navbar ── */
-    --color-navbar-bg: #adadad;
+    --color-navbar-bg: #76bb40;
     --color-navbar-text: #000000;
 
     /* ── Knappar ── */
     --color-btn-primary: #28a745;
-    --color-btn-danger: #dc3545;
+    --color-btn-danger: #ff6250;
     --color-btn-warning: #ffc107;
 
     /* ── Flikar / Tabs ── */
@@ -27,7 +27,7 @@
 
     /* ── Kort & paneler ── */
     --color-card-bg: #ffffff;
-    --color-card-border: #d6d6d6;
+    --color-card-border: #c2c2c2;
     --color-card-shadow: rgba(0, 0, 0, 0.05);
 
     /* ── Slutspelsbakgrund (bracket) ── */
@@ -46,7 +46,7 @@
     /* ── Leaderboard & poäng ── */
     --color-correct: #28a745;
     --color-wrong: #dc3545;
-    --color-partial: #17a2b8;
+    --color-partial: #feb43f;
     --color-highlight-row: rgba(40, 167, 69, 0.08);
 
     /* ── Progressbar / statbar ── */
