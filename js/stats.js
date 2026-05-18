@@ -366,7 +366,7 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             // For each round transition, show ALL teams the user picked to advance
             // out of "thisRound" into "nextRound". Section labeled "Vidare till {nextRound}".
             // Last transition (e.g. SF → Final) is rendered as Guld/Silver below.
-            for (let i = 0; i <= koRoundsAll.length - 3; i++) {
+            for (let i = 0; i <= koRoundsAll.length - 2; i++) {
                 const thisRound = koRoundsAll[i];
                 const nextRound = koRoundsAll[i + 1];
                 const rawPicks = ko[thisRound.key];
