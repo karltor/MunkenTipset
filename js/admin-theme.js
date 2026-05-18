@@ -240,6 +240,11 @@ export function initThemeEditor() {
     // Wire export
     document.getElementById('theme-export').addEventListener('click', exportTheme);
     document.getElementById('theme-copy-export').addEventListener('click', copyExport);
+
+    // Wire import
+    document.getElementById('theme-import').addEventListener('click', openImport);
+    document.getElementById('theme-import-cancel').addEventListener('click', closeImport);
+    document.getElementById('theme-import-apply').addEventListener('click', applyImport);
 }
 
 function resetSingle(key) {
@@ -270,6 +275,59 @@ function exportTheme() {
 
     document.getElementById('theme-export-text').value = css;
     document.getElementById('theme-export-output').style.display = 'block';
+}
+
+function openImport() {
+    document.getElementById('theme-import-text').value = '';
+    document.getElementById('theme-import-status').textContent = '';
+    document.getElementById('theme-import-input').style.display = 'block';
+}
+
+function closeImport() {
+    document.getElementById('theme-import-input').style.display = 'none';
+}
+
+// Parse a pasted CSS block (either a full `:root { ... }` snippet from
+// Exportera or just the property lines) and return an overrides map filtered
+// to known theme keys. Tolerant of trailing comments and stray whitespace.
+function parseImport(text) {
+    const allowed = new Set(THEME_GROUPS.flatMap(g => g.items.map(i => i.key)));
+    const out = {};
+    const unknown = [];
+    // Strip comments
+    const cleaned = text.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Find inside :root { ... } if present, otherwise treat whole text as body
+    const rootMatch = cleaned.match(/:root\s*\{([\s\S]*?)\}/);
+    const body = rootMatch ? rootMatch[1] : cleaned;
+    body.split(/[;\n]/).forEach(line => {
+        const m = line.match(/(--[a-z0-9-]+)\s*:\s*(.+?)\s*$/i);
+        if (!m) return;
+        const key = m[1].trim();
+        const value = m[2].trim();
+        if (allowed.has(key)) out[key] = value;
+        else unknown.push(key);
+    });
+    return { overrides: out, unknown };
+}
+
+function applyImport() {
+    const text = document.getElementById('theme-import-text').value;
+    const status = document.getElementById('theme-import-status');
+    const { overrides, unknown } = parseImport(text);
+    const count = Object.keys(overrides).length;
+    if (count === 0) {
+        status.style.color = '#dc3545';
+        status.textContent = 'Hittade inga giltiga tema-variabler.';
+        return;
+    }
+    // Replace existing overrides — importing means "use this look", not "merge on top"
+    clearOverrides();
+    saveOverrides(overrides);
+    applyOverrides(overrides);
+    closeImport();
+    initThemeEditor();
+    const skipped = unknown.length ? ` (${unknown.length} okänd${unknown.length === 1 ? '' : 'a'} variabler ignorerade)` : '';
+    alert(`Importerade ${count} inställning${count === 1 ? '' : 'ar'}${skipped}.`);
 }
 
 async function copyExport() {

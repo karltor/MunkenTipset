@@ -484,11 +484,21 @@
                     <div id="admin-theme-editor"></div>
                     <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
                         <button class="btn" id="theme-reset" style="background:#6c757d; flex:1;">Återställ allt</button>
-                        <button class="btn" id="theme-export" style="background:#17a2b8; flex:1;">Exportera inställningar</button>
+                        <button class="btn" id="theme-export" style="background:#17a2b8; flex:1;">Exportera</button>
+                        <button class="btn" id="theme-import" style="background:#6f42c1; flex:1;">Importera</button>
                     </div>
                     <div id="theme-export-output" style="display:none; margin-top:12px;">
                         <textarea id="theme-export-text" readonly style="width:100%; height:120px; font-family:monospace; font-size:12px; padding:10px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; resize:vertical;"></textarea>
                         <button class="btn" id="theme-copy-export" style="margin-top:6px; width:100%; background:#28a745; font-size:13px;">Kopiera</button>
+                    </div>
+                    <div id="theme-import-input" style="display:none; margin-top:12px;">
+                        <p style="margin:0 0 6px; font-size:13px; color:#666;">Klistra in temat du fått av en annan admin (CSS-blocket från Exportera):</p>
+                        <textarea id="theme-import-text" placeholder=":root { --color-page-bg: #123456; ... }" style="width:100%; height:120px; font-family:monospace; font-size:12px; padding:10px; border:1px solid #ddd; border-radius:8px; background:#f8f9fa; resize:vertical;"></textarea>
+                        <div id="theme-import-status" style="font-size:12px; margin-top:4px; min-height:16px;"></div>
+                        <div style="display:flex; gap:8px; margin-top:6px;">
+                            <button class="btn" id="theme-import-cancel" style="background:#6c757d; flex:1; font-size:13px;">Avbryt</button>
+                            <button class="btn" id="theme-import-apply" style="background:#28a745; flex:1; font-size:13px;">Använd tema</button>
+                        </div>
                     </div>
                 </div>
             </div>
