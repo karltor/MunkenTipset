@@ -849,12 +849,49 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                         const f2 = furthestLabel(origTeam2);
                         if (f1 || f2) {
                             html += '<div style="font-size:11px; color:#888; margin-top:4px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">';
+                            html += '<span>Du har tippat </span>';
                             if (f1) html += `<span>${f(origTeam1)}<strong>${origTeam1}</strong> → ${f1}</span>`;
                             if (f1 && f2) html += '<span style="color:#ccc;">·</span>';
                             if (f2) html += `<span>${f(origTeam2)}<strong>${origTeam2}</strong> → ${f2}</span>`;
                             html += '</div>';
                         }
                     }
+                }
+            }
+
+            // Community stake bar — only for upcoming knockout matches.
+            // Shows how the wider field of tipsare has bet on this match:
+            // who's backing team1, who's backing team2, and who has no stake.
+            if (match._isKnockout) {
+                const roundKey = match._koRoundKey;
+                const leg = match._koLeg;
+                const t1 = leg === 2 ? match.awayTeam : match.homeTeam;
+                const t2 = leg === 2 ? match.homeTeam : match.awayTeam;
+                let c1 = 0, c2 = 0, cNone = 0;
+                users.forEach(u => {
+                    if (!u.knockoutPicks) { cNone++; return; }
+                    const p = u.knockoutPicks[roundKey];
+                    const arr = Array.isArray(p) ? p : (p ? [p] : []);
+                    if (arr.includes(t1)) c1++;
+                    else if (arr.includes(t2)) c2++;
+                    else cNone++;
+                });
+                const total = c1 + c2 + cNone;
+                if (total > 0) {
+                    const pct = n => total === 0 ? 0 : (n / total) * 100;
+                    const p1 = pct(c1), p2 = pct(c2), pN = pct(cNone);
+                    html += '<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #eee;">';
+                    html += '<div style="display:flex; height:6px; border-radius:3px; overflow:hidden; background:#eee;">';
+                    if (p1 > 0) html += `<div style="width:${p1}%; background:#4a90e2;" title="${c1} tippar ${t1}"></div>`;
+                    if (pN > 0) html += `<div style="width:${pN}%; background:#d8dce2;" title="${cNone} har inget stake"></div>`;
+                    if (p2 > 0) html += `<div style="width:${p2}%; background:#e67e22;" title="${c2} tippar ${t2}"></div>`;
+                    html += '</div>';
+                    html += '<div style="display:flex; justify-content:space-between; font-size:10px; color:#888; margin-top:3px;">';
+                    html += `<span><span style="color:#4a90e2;">●</span> ${Math.round(p1)}% ${f(t1)}${t1}</span>`;
+                    html += `<span style="color:#aaa;">${Math.round(pN)}% inget tipp</span>`;
+                    html += `<span>${t2}${f(t2)} ${Math.round(p2)}% <span style="color:#e67e22;">●</span></span>`;
+                    html += '</div>';
+                    html += '</div>';
                 }
             }
 
