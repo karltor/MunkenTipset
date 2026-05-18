@@ -10,6 +10,7 @@ import { renderScoringInfoTab, invalidateScoringInfoCache } from './scoring-info
 import { initAdmin, checkTipsLocked } from './admin.js';
 import { initSpecialTips, setSpecialLocked } from './special-tips.js';
 import { loadResults } from './results.js';
+import { maybeShowFinalModal } from './final-modal.js';
 import { applyStoredTheme } from './admin-theme.js';
 import { getColorMode, applyColorMode } from './color-mode.js';
 import { loadEmailPref, showEmailPrefPopup, initSettingsTab, WELCOME_DISMISSED_KEY } from './user-settings.js';
@@ -298,6 +299,11 @@ onAuthStateChanged(auth, async (user) => {
     if (activeTabOnLoad === 'start-tab') {
         loadCommunityStats(settings);
     }
+
+    // After data is loaded, check if the final has been decided — if so, the
+    // modal will pop up announcing the champion and MunkenTipset winners.
+    // Fires regardless of which tab is active so users land into it directly.
+    maybeShowFinalModal();
 });
 
 function showEmailPrefOnly() {
@@ -524,6 +530,10 @@ async function applyLiveDataRefresh(newDataVersion) {
     if (activeTab === 'start-tab') loadCommunityStats();
     else if (activeTab === 'results-tab') loadResults(allMatchesData);
     // wizard/bracket/special: leave alone — user may be mid-edit
+
+    // Pushed final result? Pop the announcement modal for anyone connected,
+    // regardless of which tab they're on.
+    maybeShowFinalModal();
 
     showGlobalToast('📊 Resultat uppdaterade.', 'success');
 }

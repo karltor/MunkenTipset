@@ -4,6 +4,7 @@ import { f } from './wizard.js';
 import { teamImg } from './team-data.js';
 import { DEFAULT_SCORING, buildDefaultScoring, buildOfficialGroupStandings, calcLeaderboard, sign, parseMatchDate } from './scoring.js';
 import { initCompareState, showFullLeaderboard, showAllTips } from './compare.js';
+import { maybeShowFinalModal } from './final-modal.js';
 import { getGroupLetters, getKnockoutRounds, getTournamentName, getTournamentYear, hasStageType, isTwoLegged, getSpecialQuestionsConfig, hasSpecialQuestions } from './tournament-config.js';
 
 export { DEFAULT_SCORING };
@@ -142,6 +143,10 @@ export async function loadCommunityStats(prefetchedSettings) {
 
     const scores = calcLeaderboard(users, results, bracket, scoring, officialGroupStandings);
     scores.sort((a, b) => b.total - a.total);
+
+    // If the final has just been decided, announce it via modal. Reuses the
+    // bracket + scores we just computed so no extra Firestore reads.
+    maybeShowFinalModal({ bracket, scores });
 
     let html = '';
 
@@ -817,17 +822,28 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
 
     html += `<h3 class="dashboard-section-title">Kommande matcher</h3>`;
     if (upcomingMatches.length > 0) {
+        const koRoundsForUpcoming = getKnockoutRounds();
+        const finalRoundKey = koRoundsForUpcoming[koRoundsForUpcoming.length - 1]?.key;
         upcomingMatches.forEach(match => {
-            html += `<div class="stat-card upcoming-card" style="padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;">`;
+            const isFinalMatch = match._isKnockout && match._koRoundKey === finalRoundKey;
+            const cardStyle = isFinalMatch
+                ? 'padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18); background:linear-gradient(180deg, rgba(241,196,15,0.08), rgba(241,196,15,0.02));'
+                : 'padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;';
+            html += `<div class="stat-card upcoming-card${isFinalMatch ? ' upcoming-card-final' : ''}" style="${cardStyle}">`;
 
-            // Stage + date
-            html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage || ''}${match.date ? ' · ' + match.date : ''}</div>`;
+            // Stage + date — final gets a trophy banner
+            if (isFinalMatch) {
+                html += `<div style="font-size:10px; font-weight:800; letter-spacing:2px; color:#a67c00; text-align:center; margin-bottom:6px;">🏆 ${(match.stage || 'FINAL').toUpperCase()}${match.date ? ' · ' + match.date : ''}</div>`;
+            } else {
+                html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage || ''}${match.date ? ' · ' + match.date : ''}</div>`;
+            }
 
             // Teams row — centered with "vs"
+            const teamFontSize = isFinalMatch ? '1.05rem' : '1rem';
             html += `<div style="display:flex; align-items:center;">
-                <span style="flex:1; text-align:right; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f(match.homeTeam)}${match.homeTeam}</span>
+                <span style="flex:1; text-align:right; font-weight:700; font-size:${teamFontSize}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f(match.homeTeam)}${match.homeTeam}</span>
                 <span style="flex:0 0 auto; min-width:80px; text-align:center; font-size:1rem; color:#999; font-weight:600;">vs</span>
-                <span style="flex:1; text-align:left; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
+                <span style="flex:1; text-align:left; font-weight:700; font-size:${teamFontSize}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${match.awayTeam}${f(match.awayTeam)}</span>
             </div>`;
 
             // My tip
