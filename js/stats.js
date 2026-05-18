@@ -818,9 +818,17 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                     if (me.knockoutPicks && (leg === 2 || leg === 0)) {
                         const koRoundsAll = getKnockoutRounds();
                         const finalKey = koRoundsAll[koRoundsAll.length - 1]?.key;
+                        // Only show a label if the user has picked the team to
+                        // win THIS match (i.e. advance out of the current round).
+                        // Otherwise the pick was already resolved in an earlier
+                        // round and the outcome of this match is irrelevant.
+                        const currentRoundPicksRaw = me.knockoutPicks[roundKey];
+                        const currentRoundPicks = Array.isArray(currentRoundPicksRaw)
+                            ? currentRoundPicksRaw
+                            : (currentRoundPicksRaw ? [currentRoundPicksRaw] : []);
                         const furthestLabel = (team) => {
-                            if (!team) return null;
-                            // Champion pick (string)
+                            if (!team || !currentRoundPicks.includes(team)) return null;
+                            // Champion pick (string at final key)
                             const champ = me.knockoutPicks[finalKey];
                             if (champ && champ === team) return 'Mästare';
                             // Walk from deepest → shallowest array round
