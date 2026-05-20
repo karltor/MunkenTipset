@@ -359,7 +359,7 @@ function renderPosts() {
             <span class="forum-thread-icon">${thread.icon || '⚽'}</span> ${escapeHtml(thread.title)}`;
 
         list.innerHTML = tp.length
-            ? tp.map(p => postCardHtml(p, null)).join('')
+            ? groupConsecutive(tp).map(g => groupCardHtml(g, null)).join('')
             : '<p class="chat-empty">Inga inlägg i tråden än.</p>';
 
         replyRow.style.display = meta?.muted?.includes(auth.currentUser?.uid) ? 'none' : 'flex';
@@ -394,44 +394,61 @@ function renderPosts() {
         list.innerHTML = '<p class="chat-empty">Inga inlägg än. Var först att slå ett nytt inlägg!</p>';
         return;
     }
-    list.innerHTML = feed.map(p => postCardHtml(p, threadById.get(p.threadId))).join('');
+    // Each feed item is a standalone post (own group of one) with a thread chip
+    list.innerHTML = feed.map(p => groupCardHtml([p], threadById.get(p.threadId))).join('');
     wirePostCards(list);
 }
 
-function postCardHtml(p, thread) {
+/* Collapse consecutive posts by the same author into groups. */
+function groupConsecutive(postList) {
+    const groups = [];
+    postList.forEach(p => {
+        const last = groups[groups.length - 1];
+        if (last && last[0].uid === p.uid) last.push(p);
+        else groups.push([p]);
+    });
+    return groups;
+}
+
+/* Render one card for a group of consecutive posts by the same author.
+   Name + time share the top row; the message sits underneath. Extra posts
+   in the group are stacked with their own timestamps. */
+function groupCardHtml(group, thread) {
     const uid = auth.currentUser?.uid;
     const shadow = new Set(meta?.shadowbanned || []);
-    const isOwn = p.uid === uid;
-    const isShadow = shadow.has(p.uid) && p.uid === uid;
-    const time = new Date(p.ts).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    const dayLabel = relTime(p.ts);
-    const name = escapeHtml(resolveName(p));
+    const first = group[0];
+    const isOwn = first.uid === uid;
+    const isShadow = shadow.has(first.uid) && first.uid === uid;
+    const name = escapeHtml(resolveName(first));
 
-    // Thread chip only shown in the all-threads feed
     const chip = thread
         ? `<div class="forum-card-chip"><span class="forum-thread-icon">${thread.icon || '⚽'}</span><span>${escapeHtml(thread.title)}</span></div>`
         : '';
 
     const nameHtml = adminMode
-        ? `<span class="forum-card-name" style="cursor:pointer;text-decoration:underline dotted;" data-uid="${p.uid}" data-action="user-menu">${name}</span>`
+        ? `<span class="forum-card-name" style="cursor:pointer;text-decoration:underline dotted;" data-uid="${first.uid}" data-action="user-menu">${name}</span>`
         : `<span class="forum-card-name">${name}</span>`;
 
-    const adminX = adminMode
-        ? `<button class="chat-msg-admin-x" data-del-post="${p.id}" title="Ta bort">&times;</button>` : '';
+    const msgsHtml = group.map((p, i) => {
+        const time = new Date(p.ts).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+        const day = relTime(p.ts);
+        const adminX = adminMode
+            ? `<button class="chat-msg-admin-x" data-del-post="${p.id}" title="Ta bort">&times;</button>` : '';
+        const head = i === 0
+            ? `<div class="forum-msg-head">${nameHtml}<span class="forum-msg-time">${day} ${time}</span>${adminX}</div>`
+            : `<div class="forum-msg-head forum-msg-head-cont"><span class="forum-msg-time">${time}</span>${adminX}</div>`;
+        return `<div class="forum-msg" data-post-id="${p.id}">
+            ${head}
+            <div class="forum-card-text">${escapeHtml(p.text)}</div>
+        </div>`;
+    }).join('');
 
     const clickable = thread ? ' forum-card-clickable' : '';
     const classes = `forum-card${isOwn ? ' own' : ''}${isShadow ? ' shadow' : ''}${clickable}`;
 
-    return `<div class="${classes}" data-post-id="${p.id}"${thread ? ` data-open-thread="${p.threadId}"` : ''}>
+    return `<div class="${classes}"${thread ? ` data-open-thread="${first.threadId}"` : ''}>
         ${chip}
-        <div class="forum-card-net">
-            <div class="forum-card-top">
-                <span class="forum-card-day">${dayLabel} ${time}</span>
-                ${adminX}
-            </div>
-            <div class="forum-card-text">${escapeHtml(p.text)}</div>
-            ${nameHtml}
-        </div>
+        <div class="forum-card-net">${msgsHtml}</div>
     </div>`;
 }
 
