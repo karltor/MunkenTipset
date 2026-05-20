@@ -1180,12 +1180,14 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 /* Threads column header: title + compact "new thread" action */
 .forum-threads-header {
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
 }
-.forum-threads-header .forum-col-title { margin: 0; }
+.forum-threads-header .forum-col-title { margin: 0; flex: 0 1 auto; min-width: 0; }
+.forum-threads-header .forum-action-btn { flex: 0 0 auto; }
 
 /* Smaller button variant */
 .forum-action-sm {
