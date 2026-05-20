@@ -1,21 +1,25 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove }
     from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-import { f, flags } from './wizard.js';
-import { teamImg } from './team-data.js';
-import { parseMatchDate } from './scoring.js';
-import { getKnockoutRounds, isTwoLegged } from './tournament-config.js';
 
 /* ── state ─────────────────────────────────────────── */
-let unsubMessages = null;   // onSnapshot unsubscribe handle
-let unsubMeta = null;        // onSnapshot unsubscribe handle for _meta
+let unsubThreads = null;     // onSnapshot handle for chat/threads
+let unsubPosts = null;       // onSnapshot handle for chat/posts
+let unsubMeta = null;        // onSnapshot handle for chat/_meta
 let meta = null;             // { shadowbanned:[], muted:[], chatNames:{} }
 let isAdmin = false;
 let adminMode = false;       // admin moderation mode active
-let msgs = [];               // current messages array
+let threads = [];            // [{ id, title, icon, byUid, byName, ts }]
+let posts = [];              // [{ id, threadId, uid, name, fullName, text, ts, replyTo* }]
 let initialized = false;
-let replyingToMsg = null;    // state for active reply
-const TRIM_THRESHOLD = 2000; // trim array when it exceeds this
+let activeThreadId = null;   // null = "all threads" feed; else single-thread view
+let formOpen = false;        // new-thread form visible
+let selectedIcon = '⚽';     // chosen icon in new-thread form
+const TRIM_THRESHOLD = 4000; // trim posts array when it grows beyond this
+const FEED_LIMIT = 30;       // posts shown in the all-threads feed
+const SEEN_KEY = 'forumSeen';
+
+const THREAD_ICONS = ['⚽', '👕', '🥅', '🚩', '👟', '🏆', '🧤', '📣', '🔥', '😂'];
 
 function showToast(msg) {
     let t = document.querySelector('.toast');
@@ -30,30 +34,22 @@ function showToast(msg) {
 export function setChatAdmin(val) { isAdmin = val; }
 
 export async function initChat() {
-    // Always (re-)measure chat layout — tab may have been reopened after leaving
-    fitChatLayoutToViewport();
-    if (unsubMessages) return; // already listening
+    if (unsubPosts) return; // already listening
 
-    // Inject dynamic CSS for the highlight animation if it doesn't exist
     if (!document.getElementById('chat-dynamic-styles')) {
         const style = document.createElement('style');
         style.id = 'chat-dynamic-styles';
         style.innerHTML = `
-            .chat-msg-highlight { animation: chatHighlight 2s ease-out; }
-            @keyframes chatHighlight {
-                0% { background-color: rgba(255, 193, 7, 0.4); }
+            .forum-post-highlight { animation: forumHighlight 2s ease-out; }
+            @keyframes forumHighlight {
+                0% { background-color: rgba(255, 193, 7, 0.35); }
                 100% { background-color: transparent; }
-            }
-        `;
+            }`;
         document.head.appendChild(style);
     }
 
-    const container = document.getElementById('chat-messages');
-    container.innerHTML = '<p class="chat-empty">Laddar chatt...</p>';
-
-    // Show admin button if admin
     const adminBtn = document.getElementById('chat-admin-btn');
-    if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
+    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
 
     // Load meta (shadowban/mute lists) — 1 read
     try {
@@ -62,60 +58,42 @@ export async function initChat() {
     } catch {
         meta = { shadowbanned: [], muted: [], chatNames: {} };
     }
-
-    // Check if current user is muted
     updateMuteState();
 
-    // Start onSnapshot on single messages document — 1 read + 1 per change
-    unsubMessages = onSnapshot(doc(db, "chat", "messages"), (snap) => {
-        if (snap.exists()) {
-            msgs = snap.data().msgs || [];
-        } else {
-            msgs = [];
-        }
-        renderMessages();
+    // Live listeners
+    unsubThreads = onSnapshot(doc(db, "chat", "threads"), (snap) => {
+        threads = snap.exists() ? (snap.data().threads || []) : [];
+        renderThreads();
+        renderPosts();
     });
 
-    // Live listener on _meta so mute/shadow/chatName changes from admin take
-    // effect immediately without the affected user needing to reload.
+    unsubPosts = onSnapshot(doc(db, "chat", "posts"), (snap) => {
+        posts = snap.exists() ? (snap.data().posts || []) : [];
+        renderThreads();
+        renderPosts();
+    });
+
     unsubMeta = onSnapshot(doc(db, "chat", "_meta"), (snap) => {
         meta = snap.exists() ? snap.data() : { shadowbanned: [], muted: [], chatNames: {} };
         updateMuteState();
-        renderMessages();
+        renderThreads();
+        renderPosts();
     });
 
-    // Build match sidebar from cached data (no reads)
-    buildMatchSidebar();
-
-    // Wire input
-    if (!initialized) {
-        const input = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('chat-send');
-        sendBtn.addEventListener('click', () => sendMessage());
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        });
-        initialized = true;
-    }
+    wireUi();
 }
 
 export function destroyChat() {
-    if (unsubMessages) {
-        unsubMessages();
-        unsubMessages = null;
-    }
-    if (unsubMeta) {
-        unsubMeta();
-        unsubMeta = null;
-    }
+    if (unsubThreads) { unsubThreads(); unsubThreads = null; }
+    if (unsubPosts) { unsubPosts(); unsubPosts = null; }
+    if (unsubMeta) { unsubMeta(); unsubMeta = null; }
     adminMode = false;
-    replyingToMsg = null;
-    renderReplyPreview();
 }
 
 export function setAdminMode(val) {
     adminMode = val;
-    renderMessages();
+    renderThreads();
+    renderPosts();
 }
 
 export function getMeta() { return meta; }
@@ -126,77 +104,138 @@ export async function refreshMeta() {
         meta = metaSnap.exists() ? metaSnap.data() : { shadowbanned: [], muted: [], chatNames: {} };
     } catch { /* keep old */ }
     updateMuteState();
-    renderMessages();
+    renderThreads();
+    renderPosts();
 }
 
-export async function deleteMessage(msg) {
-    await updateDoc(doc(db, "chat", "messages"), { msgs: arrayRemove(msg) });
+export async function deleteMessage(post) {
+    await updateDoc(doc(db, "chat", "posts"), { posts: arrayRemove(post) });
 }
 
-/* ── internals ─────────────────────────────────────── */
+/* ── wiring ────────────────────────────────────────── */
 
-function updateMuteState() {
+function wireUi() {
+    if (initialized) return;
+
+    document.getElementById('forum-new-thread').addEventListener('click', openNewThreadForm);
+    document.getElementById('forum-reply-hint').addEventListener('click', onReplyHint);
+    document.getElementById('forum-create-cancel').addEventListener('click', closeNewThreadForm);
+    document.getElementById('forum-create-submit').addEventListener('click', createThread);
+
+    const input = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('chat-send');
+    sendBtn.addEventListener('click', () => sendReply());
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+    });
+
+    initialized = true;
+}
+
+function onReplyHint() {
+    if (activeThreadId) {
+        document.getElementById('chat-input')?.focus();
+        return;
+    }
+    showToast('Välj en tråd till vänster för att svara.');
+    const list = document.getElementById('forum-thread-list');
+    if (list) {
+        list.classList.add('forum-pulse');
+        setTimeout(() => list.classList.remove('forum-pulse'), 1200);
+        list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+/* ── new-thread form ───────────────────────────────── */
+
+function openNewThreadForm() {
+    formOpen = true;
+    selectedIcon = THREAD_ICONS[Math.floor(Math.random() * THREAD_ICONS.length)];
+    document.getElementById('forum-post-list').style.display = 'none';
+    document.getElementById('forum-reply-row').style.display = 'none';
+    const form = document.getElementById('forum-new-form');
+    form.style.display = 'flex';
+    document.getElementById('forum-posts-title').textContent = '➕ NY TRÅD';
+
+    const picker = document.getElementById('forum-icon-picker');
+    picker.innerHTML = THREAD_ICONS.map(ic =>
+        `<button type="button" class="forum-icon-opt${ic === selectedIcon ? ' selected' : ''}" data-icon="${ic}">${ic}</button>`
+    ).join('');
+    picker.querySelectorAll('.forum-icon-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedIcon = btn.dataset.icon;
+            picker.querySelectorAll('.forum-icon-opt').forEach(b => b.classList.toggle('selected', b === btn));
+        });
+    });
+
+    document.getElementById('forum-thread-title').value = '';
+    document.getElementById('forum-thread-body').value = '';
+    document.getElementById('forum-thread-title').focus();
+}
+
+function closeNewThreadForm() {
+    formOpen = false;
+    document.getElementById('forum-new-form').style.display = 'none';
+    document.getElementById('forum-post-list').style.display = '';
+    renderPosts();
+}
+
+async function createThread() {
     const uid = auth.currentUser?.uid;
-    const muted = meta?.muted?.includes(uid);
-    const inputRow = document.querySelector('.chat-input-row');
-    const notice = document.getElementById('chat-muted-notice');
-    if (inputRow) inputRow.style.display = muted ? 'none' : 'flex';
-    if (notice) notice.style.display = muted ? 'block' : 'none';
-}
+    if (!uid) return;
+    if (meta?.muted?.includes(uid)) { showToast('Du kan inte skriva i forumet just nu.'); return; }
+    if (!navigator.onLine) { showToast('Ingen internetanslutning — tråden skapades inte.'); return; }
 
-function truncateWords(str, num) {
-    const words = str.split(/\s+/);
-    if (words.length <= num) return str;
-    return words.slice(0, num).join(' ') + '...';
-}
+    const title = document.getElementById('forum-thread-title').value.trim();
+    const body = document.getElementById('forum-thread-body').value.trim();
+    if (!title) { showToast('Tråden behöver en rubrik.'); return; }
+    if (!body) { showToast('Skriv ett första inlägg.'); return; }
 
-function renderReplyPreview() {
-    let previewEl = document.getElementById('chat-reply-preview-bar');
-    
-    // Create the preview bar element if it doesn't exist
-    if (!previewEl) {
-        const inputRow = document.querySelector('.chat-input-row');
-        previewEl = document.createElement('div');
-        previewEl.id = 'chat-reply-preview-bar';
-        // Add styling for the preview bar directly here so you don't need CSS changes
-        previewEl.style.cssText = 'display: none; background: #f1f3f5; padding: 6px 12px; font-size: 12px; border-radius: 6px 6px 0 0; border-bottom: 1px solid #ddd; justify-content: space-between; align-items: center; margin-bottom: -1px;';
-        inputRow.parentNode.insertBefore(previewEl, inputRow);
+    const displayName = meta?.chatNames?.[uid] || auth.currentUser.displayName || auth.currentUser.email;
+    const firstName = displayName.split(' ')[0];
+    const now = Date.now();
+    const threadId = crypto.randomUUID();
+
+    const thread = { id: threadId, title, icon: selectedIcon, byUid: uid, byName: firstName, ts: now };
+    const post = { id: crypto.randomUUID(), threadId, uid, name: firstName, fullName: displayName, text: body, ts: now };
+
+    try {
+        await appendToDoc("threads", "threads", thread);
+        await appendToDoc("posts", "posts", post);
+    } catch (err) {
+        console.error('Create thread error:', err);
+        showToast('Tråden kunde inte skapas. Försök igen.');
+        return;
     }
 
-    if (replyingToMsg) {
-        const name = resolveName(replyingToMsg);
-        const snippet = truncateWords(replyingToMsg.text, 8);
-        previewEl.innerHTML = `<span style="color:#555;">Svarar <b>${escapeHtml(name)}</b>: <i>"${escapeHtml(snippet)}"</i></span> <button id="cancel-reply-btn" title="Avbryt svar" style="background:none;border:none;cursor:pointer;font-weight:bold;font-size:16px;color:#888;">&times;</button>`;
-        previewEl.style.display = 'flex';
-        
-        document.getElementById('cancel-reply-btn').onclick = () => {
-            replyingToMsg = null;
-            renderReplyPreview();
-        };
+    markSeen(threadId, now);
+    closeNewThreadForm();
+    openThread(threadId);
+}
+
+/* Append an item to an array-field document, creating it if needed and
+   trimming the posts array if it grows too large. */
+async function appendToDoc(docId, field, item) {
+    const ref = doc(db, "chat", docId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+        await setDoc(ref, { [field]: [item] });
+        return;
+    }
+    const current = snap.data()[field] || [];
+    if (field === 'posts' && current.length > TRIM_THRESHOLD) {
+        const trimmed = current.slice(-1000);
+        trimmed.push(item);
+        await setDoc(ref, { [field]: trimmed });
     } else {
-        previewEl.style.display = 'none';
+        await updateDoc(ref, { [field]: arrayUnion(item) });
     }
 }
 
-function initiateReply(msg) {
-    replyingToMsg = msg;
-    renderReplyPreview();
-    document.getElementById('chat-input').focus();
-}
+/* ── reply ─────────────────────────────────────────── */
 
-function scrollToMessage(id) {
-    const container = document.getElementById('chat-messages');
-    const el = container.querySelector(`[data-msg-id="${id}"]`);
-    if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Add highlight class (animation defined in initChat)
-        el.classList.add('chat-msg-highlight');
-        // Remove class after animation finishes so it can be re-triggered later
-        setTimeout(() => el.classList.remove('chat-msg-highlight'), 2000);
-    }
-}
-
-async function sendMessage() {
+async function sendReply() {
+    if (!activeThreadId) return;
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
@@ -204,490 +243,283 @@ async function sendMessage() {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     if (meta?.muted?.includes(uid)) return;
+    if (!navigator.onLine) { showToast('Ingen internetanslutning — inlägget skickades inte.'); return; }
 
-    // Firestore queues writes silently when offline (promise doesn't reject,
-    // message shows optimistically via onSnapshot) but the queue is lost on
-    // page reload. Refuse to send upfront so the user can retry after
-    // reconnecting. navigator.onLine is reliable for the DevTools Offline
-    // toggle and clear network drops.
-    if (!navigator.onLine) {
-        showToast('Ingen internetanslutning — meddelandet skickades inte.');
-        return;
-    }
-
-    // Determine display name
     const displayName = meta?.chatNames?.[uid] || auth.currentUser.displayName || auth.currentUser.email;
     const firstName = displayName.split(' ')[0];
+    const now = Date.now();
+    const post = { id: crypto.randomUUID(), threadId: activeThreadId, uid, name: firstName, fullName: displayName, text, ts: now };
 
-    const msg = {
-        id: crypto.randomUUID(),
-        uid,
-        name: firstName,
-        fullName: displayName,
-        text,
-        ts: Date.now()
-    };
-
-    // Append reply metadata if active
-    if (replyingToMsg) {
-        msg.replyToId = replyingToMsg.id;
-        msg.replyToName = resolveName(replyingToMsg);
-        msg.replyToText = truncateWords(replyingToMsg.text, 8);
-        
-        // Reset state after capturing
-        replyingToMsg = null;
-        renderReplyPreview();
-    }
-
-    const originalText = text;
+    const original = text;
     input.value = '';
     input.focus();
 
-    // Ensure document exists, then append
     try {
-        const msgRef = doc(db, "chat", "messages");
-        const snap = await getDoc(msgRef);
-        if (!snap.exists()) {
-            await setDoc(msgRef, { msgs: [msg] });
-        } else {
-            const currentMsgs = snap.data().msgs || [];
-            if (currentMsgs.length > TRIM_THRESHOLD) {
-                // Trim old messages to keep document size manageable
-                const trimmed = currentMsgs.slice(-500);
-                trimmed.push(msg);
-                await setDoc(msgRef, { msgs: trimmed });
-            } else {
-                await updateDoc(msgRef, { msgs: arrayUnion(msg) });
-            }
-        }
+        await appendToDoc("posts", "posts", post);
+        markSeen(activeThreadId, now);
     } catch (err) {
-        console.error('Chat send error:', err);
-        // Restore the user's message so they can retry
-        if (!input.value) input.value = originalText;
-        showToast('Meddelandet kunde inte skickas. Försök igen.');
+        console.error('Reply error:', err);
+        if (!input.value) input.value = original;
+        showToast('Inlägget kunde inte skickas. Försök igen.');
     }
 }
 
-function renderMessages() {
-    const container = document.getElementById('chat-messages');
+/* ── derived data ──────────────────────────────────── */
+
+function visiblePosts() {
     const uid = auth.currentUser?.uid;
-    const shadowbanned = new Set(meta?.shadowbanned || []);
+    const shadow = new Set(meta?.shadowbanned || []);
+    return posts.filter(p => !(shadow.has(p.uid) && p.uid !== uid));
+}
 
-    // Filter: hide shadowbanned users' messages (except own)
-    const visible = msgs.filter(m => {
-        if (shadowbanned.has(m.uid) && m.uid !== uid) return false;
-        return true;
-    });
+function threadPosts(threadId) {
+    return visiblePosts().filter(p => p.threadId === threadId).sort((a, b) => a.ts - b.ts);
+}
 
-    if (visible.length === 0) {
-        container.innerHTML = '<p class="chat-empty">Inga meddelanden i chatten. Var först att skriva!</p>';
+function threadStats(threadId) {
+    const tp = threadPosts(threadId);
+    const last = tp.length ? tp[tp.length - 1].ts : 0;
+    return { count: tp.length, lastTs: last };
+}
+
+/* ── seen tracking (localStorage) ──────────────────── */
+
+function getSeen() {
+    try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); }
+    catch { return {}; }
+}
+function markSeen(threadId, ts) {
+    const seen = getSeen();
+    if (!seen[threadId] || ts > seen[threadId]) seen[threadId] = ts;
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch { /* ignore */ }
+}
+function hasUnseen(threadId, lastTs) {
+    const uid = auth.currentUser?.uid;
+    const tp = threadPosts(threadId);
+    const lastPost = tp[tp.length - 1];
+    if (!lastPost || lastPost.uid === uid) return false; // own latest post = nothing new
+    const seen = getSeen()[threadId] || 0;
+    return lastTs > seen;
+}
+
+/* ── render: threads (left) ────────────────────────── */
+
+function renderThreads() {
+    const list = document.getElementById('forum-thread-list');
+    if (!list) return;
+
+    const ordered = threads
+        .map(t => ({ ...t, ...threadStats(t.id) }))
+        .sort((a, b) => (b.lastTs || b.ts) - (a.lastTs || a.ts));
+
+    if (ordered.length === 0) {
+        list.innerHTML = '<p class="chat-empty">Inga trådar än. Slå ett nytt inlägg!</p>';
+        document.getElementById('forum-thread-count').textContent = '';
         return;
     }
 
-    // Detect duplicate first names among message authors
-    const nameMap = new Map(); // firstName -> Set<uid>
-    visible.forEach(m => {
-        const name = resolveName(m);
-        if (!nameMap.has(name)) nameMap.set(name, new Set());
-        nameMap.get(name).add(m.uid);
-    });
-    const dupeFirstNames = new Set();
-    nameMap.forEach((uids, name) => {
-        if (uids.size > 1) dupeFirstNames.add(name);
-    });
-
-    // Get active matches for tip badges
-    const activeMatches = getActiveMatches();
-    const chatUids = new Set(visible.map(m => m.uid));
-    const tipsByUser = buildTipBadges(activeMatches, chatUids);
-
-    let html = '';
-    let lastDateStr = '';
-
-    visible.forEach(m => {
-        const d = new Date(m.ts);
-        const dateStr = d.toLocaleDateString('sv-SE');
-
-        // Date separator
-        if (dateStr !== lastDateStr) {
-            const label = isToday(d) ? 'Idag' : (isYesterday(d) ? 'Igår' : dateStr);
-            html += `<div class="chat-date-sep">${label}</div>`;
-            lastDateStr = dateStr;
-        }
-
-        const time = d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-        let displayName = resolveName(m);
-        if (dupeFirstNames.has(displayName)) {
-            // Add last initial
-            const full = meta?.chatNames?.[m.uid] || m.fullName || m.name;
-            const parts = full.split(' ');
-            if (parts.length > 1) {
-                displayName = `${displayName} ${parts[parts.length - 1][0]}`;
-            }
-        }
-
-        const isOwn = m.uid === uid;
-        const isShadow = shadowbanned.has(m.uid) && m.uid === uid;
-        const classes = ['chat-msg'];
-        if (isOwn) classes.push('chat-msg-own');
-        if (isShadow) classes.push('chat-msg-shadow');
-
-        // Tip badges
-        const badges = tipsByUser.get(m.uid) || '';
-
-        // Admin delete button
-        const adminX = adminMode ? `<button class="chat-msg-admin-x" data-msg-id="${m.id}" title="Ta bort">&times;</button>` : '';
-
-        // XSS FIX: Escape the display name so malicious names don't execute script tags
-        const safeDisplayName = escapeHtml(displayName);
-
-        // Admin: clickable name
-        const nameHtml = adminMode
-            ? `<span class="chat-msg-name" style="cursor:pointer; text-decoration:underline dotted;" data-uid="${m.uid}" data-action="user-menu">${safeDisplayName}</span>`
-            : `<span class="chat-msg-name">${safeDisplayName}</span>`;
-
-        // Reply snippet HTML
-        let replyHtml = '';
-        if (m.replyToId) {
-            const safeReplyName = escapeHtml(m.replyToName || 'Någon');
-            const safeReplyText = escapeHtml(m.replyToText || '');
-            replyHtml = `
-                <div class="chat-reply-link" data-target="${m.replyToId}" style="font-size: 11px; color: #666; background: rgba(0,0,0,0.04); padding: 4px 8px; border-radius: 4px; margin-bottom: 6px; cursor: pointer; border-left: 3px solid rgba(0,0,0,0.2);">
-                    <span style="opacity: 0.7;">↩ Svar till <b>${safeReplyName}</b>: <i>"${safeReplyText}"</i></span>
-                </div>`;
-        }
-
-        html += `<div class="${classes.join(' ')}" data-msg-id="${m.id}" style="cursor: pointer;" title="Klicka för att svara">
-            <div class="chat-msg-header">
-                <span class="chat-msg-time">${time}</span>
-                ${nameHtml}
-                ${badges ? `<span class="chat-msg-tips">${badges}</span>` : ''}
-                ${adminX}
+    list.innerHTML = ordered.map(t => {
+        const unseen = hasUnseen(t.id, t.lastTs);
+        const adminX = adminMode
+            ? `<button class="forum-thread-del" data-del-thread="${t.id}" title="Ta bort tråd">&times;</button>` : '';
+        return `<div class="forum-thread${t.id === activeThreadId ? ' active' : ''}" data-thread="${t.id}">
+            <span class="forum-thread-icon">${t.icon || '⚽'}</span>
+            <div class="forum-thread-main">
+                <div class="forum-thread-title">${escapeHtml(t.title)}</div>
+                <div class="forum-thread-meta">Startad av ${escapeHtml(t.byName || 'Anonym')} · ${relTime(t.ts)}</div>
             </div>
-            ${replyHtml}
-            <span class="chat-msg-text">${escapeHtml(m.text)}</span>
+            ${unseen ? '<span class="forum-badge-new">NYA INLÄGG</span>' : ''}
+            <span class="forum-thread-count-pill">💬 ${t.count}</span>
+            ${adminX}
         </div>`;
-    });
+    }).join('');
 
-    container.innerHTML = html;
+    document.getElementById('forum-thread-count').textContent =
+        `Visar ${ordered.length} av ${ordered.length} trådar`;
 
-    // Auto-scroll to bottom
-    container.scrollTop = container.scrollHeight;
-
-    // --- Wiring Event Listeners ---
-
-    // 1. Click on message to reply
-    container.querySelectorAll('.chat-msg').forEach(msgEl => {
-        msgEl.addEventListener('click', (e) => {
-            // Do not trigger reply if clicking admin elements or a reply link
-            if (e.target.closest('.chat-msg-admin-x') || e.target.closest('.chat-msg-name[data-action]') || e.target.closest('.chat-reply-link')) {
-                return;
-            }
-            const msgId = msgEl.dataset.msgId;
-            const msg = msgs.find(m => m.id === msgId);
-            if (msg) initiateReply(msg);
+    list.querySelectorAll('.forum-thread').forEach(el => {
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('[data-del-thread]')) return;
+            openThread(el.dataset.thread);
         });
     });
-
-    // 2. Click on reply snippet to scroll to original message
-    container.querySelectorAll('.chat-reply-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevents triggering a reply
-            const targetId = link.dataset.target;
-            scrollToMessage(targetId);
-        });
-    });
-
-    // 3. Admin delete buttons
     if (adminMode) {
-        container.querySelectorAll('.chat-msg-admin-x').forEach(btn => {
+        list.querySelectorAll('[data-del-thread]').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevents triggering a reply
-                const msgId = btn.dataset.msgId;
-                const msg = msgs.find(m => m.id === msgId);
-                if (msg) deleteMessage(msg);
+                e.stopPropagation();
+                deleteThread(btn.dataset.delThread);
             });
         });
     }
 }
 
-function resolveName(m) {
-    if (meta?.chatNames?.[m.uid]) {
-        // Admin-set names are used verbatim — they've deliberately chosen the
-        // display (e.g. "Karl T."), so we must not truncate to first word.
-        return meta.chatNames[m.uid];
+/* ── render: posts (right) ─────────────────────────── */
+
+function renderPosts() {
+    if (formOpen) return;
+    const list = document.getElementById('forum-post-list');
+    const title = document.getElementById('forum-posts-title');
+    const replyRow = document.getElementById('forum-reply-row');
+    if (!list) return;
+
+    document.querySelector('.forum-body')?.classList.toggle('viewing-thread', !!activeThreadId);
+
+    // Single-thread view
+    if (activeThreadId) {
+        const thread = threads.find(t => t.id === activeThreadId);
+        if (!thread) { activeThreadId = null; return renderPosts(); }
+
+        const tp = threadPosts(activeThreadId);
+        title.innerHTML = `<button class="forum-back-btn" id="forum-back">← Alla trådar</button>
+            <span class="forum-thread-icon">${thread.icon || '⚽'}</span> ${escapeHtml(thread.title)}`;
+
+        list.innerHTML = tp.length
+            ? tp.map(p => postCardHtml(p, null)).join('')
+            : '<p class="chat-empty">Inga inlägg i tråden än.</p>';
+
+        replyRow.style.display = meta?.muted?.includes(auth.currentUser?.uid) ? 'none' : 'flex';
+        if (tp.length) markSeen(activeThreadId, tp[tp.length - 1].ts);
+
+        document.getElementById('forum-back').addEventListener('click', () => {
+            activeThreadId = null;
+            renderThreads();
+            renderPosts();
+        });
+        wirePostCards(list);
+        list.scrollTop = list.scrollHeight;
+        renderThreads(); // refresh unseen badges
+        return;
     }
-    return m.name || 'Anonym';
+
+    // All-threads feed: most recent posts across every thread
+    title.textContent = '📣 SENASTE INLÄGGEN FRÅN ALLA TRÅDAR';
+    replyRow.style.display = 'none';
+
+    const feed = visiblePosts().slice().sort((a, b) => b.ts - a.ts).slice(0, FEED_LIMIT);
+    if (feed.length === 0) {
+        list.innerHTML = '<p class="chat-empty">Inga inlägg än. Var först att slå ett nytt inlägg!</p>';
+        return;
+    }
+    const threadById = new Map(threads.map(t => [t.id, t]));
+    list.innerHTML = feed.map(p => postCardHtml(p, threadById.get(p.threadId))).join('');
+    wirePostCards(list);
+}
+
+function postCardHtml(p, thread) {
+    const uid = auth.currentUser?.uid;
+    const shadow = new Set(meta?.shadowbanned || []);
+    const isOwn = p.uid === uid;
+    const isShadow = shadow.has(p.uid) && p.uid === uid;
+    const time = new Date(p.ts).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+    const dayLabel = relTime(p.ts);
+    const name = escapeHtml(resolveName(p));
+
+    // Thread chip only shown in the all-threads feed
+    const chip = thread
+        ? `<div class="forum-card-chip"><span class="forum-thread-icon">${thread.icon || '⚽'}</span><span>${escapeHtml(thread.title)}</span></div>`
+        : '';
+
+    const nameHtml = adminMode
+        ? `<span class="forum-card-name" style="cursor:pointer;text-decoration:underline dotted;" data-uid="${p.uid}" data-action="user-menu">${name}</span>`
+        : `<span class="forum-card-name">${name}</span>`;
+
+    const adminX = adminMode
+        ? `<button class="chat-msg-admin-x" data-del-post="${p.id}" title="Ta bort">&times;</button>` : '';
+
+    const clickable = thread ? ' forum-card-clickable' : '';
+    const classes = `forum-card${isOwn ? ' own' : ''}${isShadow ? ' shadow' : ''}${clickable}`;
+
+    return `<div class="${classes}" data-post-id="${p.id}"${thread ? ` data-open-thread="${p.threadId}"` : ''}>
+        ${chip}
+        <div class="forum-card-net">
+            <div class="forum-card-top">
+                <span class="forum-card-day">${dayLabel} ${time}</span>
+                ${adminX}
+            </div>
+            <div class="forum-card-text">${escapeHtml(p.text)}</div>
+            ${nameHtml}
+        </div>
+    </div>`;
+}
+
+function wirePostCards(list) {
+    list.querySelectorAll('.forum-card-clickable').forEach(card => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('[data-del-post]') || e.target.closest('[data-action]')) return;
+            openThread(card.dataset.openThread);
+        });
+    });
+    if (adminMode) {
+        list.querySelectorAll('[data-del-post]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const post = posts.find(p => p.id === btn.dataset.delPost);
+                if (post) deleteMessage(post);
+            });
+        });
+    }
+}
+
+/* ── thread navigation / admin ─────────────────────── */
+
+function openThread(threadId) {
+    activeThreadId = threadId;
+    if (formOpen) closeNewThreadForm();
+    renderThreads();
+    renderPosts();
+    document.getElementById('chat-input')?.focus();
+}
+
+async function deleteThread(threadId) {
+    const thread = threads.find(t => t.id === threadId);
+    if (!thread) return;
+    const toRemove = posts.filter(p => p.threadId === threadId);
+    try {
+        await updateDoc(doc(db, "chat", "threads"), { threads: arrayRemove(thread) });
+        if (toRemove.length) {
+            const ref = doc(db, "chat", "posts");
+            const snap = await getDoc(ref);
+            const remaining = (snap.data()?.posts || []).filter(p => p.threadId !== threadId);
+            await setDoc(ref, { posts: remaining });
+        }
+        if (activeThreadId === threadId) activeThreadId = null;
+    } catch (err) {
+        console.error('Delete thread error:', err);
+        showToast('Kunde inte ta bort tråden.');
+    }
+}
+
+/* ── helpers ───────────────────────────────────────── */
+
+function updateMuteState() {
+    const uid = auth.currentUser?.uid;
+    const muted = meta?.muted?.includes(uid);
+    const notice = document.getElementById('chat-muted-notice');
+    const replyRow = document.getElementById('forum-reply-row');
+    if (notice) notice.style.display = muted ? 'block' : 'none';
+    if (muted && replyRow) replyRow.style.display = 'none';
+}
+
+function resolveName(p) {
+    if (meta?.chatNames?.[p.uid]) return meta.chatNames[p.uid];
+    return p.name || 'Anonym';
 }
 
 function escapeHtml(str) {
     const div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = str == null ? '' : str;
     return div.innerHTML;
 }
 
-function isToday(d) {
-    const t = new Date();
-    return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
-}
-
-function isYesterday(d) {
-    const y = new Date();
-    y.setDate(y.getDate() - 1);
-    return d.getDate() === y.getDate() && d.getMonth() === y.getMonth() && d.getFullYear() === y.getFullYear();
-}
-
-/* ── Match sidebar ─────────────────────────────────── */
-
-function getActiveMatches() {
-    const matchDocs = window._cachedMatchDocs || [];
-    const results = window._cachedResults || {};
-    const now = Date.now();
-
-    const parsed = matchDocs.map(m => ({
-        ...m,
-        _parsed: parseMatchDate(m.date),
-        _hasResult: !!(results[m.id] && results[m.id].homeScore !== undefined)
-    }));
-
-    // Ongoing: started (time <= now) but no result yet
-    const ongoing = parsed.filter(m => m._parsed && m._parsed.getTime() <= now && !m._hasResult)
-        .sort((a, b) => b._parsed - a._parsed);
-
-    // Upcoming: not started yet
-    const upcoming = parsed.filter(m => m._parsed && m._parsed.getTime() > now && !m._hasResult)
-        .sort((a, b) => a._parsed - b._parsed);
-
-    // Also check knockout bracket for active matches
-    const bracketMatches = getActiveBracketMatches(now);
-
-    const all = [...ongoing, ...bracketMatches.ongoing];
-    const allUpcoming = [...upcoming, ...bracketMatches.upcoming];
-
-    // Max 2 total: ongoing first, fill with upcoming
-    const active = all.slice(0, 2);
-    const remaining = 2 - active.length;
-    if (remaining > 0) active.push(...allUpcoming.slice(0, remaining));
-
-    return active;
-}
-
-function getActiveBracketMatches(now) {
-    const bracket = window._cachedBracket;
-    if (!bracket?.rounds) return { ongoing: [], upcoming: [] };
-
-    const ongoing = [], upcoming = [];
-    getKnockoutRounds().forEach(rd => {
-        const twoLeg = isTwoLegged(rd.key);
-        (bracket.rounds[rd.adminKey] || []).forEach((m, mi) => {
-            if (!m.team1 || !m.team2) return;
-
-            // Leg 1
-            if (m.score1 === undefined) {
-                const parsed = m.date ? parseMatchDate(m.date) : null;
-                const entry = {
-                    homeTeam: m.team1, awayTeam: m.team2, date: m.date,
-                    stage: twoLeg ? `${rd.label} – Match 1` : rd.label,
-                    _parsed: parsed, _hasResult: false,
-                    _isKnockout: true, _koRoundKey: rd.key, _koMatchIdx: mi, _koLeg: 1
-                };
-                if (parsed && parsed.getTime() <= now) ongoing.push(entry);
-                else upcoming.push(entry);
-            }
-
-            // Leg 2
-            if (twoLeg && m.score1_leg2 === undefined) {
-                const parsed = m.date_leg2 ? parseMatchDate(m.date_leg2) : null;
-                const entry = {
-                    homeTeam: m.team2, awayTeam: m.team1, date: m.date_leg2,
-                    stage: `${rd.label} – Match 2 (retur)`,
-                    _parsed: parsed, _hasResult: false,
-                    _isKnockout: true, _koRoundKey: rd.key, _koMatchIdx: mi, _koLeg: 2
-                };
-                if (parsed && parsed.getTime() <= now) ongoing.push(entry);
-                else upcoming.push(entry);
-            }
-        });
-    });
-
-    ongoing.sort((a, b) => (b._parsed || 0) - (a._parsed || 0));
-    upcoming.sort((a, b) => (a._parsed || Infinity) - (b._parsed || Infinity));
-    return { ongoing, upcoming };
-}
-
-function buildMatchSidebar() {
-    const container = document.getElementById('chat-match-cards');
-    const activeMatches = getActiveMatches();
-    const users = window._cachedUsers || [];
-
-    if (activeMatches.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-
-    let html = '';
-    activeMatches.forEach((match, i) => {
-        const isKnockout = match.stage && !match.stage.startsWith('Grupp');
-        const dist = computeTipDistribution(match, users);
-        const timeStr = match.date || '';
-        const stageStr = match.stage || '';
-
-        html += `<div class="chat-match-card" data-card-idx="${i}">
-            <div class="chat-match-teams">
-                <span>${f(match.homeTeam)}${match.homeTeam}</span>
-                <span class="chat-match-vs">v</span>
-                <span>${match.awayTeam}${f(match.awayTeam)}</span>
-            </div>
-            <div class="chat-match-popup">
-                <div class="chat-match-stage">${stageStr}${timeStr ? ' · ' + timeStr : ''}</div>
-                ${renderTipBar(dist, isKnockout)}
-            </div>
-        </div>`;
-    });
-
-    container.innerHTML = html;
-
-    // Wire click-to-expand
-    container.querySelectorAll('.chat-match-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const wasExpanded = card.classList.contains('expanded');
-            // Close all
-            container.querySelectorAll('.chat-match-card').forEach(c => c.classList.remove('expanded'));
-            if (!wasExpanded) card.classList.add('expanded');
-        });
-    });
-
-    // Close popup when clicking elsewhere
-    document.addEventListener('click', () => {
-        container.querySelectorAll('.chat-match-card').forEach(c => c.classList.remove('expanded'));
-    }, { once: false });
-}
-
-function computeTipDistribution(match, users) {
-    let home = 0, draw = 0, away = 0, total = 0;
-
-    if (match._isKnockout) {
-        const rk = match._koRoundKey, mi = match._koMatchIdx, leg = match._koLeg;
-        users.forEach(u => {
-            const tip = u.knockoutScores?.[rk]?.[mi];
-            if (!tip) return;
-            let h, a;
-            if (leg === 1) { h = tip.score1; a = tip.score2; }
-            else if (leg === 2) { h = tip.score1_leg2; a = tip.score2_leg2; }
-            if (h == null || a == null) return;
-            total++;
-            if (h > a) home++; else if (h < a) away++; else draw++;
-        });
-    } else {
-        const matchId = String(match.id);
-        users.forEach(u => {
-            const tip = u.matchTips?.[matchId];
-            if (!tip || tip.homeScore === undefined || tip.awayScore === undefined) return;
-            total++;
-            if (tip.homeScore > tip.awayScore) home++;
-            else if (tip.homeScore < tip.awayScore) away++;
-            else draw++;
-        });
-    }
-
-    if (total === 0) return { home: 0, draw: 0, away: 0 };
-    return {
-        home: Math.round((home / total) * 100),
-        draw: Math.round((draw / total) * 100),
-        away: Math.round((away / total) * 100)
-    };
-}
-
-function renderTipBar(dist, isKnockout) {
-    if (dist.home === 0 && dist.draw === 0 && dist.away === 0) {
-        return '<div class="chat-tip-bar" style="opacity:0.3;"><div class="chat-tip-bar-seg" style="flex:1; background:#ccc;"></div></div>';
-    }
-
-    const segments = isKnockout
-        ? `<div class="chat-tip-bar-seg chat-tip-bar-home" style="flex-basis:${dist.home + dist.draw / 2}%;"></div>
-           <div class="chat-tip-bar-seg chat-tip-bar-away" style="flex-basis:${dist.away + dist.draw / 2}%;"></div>`
-        : `<div class="chat-tip-bar-seg chat-tip-bar-home" style="flex-basis:${dist.home}%;"></div>
-           <div class="chat-tip-bar-seg chat-tip-bar-draw" style="flex-basis:${dist.draw}%;"></div>
-           <div class="chat-tip-bar-seg chat-tip-bar-away" style="flex-basis:${dist.away}%;"></div>`;
-
-    const labels = isKnockout
-        ? `<div class="chat-tip-bar-labels"><span>1 ${dist.home + Math.round(dist.draw / 2)}%</span><span>${dist.away + Math.round(dist.draw / 2)}% 2</span></div>`
-        : `<div class="chat-tip-bar-labels"><span>1 ${dist.home}%</span><span>X ${dist.draw}%</span><span>${dist.away}% 2</span></div>`;
-
-    return `<div class="chat-tip-bar">${segments}</div>${labels}`;
-}
-
-/* ── Tip badges for chat users ─────────────────────── */
-
-function buildTipBadges(activeMatches, chatUids) {
-    const users = window._cachedUsers || [];
-    const tipMap = new Map(); // uid -> html string
-
-    if (activeMatches.length === 0) return tipMap;
-
-    // Build lookup: uid -> user data (only for chat participants)
-    const userLookup = new Map();
-    users.forEach(u => {
-        if (chatUids.has(u.userId)) userLookup.set(u.userId, u);
-    });
-
-    chatUids.forEach(uid => {
-        const u = userLookup.get(uid);
-        if (!u) return;
-
-        let badges = '';
-        activeMatches.forEach(match => {
-            let tipH, tipA;
-
-            if (match._isKnockout) {
-                const tip = u.knockoutScores?.[match._koRoundKey]?.[match._koMatchIdx];
-                if (!tip) return;
-                if (match._koLeg === 1) { tipH = tip.score1; tipA = tip.score2; }
-                else if (match._koLeg === 2) { tipH = tip.score1_leg2; tipA = tip.score2_leg2; }
-                if (tipH == null || tipA == null) return;
-            } else {
-                const tip = u.matchTips?.[String(match.id)];
-                if (!tip || tip.homeScore === undefined) return;
-                tipH = tip.homeScore;
-                tipA = tip.awayScore;
-            }
-
-            const flagHome = teamImg(match.homeTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
-            const flagAway = teamImg(match.awayTeam, { size: 16, height: 12, style: 'margin:0 2px;' });
-
-            badges += `<span class="chat-tip-badge">${flagHome}${tipH}-${tipA}${flagAway}</span>`;
-        });
-
-        if (badges) tipMap.set(uid, badges);
-    });
-
-    return tipMap;
-}
-
-// Ensures the chat input row is immediately visible at the bottom of the
-// viewport on mobile, by pinning .chat-layout to the viewport (position:
-// fixed via CSS). Measure where the chat-tab naturally sits below the
-// navbar+tabs chrome and feed that into the CSS --chat-top-offset.
-function fitChatLayoutToViewport() {
-    if (window.innerWidth > 768) return;
-    const tab = document.getElementById('chat-tab');
-    if (!tab) return;
-    // requestAnimationFrame + tiny timeout so navbar/tabs have finalized layout
-    requestAnimationFrame(() => {
-        // Scroll to top so measurements are consistent
-        window.scrollTo(0, 0);
-        // Measure position of chat-tab from viewport top (= distance from top
-        // to where the tab starts, i.e. below navbar + tab-buttons row)
-        const top = Math.max(tab.getBoundingClientRect().top, 8);
-        document.documentElement.style.setProperty('--chat-top-offset', top + 'px');
-    });
-}
-
-// Re-measure on resize / orientation change so the chat layout stays correct.
-if (typeof window !== 'undefined') {
-    window.addEventListener('resize', () => {
-        const tab = document.getElementById('chat-tab');
-        if (tab?.classList.contains('active')) fitChatLayoutToViewport();
-    });
+function relTime(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    const yesterday = d.toDateString() === y.toDateString();
+    if (sameDay) return 'Idag';
+    if (yesterday) return 'Igår';
+    const days = Math.floor((now - d) / 86400000);
+    if (days < 7) return `${days} dagar sedan`;
+    return d.toLocaleDateString('sv-SE');
 }
