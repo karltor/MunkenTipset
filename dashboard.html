@@ -334,26 +334,64 @@
             <div id="results-knockout" class="results-sub-content"></div>
         </div>
 
-        <!-- CHAT TAB -->
+        <!-- CHAT TAB (forum) -->
         <div id="chat-tab" class="tab-content">
-            <div class="chat-layout">
-                <div class="chat-top-bar">
-                    <div class="chat-match-grid" id="chat-match-cards"></div>
+            <div class="forum-layout">
+                <!-- Two clear actions up top -->
+                <div class="forum-actions">
+                    <button id="forum-new-thread" class="forum-action-btn forum-action-new">
+                        <span class="forum-action-label">SLÅ ETT<br>NYTT INLÄGG</span>
+                        <span class="forum-action-icon">+</span>
+                    </button>
+                    <button id="forum-reply-hint" class="forum-action-btn forum-action-reply">
+                        <span class="forum-action-label">SVARA PÅ<br>ETT INLÄGG</span>
+                        <span class="forum-action-icon">💬</span>
+                    </button>
                     <button id="chat-admin-btn" class="chat-admin-fab" style="display:none;">🛡</button>
                 </div>
-                <div class="chat-main">
-                    <div class="chat-messages" id="chat-messages">
-                        <p class="chat-empty">Laddar chatt...</p>
+
+                <div class="forum-body">
+                    <!-- Left: thread list -->
+                    <div class="forum-threads">
+                        <h3 class="forum-col-title">💬 TRÅDAR</h3>
+                        <div id="forum-thread-list" class="forum-thread-list">
+                            <p class="chat-empty">Laddar trådar...</p>
+                        </div>
+                        <div id="forum-thread-count" class="forum-thread-count"></div>
+                    </div>
+
+                    <!-- Right: posts feed / single thread -->
+                    <div class="forum-posts">
+                        <h3 class="forum-col-title" id="forum-posts-title">📣 SENASTE INLÄGGEN FRÅN ALLA TRÅDAR</h3>
+                        <div id="forum-post-list" class="forum-post-list">
+                            <p class="chat-empty">Laddar inlägg...</p>
+                        </div>
+
+                        <!-- New-thread form (hidden by default) -->
+                        <div id="forum-new-form" class="forum-new-form" style="display:none;">
+                            <label class="forum-form-label">Välj en ikon</label>
+                            <div id="forum-icon-picker" class="forum-icon-picker"></div>
+                            <label class="forum-form-label">Rubrik på tråden</label>
+                            <input type="text" id="forum-thread-title" class="chat-input" placeholder="T.ex. Blir det straff i semifinalen?" maxlength="120" autocomplete="off">
+                            <label class="forum-form-label">Ditt första inlägg</label>
+                            <textarea id="forum-thread-body" class="chat-input forum-textarea" placeholder="Skriv ditt tips eller din fråga..." maxlength="500"></textarea>
+                            <div class="forum-form-actions">
+                                <button id="forum-create-cancel" class="btn forum-btn-secondary">Avbryt</button>
+                                <button id="forum-create-submit" class="btn chat-send-btn">Skapa tråd</button>
+                            </div>
+                        </div>
+
+                        <!-- Reply input (shown when a thread is open) -->
+                        <div class="chat-input-row forum-reply-row" id="forum-reply-row" style="display:none;">
+                            <input type="text" id="chat-input" class="chat-input" placeholder="Skriv ett svar..." maxlength="500" autocomplete="off">
+                            <button id="chat-send" class="btn chat-send-btn">Skicka</button>
+                        </div>
+                        <div id="chat-muted-notice" class="chat-muted-notice" style="display:none;">Du kan inte skriva i forumet just nu.</div>
                     </div>
                 </div>
-                <div class="chat-input-row">
-                    <input type="text" id="chat-input" class="chat-input" placeholder="Skriv ett meddelande..." maxlength="500" autocomplete="off">
-                    <button id="chat-send" class="btn chat-send-btn">Skicka</button>
-                </div>
-                <div id="chat-muted-notice" class="chat-muted-notice" style="display:none;">Du kan inte skriva i chatten just nu.</div>
-                <div class="chat-sidebar" id="chat-sidebar" style="display:none;">
-                    <h4 class="chat-sidebar-title">Matcher</h4>
-                    <div id="chat-sidebar-cards"></div>
+
+                <div class="forum-footer">
+                    🇸🇪 ⚽ Tipsa, diskutera och ha kul tillsammans! Heja Sverige! 🇸🇪
                 </div>
             </div>
             <div id="chat-admin-panel" class="chat-admin-panel" style="display:none;"></div>
