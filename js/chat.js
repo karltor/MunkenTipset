@@ -118,7 +118,6 @@ function wireUi() {
     if (initialized) return;
 
     document.getElementById('forum-new-thread').addEventListener('click', openNewThreadForm);
-    document.getElementById('forum-reply-hint').addEventListener('click', onReplyHint);
     document.getElementById('forum-create-cancel').addEventListener('click', closeNewThreadForm);
     document.getElementById('forum-create-submit').addEventListener('click', createThread);
 
@@ -130,20 +129,6 @@ function wireUi() {
     });
 
     initialized = true;
-}
-
-function onReplyHint() {
-    if (activeThreadId) {
-        document.getElementById('chat-input')?.focus();
-        return;
-    }
-    showToast('Välj en tråd till vänster för att svara.');
-    const list = document.getElementById('forum-thread-list');
-    if (list) {
-        list.classList.add('forum-pulse');
-        setTimeout(() => list.classList.remove('forum-pulse'), 1200);
-        list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
 }
 
 /* ── new-thread form ───────────────────────────────── */
@@ -391,16 +376,24 @@ function renderPosts() {
         return;
     }
 
-    // All-threads feed: most recent posts across every thread
+    // All-threads feed: only the single latest post from each thread
     title.textContent = '📣 SENASTE INLÄGGEN FRÅN ALLA TRÅDAR';
     replyRow.style.display = 'none';
 
-    const feed = visiblePosts().slice().sort((a, b) => b.ts - a.ts).slice(0, FEED_LIMIT);
+    const threadById = new Map(threads.map(t => [t.id, t]));
+    const feed = threads
+        .map(t => {
+            const tp = threadPosts(t.id);
+            return tp.length ? tp[tp.length - 1] : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, FEED_LIMIT);
+
     if (feed.length === 0) {
         list.innerHTML = '<p class="chat-empty">Inga inlägg än. Var först att slå ett nytt inlägg!</p>';
         return;
     }
-    const threadById = new Map(threads.map(t => [t.id, t]));
     list.innerHTML = feed.map(p => postCardHtml(p, threadById.get(p.threadId))).join('');
     wirePostCards(list);
 }
