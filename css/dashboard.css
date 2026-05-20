@@ -1177,6 +1177,25 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     font-size: 18px;
 }
 
+/* Threads column header: title + compact "new thread" action */
+.forum-threads-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.forum-threads-header .forum-col-title { margin: 0; }
+
+/* Smaller button variant */
+.forum-action-sm {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 10px;
+    gap: 6px;
+}
+.forum-action-sm .forum-action-icon { width: 20px; height: 20px; font-size: 15px; }
+
 /* Admin fab */
 .chat-admin-fab {
     flex: 0 0 auto;
