@@ -337,19 +337,6 @@
         <!-- CHAT TAB (forum) -->
         <div id="chat-tab" class="tab-content">
             <div class="forum-layout">
-                <!-- Two clear actions up top -->
-                <div class="forum-actions">
-                    <button id="forum-new-thread" class="forum-action-btn forum-action-new">
-                        <span class="forum-action-label">SLÅ ETT<br>NYTT INLÄGG</span>
-                        <span class="forum-action-icon">+</span>
-                    </button>
-                    <button id="forum-reply-hint" class="forum-action-btn forum-action-reply">
-                        <span class="forum-action-label">SVARA PÅ<br>ETT INLÄGG</span>
-                        <span class="forum-action-icon">💬</span>
-                    </button>
-                    <button id="chat-admin-btn" class="chat-admin-fab" style="display:none;">🛡</button>
-                </div>
-
                 <div class="forum-body">
                     <!-- Left: thread list -->
                     <div class="forum-threads">
@@ -362,7 +349,16 @@
 
                     <!-- Right: posts feed / single thread -->
                     <div class="forum-posts">
-                        <h3 class="forum-col-title" id="forum-posts-title">📣 SENASTE INLÄGGEN FRÅN ALLA TRÅDAR</h3>
+                        <div class="forum-posts-header">
+                            <h3 class="forum-col-title" id="forum-posts-title">📣 SENASTE INLÄGGEN FRÅN ALLA TRÅDAR</h3>
+                            <div class="forum-posts-header-actions">
+                                <button id="forum-new-thread" class="forum-action-btn forum-action-new">
+                                    <span class="forum-action-label">SLÅ ETT NYTT INLÄGG</span>
+                                    <span class="forum-action-icon">+</span>
+                                </button>
+                                <button id="chat-admin-btn" class="chat-admin-fab" style="display:none;">🛡</button>
+                            </div>
+                        </div>
                         <div id="forum-post-list" class="forum-post-list">
                             <p class="chat-empty">Laddar inlägg...</p>
                         </div>
