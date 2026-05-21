@@ -1302,6 +1302,16 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     color: #999;
     text-align: center;
 }
+.forum-show-more {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-btn-primary);
+    font-weight: 700;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+.forum-show-more:hover { text-decoration: underline; }
 
 /* Posts feed (right) */
 .forum-post-list {

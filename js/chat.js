@@ -15,6 +15,8 @@ let initialized = false;
 let activeThreadId = null;   // null = "all threads" feed; else single-thread view
 let formOpen = false;        // new-thread form visible
 let selectedIcon = '⚽';     // chosen icon in new-thread form
+let threadsExpanded = false; // show full thread list vs. top few
+const THREAD_PREVIEW = 5;    // threads shown before "Visa fler"
 const TRIM_THRESHOLD = 4000; // trim posts array when it grows beyond this
 const FEED_LIMIT = 30;       // posts shown in the all-threads feed
 const SEEN_KEY = 'forumSeen';
@@ -303,7 +305,9 @@ function renderThreads() {
         return;
     }
 
-    list.innerHTML = ordered.map(t => {
+    const shown = threadsExpanded ? ordered : ordered.slice(0, THREAD_PREVIEW);
+
+    list.innerHTML = shown.map(t => {
         const unseen = hasUnseen(t.id, t.lastTs);
         const adminX = adminMode
             ? `<button class="forum-thread-del" data-del-thread="${t.id}" title="Ta bort tråd">&times;</button>` : '';
@@ -319,8 +323,18 @@ function renderThreads() {
         </div>`;
     }).join('');
 
-    document.getElementById('forum-thread-count').textContent =
-        `Visar ${ordered.length} av ${ordered.length} trådar`;
+    const countEl = document.getElementById('forum-thread-count');
+    if (ordered.length > THREAD_PREVIEW) {
+        countEl.innerHTML = threadsExpanded
+            ? `<button class="forum-show-more" id="forum-toggle-threads">Visa färre ▲</button>`
+            : `<button class="forum-show-more" id="forum-toggle-threads">Visa fler (${ordered.length - THREAD_PREVIEW}) ▼</button>`;
+        document.getElementById('forum-toggle-threads').addEventListener('click', () => {
+            threadsExpanded = !threadsExpanded;
+            renderThreads();
+        });
+    } else {
+        countEl.textContent = `Visar ${ordered.length} av ${ordered.length} trådar`;
+    }
 
     list.querySelectorAll('.forum-thread').forEach(el => {
         el.addEventListener('click', (e) => {
