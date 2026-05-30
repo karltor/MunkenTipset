@@ -37,6 +37,11 @@ let listenersAttached = false;
 let bracketLocked = false;
 let adminBracket = null;
 let knockoutOnly = false;
+// Set when the user re-enters the bracket right after (re)saving their group
+// stage. Forces a reload from the first knockout round so the new qualifiers
+// and seeding propagate, instead of fast-forwarding past rounds the user has
+// already filled in (which made group edits look like they "didn't take").
+let restartAtFirstRound = false;
 
 export function setBracketLocked(locked) {
     bracketLocked = !!locked;
@@ -47,9 +52,19 @@ export function setBracketLocked(locked) {
     }
 }
 
+// Called by app.js right before re-opening the bracket after a group-stage save.
+export function requestBracketRestart() {
+    restartAtFirstRound = true;
+}
+
 export async function initBracket(groupPicks, tipsLocked) {
     bracketLocked = tipsLocked || false;
     knockoutOnly = !hasStageType('round-robin-groups');
+
+    // Consume the restart request up-front so it's always cleared, even on the
+    // early-return paths below.
+    const forceRestart = restartAtFirstRound;
+    restartAtFirstRound = false;
 
     if (knockoutOnly) {
         const bracketSnap = await getDoc(doc(db, "matches", "_bracket"));
@@ -94,7 +109,10 @@ export async function initBracket(groupPicks, tipsLocked) {
         if (picks.some(t => !valid.has(t))) { firstStaleRound = i; break; }
     }
 
-    if (firstStaleRound === -1) {
+    // After a group-stage edit we always restart at the first knockout round so
+    // the user can see their change flow through — skip the "jump straight to the
+    // champion" shortcut in that case.
+    if (!forceRestart && firstStaleRound === -1) {
         if (knockoutData[finalRoundKey] && typeof knockoutData[finalRoundKey] === 'string') { showChampion(knockoutData[finalRoundKey]); return; }
         if (knockoutData[finalRoundKey]) { showChampion(knockoutData[finalRoundKey]); return; }
     }
@@ -108,6 +126,16 @@ export async function initBracket(groupPicks, tipsLocked) {
         if (knockoutData[r.key]?.length === expectedPicks) currentRound = i + 1;
     }
     if (firstStaleRound !== -1) currentRound = firstStaleRound;
+
+    // Group edit → don't fast-forward past rounds the user already filled in.
+    // Land them on the first round so the new qualifiers (and seeding) show up
+    // instead of leaving them stranded on a later round with stale selections.
+    if (forceRestart) {
+        currentRound = 0;
+        if (Object.keys(knockoutData).length > 0) {
+            showBracketToast('Ditt gruppspelstips ändrades — gå igenom slutspelet igen så att det stämmer med dina nya grupper.');
+        }
+    }
 
     showBracketContent();
     loadRound(currentRound);
@@ -137,6 +165,21 @@ function showBracketContent() {
     document.getElementById('bracket-content').style.display = 'block';
     document.getElementById('bracket-champion').style.display = 'none';
     if (knockoutOnly) renderModeBar();
+}
+
+function showBracketToast(msg) {
+    let toast = document.getElementById('bracket-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'bracket-toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.remove('show');
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4500);
 }
 
 function buildQualifiedTeams(picks) {
@@ -743,12 +786,22 @@ async function saveBracketRound() {
     if (_isFinalRound(roundKey)) {
         knockoutData[roundKey] = Array.from(selectedTeams)[0];
     } else {
-        knockoutData[roundKey] = Array.from(selectedTeams);
-        const rounds = _rounds();
-        const thisIdx = rounds.indexOf(roundKey);
-        for (let i = thisIdx + 1; i < rounds.length; i++) {
-            delete knockoutData[rounds[i]];
-            delete knockoutScores[rounds[i]];
+        const newPicks = Array.from(selectedTeams);
+        const prevPicks = knockoutData[roundKey];
+        // Only invalidate the later rounds when this round's winners actually
+        // changed. Re-saving an unchanged round (e.g. while stepping back through
+        // the bracket after a small group edit) must not wipe the rest of it.
+        const picksChanged = !Array.isArray(prevPicks)
+            || prevPicks.length !== newPicks.length
+            || newPicks.some((t, i) => t !== prevPicks[i]);
+        knockoutData[roundKey] = newPicks;
+        if (picksChanged) {
+            const rounds = _rounds();
+            const thisIdx = rounds.indexOf(roundKey);
+            for (let i = thisIdx + 1; i < rounds.length; i++) {
+                delete knockoutData[rounds[i]];
+                delete knockoutScores[rounds[i]];
+            }
         }
     }
 

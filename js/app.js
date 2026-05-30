@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { collection, getDocs, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { loadTournamentConfig, getTournamentName, getLogo, hasStageType, getSpecialQuestionsConfig } from './tournament-config.js';
 import { initWizard, getGroupPicks, setWizardLocked } from './wizard.js';
-import { initBracket, setBracketLocked } from './bracket.js';
+import { initBracket, setBracketLocked, requestBracketRestart } from './bracket.js';
 import { loadCommunityStats, setStatsViewerIsAdmin } from './stats.js';
 import { showAllTips } from './compare.js';
 import { renderScoringInfoTab, invalidateScoringInfoCache } from './scoring-info.js';
@@ -354,6 +354,9 @@ function showWelcomePopup(emailPref) {
 
 function onGroupsComplete() {
     unlockBracket();
+    // Re-enter the bracket from the first knockout round so the freshly-saved
+    // group results propagate, instead of resuming mid-bracket on stale picks.
+    requestBracketRestart();
     document.querySelector('.tab-btn[data-target="bracket-tab"]').click();
 }
 
