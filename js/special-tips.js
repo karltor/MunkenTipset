@@ -130,7 +130,11 @@ function renderSpecialForm(container, config, existingPicks, alreadyDone) {
     if (alreadyDone && !tipsLocked) {
         document.getElementById('btn-edit-special')?.addEventListener('click', () => {
             container.querySelector('.special-tips-form')?.classList.remove('special-readonly');
-            document.querySelector('.already-done-banner')?.remove();
+            // Scope to this tab's container — the wizard's "redan klart"-panel
+            // (#wizard-already-done) shares the .already-done-banner class and
+            // comes earlier in the DOM, so a document-wide querySelector would
+            // delete the Gruppspel content instead, blanking that tab.
+            container.querySelector('.already-done-banner')?.remove();
         });
     }
 
