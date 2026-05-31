@@ -1,6 +1,7 @@
 import { db, auth } from './config.js';
 import { doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 import { invalidateStatsCache } from './stats.js';
+import { parseMatchDate } from './scoring.js';
 import { getGroupLetters } from './tournament-config.js';
 import { countryFlags, clubCrestIds, teamImg, teamImgLarge } from './team-data.js';
 import { isTipsLockedLive } from './lock-check.js';
@@ -163,7 +164,15 @@ function loadGroup(index) {
     }
     prevFirst = selFirst; prevSecond = selSecond;
 
-    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+    // Sort by kickoff time — Firestore returns matches in document-id order
+    // (lexicographic: "1","10","11",…,"2"), which isn't chronological.
+    const groupMatches = allMatches
+        .filter(m => m.stage === `Grupp ${letter}`)
+        .sort((a, b) => {
+            const ta = parseMatchDate(a.date)?.getTime() ?? Infinity;
+            const tb = parseMatchDate(b.date)?.getTime() ?? Infinity;
+            return ta - tb;
+        });
     currentTeams = Array.from(new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam])));
 
     renderTeamSelectors();
