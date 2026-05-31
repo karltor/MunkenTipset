@@ -72,7 +72,7 @@ export async function initWizard(matchesData, onComplete, locked, prefetchedUser
     document.getElementById('btn-smart-random').addEventListener('click', smartAutoFill);
     document.getElementById('btn-save-group').addEventListener('click', saveAndNext);
     document.getElementById('btn-prev-group').addEventListener('click', () => {
-        if (currentIndex > 0) { storeCurrentScores(); currentIndex--; loadGroup(currentIndex); }
+        if (currentIndex > 0) { persistCurrentGroup(); storeCurrentScores(); currentIndex--; loadGroup(currentIndex); }
     });
 }
 
@@ -113,6 +113,7 @@ function startMode(mode) {
 }
 
 function switchMode() {
+    persistCurrentGroup();
     storeCurrentScores();
     currentMode = currentMode === 'casual' ? 'detailed' : 'casual';
     startMode(currentMode);
@@ -204,7 +205,7 @@ function renderGroupNav(activeIndex) {
         btn.style.cssText = `padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; border:2px solid ${i === activeIndex ? '#1a1a1a' : (hasPick ? '#28a745' : '#ddd')}; background:${i === activeIndex ? '#1a1a1a' : (hasPick ? 'rgba(40,167,69,0.08)' : '#fff')}; color:${i === activeIndex ? '#fff' : '#333'};`;
         btn.textContent = letter;
         btn.addEventListener('click', () => {
-            if (i !== currentIndex) { storeCurrentScores(); loadGroup(i); }
+            if (i !== currentIndex) { persistCurrentGroup(); storeCurrentScores(); loadGroup(i); }
         });
         nav.appendChild(btn);
     });
@@ -479,6 +480,11 @@ async function saveAndNext() {
     }
     const letter = getGroupLetters()[currentIndex];
     const userId = auth.currentUser.uid;
+    // Was this user already finished before this save? A single-group edit by a
+    // completed user must NOT bounce them into the bracket — that broke group-to-
+    // group editing and pushed users onto the in-memory-only nav path, losing
+    // edits on refresh.
+    const wasComplete = !!(existingGroupPicks && existingGroupPicks.completedAt);
     if (!selFirst || !selSecond) return showToast("Välj gruppetta och grupptvåa först!");
 
     const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
@@ -530,10 +536,26 @@ async function saveAndNext() {
         return showToast("Kunde inte spara. Försök igen.");
     }
 
-    if (allGroupsDone) {
+    if (allGroupsDone && !wasComplete) {
+        // First-time completion — unlock and jump straight into the bracket.
         showToast("Snyggt! Gruppspelet klart — slutspelet låses upp!");
-        if (onGroupsComplete) onGroupsComplete();
+        if (onGroupsComplete) onGroupsComplete(true);
         maybeShowTipsCompleteModal();
+    } else if (allGroupsDone) {
+        // Re-editing an already-complete tipset. Keep the bracket in sync but
+        // DON'T yank the user to it — let "Spara & Nästa" walk through groups so
+        // every save persists and nothing reverts on refresh.
+        if (onGroupsComplete) onGroupsComplete(false);
+        const letters = getGroupLetters();
+        if (currentIndex < letters.length - 1) {
+            showToast("Sparat!");
+            storeCurrentScores();
+            currentIndex++;
+            loadGroup(currentIndex);
+            window.scrollTo(0, 0);
+        } else {
+            showToast("Sparat! Alla grupper klara ✓");
+        }
     } else {
         // Find next untipped group, or go to next sequential group
         const letters = getGroupLetters();
@@ -562,6 +584,57 @@ async function saveAndNext() {
                 window.scrollTo(0, 0);
             }
         }
+    }
+}
+
+// Persist the group currently on screen to Firestore — used when the user
+// navigates BETWEEN groups (nav buttons / Föregående / mode switch), not just on
+// "Spara & Nästa". Without this, those handlers only kept edits in the in-memory
+// savedScores, so a refresh reverted every group that wasn't explicitly saved.
+// Reads the DOM synchronously before any await, so it's safe to fire-and-forget
+// right before loadGroup() swaps the rendered group.
+async function persistCurrentGroup() {
+    if (tipsLocked) return;
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+    const letter = getGroupLetters()[currentIndex];
+    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+
+    const updates = {};
+    let anyFilled = true, someFilled = false;
+    groupMatches.forEach(m => {
+        const h = document.getElementById(`wizHome-${m.id}`)?.value;
+        const a = document.getElementById(`wizAway-${m.id}`)?.value;
+        if (h === '' || a === '' || h === undefined || a === undefined) { anyFilled = false; return; }
+        updates[`matchTips.${m.id}`] = { homeScore: parseInt(h), awayScore: parseInt(a), homeTeam: m.homeTeam, awayTeam: m.awayTeam, stage: m.stage };
+        someFilled = true;
+    });
+    if (!someFilled) return; // nothing entered yet — don't touch saved data
+
+    // Only (re)write the gruppetta/grupptvåa once the whole group is filled, so a
+    // half-entered table can't overwrite a previously-saved pick with junk.
+    if (anyFilled) {
+        const standings = calcFullStandings(groupMatches);
+        if (standings[0]?.name && standings[1]?.name) {
+            const groupData = {
+                first: standings[0].name, second: standings[1].name,
+                third: standings[2]?.name, fourth: standings[3]?.name,
+                thirdPts: standings[2]?.pts || 0, thirdGd: standings[2]?.gd || 0, thirdGf: standings[2]?.gf || 0
+            };
+            updates[`groupPicks.${letter}`] = groupData;
+            updates[`groupPicks.mode`] = currentMode;
+            if (!existingGroupPicks) existingGroupPicks = {};
+            existingGroupPicks[letter] = groupData;
+            existingGroupPicks.mode = currentMode;
+        }
+    }
+
+    try {
+        await updateDoc(doc(db, "users", userId), updates);
+        invalidateStatsCache();
+    } catch (e) {
+        console.error("Fel vid autosparning av grupp", e);
+        showToast("Kunde inte spara. Försök igen.");
     }
 }
 

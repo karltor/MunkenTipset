@@ -359,12 +359,14 @@ function showWelcomePopup(emailPref) {
     });
 }
 
-function onGroupsComplete() {
+function onGroupsComplete(navigate = true) {
     unlockBracket();
-    // Re-enter the bracket from the first knockout round so the freshly-saved
-    // group results propagate, instead of resuming mid-bracket on stale picks.
+    // Keep the bracket in sync with the (re)saved groups — it reloads from the
+    // first knockout round next time it's opened. Only auto-navigate there on the
+    // first completion; when re-editing an already-complete tipset we stay in the
+    // wizard so the user can keep editing groups without being yanked away.
     requestBracketRestart();
-    document.querySelector('.tab-btn[data-target="bracket-tab"]').click();
+    if (navigate) document.querySelector('.tab-btn[data-target="bracket-tab"]').click();
 }
 
 function lockTab(tabTarget, msg) {
