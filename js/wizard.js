@@ -307,6 +307,14 @@ function onLockedCardClick() {
 }
 
 window.toggleWizTeam = function (team) {
+    // In detailed mode the group winner/runner-up is decided by the match
+    // results, not by tapping a team. Tapping used to move the highlight without
+    // touching the scores, so the pick was silently dropped when saving (the
+    // save reads placement from the scores). Steer the user to the results.
+    if (currentMode === 'detailed') {
+        showToast('I detaljerat läge bestäms etta och tvåa av matchresultaten nedan.');
+        return;
+    }
     if (selFirst === team) selFirst = null;
     else if (selSecond === team) selSecond = null;
     else if (!selFirst) selFirst = team;
@@ -343,32 +351,35 @@ function smartAutoFill() {
 }
 
 function generateAndFillScores(targetStandings) {
-    let slots = [{ id: 0, pts: 0, gd: 0, gf: 0 }, { id: 1, pts: 0, gd: 0, gf: 0 }, { id: 2, pts: 0, gd: 0, gf: 0 }, { id: 3, pts: 0, gd: 0, gf: 0 }];
-    const simMatches = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
-    const scores = [];
-    simMatches.forEach(match => {
-        const hs = Math.floor(Math.random() * 4), as = Math.floor(Math.random() * 4);
-        scores.push({ hId: match[0], aId: match[1], h: hs, a: as });
-        let h = slots[match[0]], a = slots[match[1]];
-        h.gf += hs; a.gf += as; h.gd += (hs - as); a.gd += (as - hs);
-        if (hs > as) h.pts += 3; else if (as > hs) a.pts += 3; else { h.pts++; a.pts++; }
-    });
-    slots.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
-    const map = {};
-    slots.forEach((s, i) => map[s.id] = targetStandings[i]);
+    // targetStandings is ordered best→worst: [gruppetta, grupptvåa, 3:a, 4:a].
+    // Make every higher-ranked team beat every lower-ranked one so the final
+    // table strictly matches this order (9-6-3-0 points — no ties possible).
+    //
+    // Previously this simulated random results and *hoped* the picked teams
+    // ended on top. A random tie (e.g. all four teams level on points/goal
+    // difference) made calcFullStandings fall back to group order when saving,
+    // silently overwriting the user's gruppetta/grupptvåa pick with the first
+    // two teams in the group. Scorelines stay random here, just constrained so
+    // the higher-ranked side always wins.
+    const rankOf = {};
+    targetStandings.forEach((team, i) => { rankOf[team] = i; });
 
     const letter = getGroupLetters()[currentIndex];
     allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
-        const sim = scores.find(s =>
-            (map[s.hId] === m.homeTeam && map[s.aId] === m.awayTeam) ||
-            (map[s.aId] === m.homeTeam && map[s.hId] === m.awayTeam)
-        );
-        if (sim) {
-            const hEl = document.getElementById(`wizHome-${m.id}`);
-            const aEl = document.getElementById(`wizAway-${m.id}`);
-            if (map[sim.hId] === m.homeTeam) { hEl.value = sim.h; aEl.value = sim.a; }
-            else { hEl.value = sim.a; aEl.value = sim.h; }
-            savedScores[m.id] = { h: hEl.value, a: aEl.value };
+        const homeRank = rankOf[m.homeTeam];
+        const awayRank = rankOf[m.awayTeam];
+        if (homeRank === undefined || awayRank === undefined) return;
+        const winScore = 1 + Math.floor(Math.random() * 3);     // 1..3
+        const loseScore = Math.floor(Math.random() * winScore); // 0..winScore-1
+        const homeWins = homeRank < awayRank;                   // lower index = finishes higher
+        const hs = homeWins ? winScore : loseScore;
+        const as = homeWins ? loseScore : winScore;
+        const hEl = document.getElementById(`wizHome-${m.id}`);
+        const aEl = document.getElementById(`wizAway-${m.id}`);
+        if (hEl && aEl) {
+            hEl.value = hs;
+            aEl.value = as;
+            savedScores[m.id] = { h: hs.toString(), a: as.toString() };
         }
     });
 }
