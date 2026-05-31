@@ -17,6 +17,7 @@ import { loadEmailPref, showEmailPrefPopup, initSettingsTab, WELCOME_DISMISSED_K
 import { initChat, destroyChat, setChatAdmin } from './chat.js';
 import { toggleChatAdminPanel } from './chat-admin.js';
 import { showCountdownIfFuture, hideCountdown } from './countdown.js';
+import { swedishFlagImg } from './team-data.js';
 
 // Apply saved theme and color mode immediately before anything renders
 applyStoredTheme();
@@ -106,7 +107,13 @@ function applyTabVisibility() {
         specialBtn.style.display = hasSpecial ? '' : 'none';
         if (hasSpecial) {
             const cfg = getSpecialQuestionsConfig();
-            if (cfg?.label) specialBtn.textContent = '🇸🇪 ' + cfg.label;
+            // Swedish flag as an <img> (the 🇸🇪 emoji renders as bare "SE" on
+            // Windows). innerHTML for the trusted flag markup, then append the
+            // admin-set label as a text node so it can't inject HTML.
+            if (cfg?.label) {
+                specialBtn.innerHTML = swedishFlagImg();
+                specialBtn.append(cfg.label);
+            }
         }
     }
     if (allTipsBtn) allTipsBtn.style.display = 'none';
