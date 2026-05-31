@@ -352,36 +352,73 @@ function smartAutoFill() {
 
 function generateAndFillScores(targetStandings) {
     // targetStandings is ordered best→worst: [gruppetta, grupptvåa, 3:a, 4:a].
-    // Make every higher-ranked team beat every lower-ranked one so the final
-    // table strictly matches this order (9-6-3-0 points — no ties possible).
-    //
-    // Previously this simulated random results and *hoped* the picked teams
-    // ended on top. A random tie (e.g. all four teams level on points/goal
-    // difference) made calcFullStandings fall back to group order when saving,
-    // silently overwriting the user's gruppetta/grupptvåa pick with the first
-    // two teams in the group. Scorelines stay random here, just constrained so
-    // the higher-ranked side always wins.
-    const rankOf = {};
-    targetStandings.forEach((team, i) => { rankOf[team] = i; });
-
+    const [first, second] = targetStandings;
     const letter = getGroupLetters()[currentIndex];
-    allMatches.filter(m => m.stage === `Grupp ${letter}`).forEach(m => {
-        const homeRank = rankOf[m.homeTeam];
-        const awayRank = rankOf[m.awayTeam];
-        if (homeRank === undefined || awayRank === undefined) return;
-        const winScore = 1 + Math.floor(Math.random() * 3);     // 1..3
-        const loseScore = Math.floor(Math.random() * winScore); // 0..winScore-1
-        const homeWins = homeRank < awayRank;                   // lower index = finishes higher
-        const hs = homeWins ? winScore : loseScore;
-        const as = homeWins ? loseScore : winScore;
-        const hEl = document.getElementById(`wizHome-${m.id}`);
-        const aEl = document.getElementById(`wizAway-${m.id}`);
+    const groupMatches = allMatches.filter(m => m.stage === `Grupp ${letter}`);
+
+    // Roll random scorelines — draws included — and keep the first table that
+    // leaves the user's gruppetta clearly 1st and grupptvåa clearly 2nd. Each
+    // trial is scored with the exact same rules used when saving
+    // (calcFullStandings), so an accepted table can't be reshuffled into a
+    // different pick. Requiring a real points/goal-difference gap at the 1:a/2:a
+    // and 2:a/3:a lines keeps the winners unambiguous (and matching the live
+    // table) — the old code rolled blindly and a fluky four-way tie could fall
+    // back to group order, silently overwriting the pick with the group's first
+    // two teams.
+    const clear = (a, b) => (b.pts - a.pts || b.gd - a.gd) < 0;
+    let chosen = null;
+    for (let attempt = 0; attempt < 150 && !chosen; attempt++) {
+        const trial = groupMatches.map(m => ({
+            id: m.id, home: m.homeTeam, away: m.awayTeam,
+            hs: Math.floor(Math.random() * 4), as: Math.floor(Math.random() * 4)
+        }));
+        const table = tableFromTrial(groupMatches, trial);
+        const secondClear = !table[2] || clear(table[1], table[2]);
+        if (table[0]?.name === first && table[1]?.name === second &&
+            clear(table[0], table[1]) && secondClear) {
+            chosen = trial;
+        }
+    }
+
+    // Guaranteed fallback (no draws) if the dice never cooperate: a strict
+    // 9-6-3-0 win ladder where the higher-ranked side always wins.
+    if (!chosen) {
+        const rankOf = {};
+        targetStandings.forEach((team, i) => { rankOf[team] = i; });
+        chosen = groupMatches.map(m => {
+            const win = 1 + Math.floor(Math.random() * 3);
+            const lose = Math.floor(Math.random() * win);
+            const homeWins = rankOf[m.homeTeam] < rankOf[m.awayTeam];
+            return { id: m.id, home: m.homeTeam, away: m.awayTeam,
+                hs: homeWins ? win : lose, as: homeWins ? lose : win };
+        });
+    }
+
+    chosen.forEach(s => {
+        const hEl = document.getElementById(`wizHome-${s.id}`);
+        const aEl = document.getElementById(`wizAway-${s.id}`);
         if (hEl && aEl) {
-            hEl.value = hs;
-            aEl.value = as;
-            savedScores[m.id] = { h: hs.toString(), a: as.toString() };
+            hEl.value = s.hs;
+            aEl.value = s.as;
+            savedScores[s.id] = { h: s.hs.toString(), a: s.as.toString() };
         }
     });
+}
+
+// Standings (with stats) for a trial set of scores — mirrors calcFullStandings
+// exactly so the acceptance check matches what actually gets saved.
+function tableFromTrial(groupMatches, trial) {
+    const tData = {};
+    const teams = Array.from(new Set(groupMatches.flatMap(m => [m.homeTeam, m.awayTeam])));
+    teams.forEach(t => tData[t] = { name: t, pts: 0, gd: 0, gf: 0 });
+    trial.forEach(s => {
+        const h = s.hs, a = s.as;
+        tData[s.home].gf += h; tData[s.away].gf += a;
+        tData[s.home].gd += (h - a); tData[s.away].gd += (a - h);
+        if (h > a) tData[s.home].pts += 3; else if (h < a) tData[s.away].pts += 3;
+        else { tData[s.home].pts++; tData[s.away].pts++; }
+    });
+    return Object.values(tData).sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
 }
 
 // ─── LIVE TABLE ──────────────────────────────────────
