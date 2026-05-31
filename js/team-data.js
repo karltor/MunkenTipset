@@ -200,6 +200,20 @@ export function teamImgLarge(teamName) {
 }
 
 /**
+ * Swedish flag as an <img> for UI chrome (tab buttons, headings, instructions).
+ *
+ * The 🇸🇪 emoji is built from the regional-indicator letters S+E, and Windows
+ * has no flag-emoji font — it renders the bare text "SE" instead of a flag. We
+ * use a real flagcdn image (same source as every other flag in the app) so it
+ * shows correctly on every platform.
+ */
+export function swedishFlagImg(opts) {
+    const { size = 24, style = '' } = opts || {};
+    const h = Math.round(size * 3 / 4);
+    return `<img src="https://flagcdn.com/${size}x${h}/se.png" width="${size}" height="${h}" alt="" style="vertical-align:-4px; margin-right:6px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25); ${style}">`;
+}
+
+/**
  * Returns full autocomplete list: all countries + all clubs
  */
 export function getAllTeamNames() {

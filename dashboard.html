@@ -64,7 +64,7 @@
             <div class="welcome-steps">
                 ⚽ <strong>Steg 1:</strong> Tippa alla gruppspelsmatcher<br>
                 🏆 <strong>Steg 2:</strong> Tippa hela slutspelet<br>
-                🇸🇪 <strong>Steg 3:</strong> Tippa Sverigetipset<br>
+                <img src="https://flagcdn.com/24x18/se.png" width="24" height="18" alt="" style="vertical-align:-4px; margin-right:6px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25);"><strong>Steg 3:</strong> Tippa Sverigetipset<br>
                 📊 <strong>Steg 4:</strong> Följ resultat och se hur du ligger till
             </div>
             <div class="welcome-tagline">Må bästa munk vinna!</div>
@@ -172,7 +172,7 @@
             <button class="tab-btn active" data-target="start-tab" style="border-color: #007bff; color: #1a1a1a;">Start</button>
             <button class="tab-btn" data-target="wizard-tab" style="border-color: #28a745; color: #1a1a1a;">⚽ Gruppspel</button>
             <button class="tab-btn" data-target="bracket-tab" id="bracket-tab-btn" style="border-color: #ffc107; color: #1a1a1a;">🏆 Slutspel</button>
-            <button class="tab-btn" data-target="special-tab" id="special-tab-btn" style="border-color: #e67e22; color: #1a1a1a; display:none;">🇸🇪 Specialtips</button>
+            <button class="tab-btn" data-target="special-tab" id="special-tab-btn" style="border-color: #e67e22; color: #1a1a1a; display:none;"><img src="https://flagcdn.com/24x18/se.png" width="24" height="18" alt="" style="vertical-align:-4px; margin-right:6px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25);">Specialtips</button>
             <button class="tab-btn" data-target="start-tab" data-action="show-all-tips" id="all-tipsters-tab-btn" style="border-color: #6c757d; color: #1a1a1a; display:none;">👥 Alla tipsare</button>
             <button class="tab-btn" data-target="results-tab" style="border-color: #6f42c1; color: #1a1a1a;">📊 Matchresultat</button>
             <button class="tab-btn" data-target="chat-tab" style="border-color: #17a2b8; color: #1a1a1a;">💬 Chatt</button>
@@ -228,7 +228,11 @@
                     var spStage = null;
                     for (var j = 0; j < stages.length; j++) { if (stages[j].type === 'special-questions') spStage = stages[j]; }
                     spBtn.style.display = hasSpecial ? '' : 'none';
-                    if (hasSpecial && spStage && spStage.label) spBtn.textContent = '\u2B50 ' + spStage.label;
+                    if (hasSpecial && spStage && spStage.label) {
+                        // Real Swedish flag \u2014 the \uD83C\uDDF8\uD83C\uDDEA emoji shows as "SE" on Windows.
+                        spBtn.innerHTML = '<img src="https://flagcdn.com/24x18/se.png" width="24" height="18" alt="" style="vertical-align:-4px; margin-right:6px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25);">';
+                        spBtn.append(spStage.label);
+                    }
                 }
             } catch(e) {}
         })();
@@ -389,7 +393,7 @@
                 </div>
 
                 <div class="forum-footer">
-                    🇸🇪 ⚽ Tipsa, diskutera och ha kul tillsammans! Heja Sverige! 🇸🇪
+                    <img src="https://flagcdn.com/24x18/se.png" width="24" height="18" alt="" style="vertical-align:-4px; margin:0 4px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25);"> ⚽ Tipsa, diskutera och ha kul tillsammans! Heja Sverige! <img src="https://flagcdn.com/24x18/se.png" width="24" height="18" alt="" style="vertical-align:-4px; margin:0 4px; border-radius:2px; box-shadow:0 1px 2px rgba(0,0,0,0.25);">
                 </div>
             </div>
             <div id="chat-admin-panel" class="chat-admin-panel" style="display:none;"></div>
