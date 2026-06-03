@@ -6,6 +6,9 @@ import { doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove }
 let unsubThreads = null;     // onSnapshot handle for chat/threads
 let unsubPosts = null;       // onSnapshot handle for chat/posts
 let unsubMeta = null;        // onSnapshot handle for chat/_meta
+let visHandler = null;       // visibilitychange listener (mobile resume re-sync)
+let focusHandler = null;     // window focus listener
+let onlineHandler = null;    // network online listener
 let meta = null;             // { shadowbanned:[], muted:[], chatNames:{} }
 let isAdmin = false;
 let adminMode = false;       // admin moderation mode active
@@ -92,6 +95,14 @@ export async function initChat() {
         renderPosts();
     });
 
+    // Re-sync when the tab/window wakes up or the network reconnects
+    visHandler = () => { if (document.visibilityState === 'visible') resyncChat(); };
+    focusHandler = () => resyncChat();
+    onlineHandler = () => resyncChat();
+    document.addEventListener('visibilitychange', visHandler);
+    window.addEventListener('focus', focusHandler);
+    window.addEventListener('online', onlineHandler);
+
     wireUi();
 }
 
@@ -99,11 +110,31 @@ export function destroyChat() {
     if (unsubThreads) { unsubThreads(); unsubThreads = null; }
     if (unsubPosts) { unsubPosts(); unsubPosts = null; }
     if (unsubMeta) { unsubMeta(); unsubMeta = null; }
+    if (visHandler) { document.removeEventListener('visibilitychange', visHandler); visHandler = null; }
+    if (focusHandler) { window.removeEventListener('focus', focusHandler); focusHandler = null; }
+    if (onlineHandler) { window.removeEventListener('online', onlineHandler); onlineHandler = null; }
     adminMode = false;
     seenCache = {};
     seenLoaded = false;
     seenUid = null;
     closeReactPicker();
+}
+
+/* iOS Safari suspends background tab networking; the Firestore listener
+   can miss snapshots while the screen is locked. Force a one-shot re-read
+   when the tab/window becomes active again. */
+async function resyncChat() {
+    if (!unsubPosts) return;
+    try {
+        const [tSnap, pSnap] = await Promise.all([
+            getDoc(doc(db, 'chat', 'threads')),
+            getDoc(doc(db, 'chat', 'posts')),
+        ]);
+        if (tSnap.exists()) threads = tSnap.data().threads || [];
+        if (pSnap.exists()) posts = pSnap.data().posts || [];
+        renderThreads();
+        renderPosts();
+    } catch { /* listener will catch up */ }
 }
 
 export function setAdminMode(val) {
@@ -264,6 +295,8 @@ async function sendReply() {
     try {
         await appendToDoc("posts", "posts", post);
         markSeen(activeThreadId, now);
+        const list = document.getElementById('forum-post-list');
+        if (list) scrollToLatest(list);
     } catch (err) {
         console.error('Reply error:', err);
         if (!input.value) input.value = original;
@@ -410,6 +443,30 @@ function renderThreads() {
 
 /* ── render: posts (right) ─────────────────────────── */
 
+/* Was the user looking at the bottom of the conversation before this render?
+   On mobile the list itself doesn't scroll (page-scroll instead), so we
+   check both the list and the document. */
+function nearBottom(list) {
+    const TOL = 80;
+    if (list.scrollHeight > list.clientHeight + 1) {
+        return list.scrollHeight - list.scrollTop - list.clientHeight < TOL;
+    }
+    const doc = document.scrollingElement || document.documentElement;
+    return doc.scrollHeight - doc.scrollTop - doc.clientHeight < TOL;
+}
+
+/* Scroll the latest post into view, picking the right container. */
+function scrollToLatest(list) {
+    requestAnimationFrame(() => {
+        if (list.scrollHeight > list.clientHeight + 1) {
+            list.scrollTop = list.scrollHeight;
+        } else {
+            const last = list.lastElementChild;
+            if (last) last.scrollIntoView({ block: 'end' });
+        }
+    });
+}
+
 function renderPosts() {
     if (formOpen) return;
     const list = document.getElementById('forum-post-list');
@@ -425,6 +482,7 @@ function renderPosts() {
         if (!thread) { activeThreadId = null; return renderPosts(); }
 
         const tp = threadPosts(activeThreadId);
+        const wasAtBottom = nearBottom(list);
         title.innerHTML = `<button class="forum-back-btn" id="forum-back">← Alla trådar</button>
             <span class="forum-thread-icon">${thread.icon || '⚽'}</span> ${escapeHtml(thread.title)}`;
 
@@ -441,7 +499,7 @@ function renderPosts() {
             renderPosts();
         });
         wirePostCards(list);
-        list.scrollTop = list.scrollHeight;
+        if (wasAtBottom) scrollToLatest(list);
         renderThreads(); // refresh unseen badges
         return;
     }
