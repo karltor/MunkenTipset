@@ -26,6 +26,10 @@ let seenLoaded = false;      // false until we've hydrated from Firestore
 let seenUid = null;          // uid that seenCache belongs to
 
 const THREAD_ICONS = ['⚽', '👕', '🥅', '🚩', '👟', '🏆', '🧤', '📣', '🔥', '😂'];
+const REACTION_EMOJIS = ['😅', '😂', '😡', '✌️', '👍', '🏆', '❤️'];
+
+let reactPopupEl = null;     // floating emoji picker element
+let reactScrollHandler = null;
 
 function showToast(msg) {
     let t = document.querySelector('.toast');
@@ -99,6 +103,7 @@ export function destroyChat() {
     seenCache = {};
     seenLoaded = false;
     seenUid = null;
+    closeReactPicker();
 }
 
 export function setAdminMode(val) {
@@ -138,6 +143,12 @@ function wireUi() {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
     });
+
+    // Close the emoji picker on outside click / Escape
+    document.addEventListener('click', (e) => {
+        if (reactPopupEl && !e.target.closest('.forum-react-popup')) closeReactPicker();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeReactPicker(); });
 
     initialized = true;
 }
@@ -481,7 +492,7 @@ function groupCardHtml(group, thread) {
     const name = escapeHtml(resolveName(first));
 
     const chip = thread
-        ? `<div class="forum-card-chip"><span class="forum-thread-icon">${thread.icon || '⚽'}</span><span>${escapeHtml(thread.title)}</span></div>`
+        ? `<div class="forum-card-chip forum-chip-clickable" data-open-thread="${first.threadId}" title="Öppna tråden"><span class="forum-thread-icon">${thread.icon || '⚽'}</span><span>${escapeHtml(thread.title)}</span></div>`
         : '';
 
     const nameHtml = adminMode
@@ -496,26 +507,36 @@ function groupCardHtml(group, thread) {
         const head = i === 0
             ? `<div class="forum-msg-head">${nameHtml}<span class="forum-msg-time">${day} ${time}</span>${adminX}</div>`
             : `<div class="forum-msg-head forum-msg-head-cont"><span class="forum-msg-time">${time}</span>${adminX}</div>`;
-        return `<div class="forum-msg" data-post-id="${p.id}">
+        return `<div class="forum-msg forum-msg-react" data-post-id="${p.id}" title="Klicka för att reagera">
             ${head}
             <div class="forum-card-text">${escapeHtml(p.text)}</div>
+            ${reactionsHtml(p)}
         </div>`;
     }).join('');
 
-    const clickable = thread ? ' forum-card-clickable' : '';
-    const classes = `forum-card${isOwn ? ' own' : ''}${isShadow ? ' shadow' : ''}${clickable}`;
+    const classes = `forum-card${isOwn ? ' own' : ''}${isShadow ? ' shadow' : ''}`;
 
-    return `<div class="${classes}"${thread ? ` data-open-thread="${first.threadId}"` : ''}>
+    return `<div class="${classes}">
         ${chip}
         <div class="forum-card-net">${msgsHtml}</div>
     </div>`;
 }
 
 function wirePostCards(list) {
-    list.querySelectorAll('.forum-card-clickable').forEach(card => {
-        card.addEventListener('click', (e) => {
+    // Thread chip (feed view) → open the thread
+    list.querySelectorAll('[data-open-thread]').forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openThread(chip.dataset.openThread);
+        });
+    });
+    // Message → open the emoji reaction picker
+    list.querySelectorAll('.forum-msg-react').forEach(msg => {
+        msg.addEventListener('click', (e) => {
             if (e.target.closest('[data-del-post]') || e.target.closest('[data-action]')) return;
-            openThread(card.dataset.openThread);
+            e.stopPropagation();
+            const anchor = e.target.closest('.forum-react-pill') || msg;
+            openReactPicker(msg.dataset.postId, anchor);
         });
     });
     if (adminMode) {
@@ -526,6 +547,100 @@ function wirePostCards(list) {
                 if (post) deleteMessage(post);
             });
         });
+    }
+}
+
+/* ── reactions ─────────────────────────────────────── */
+
+/* Pill summarising the reactions on a post: distinct emojis + total count. */
+function reactionsHtml(post) {
+    const r = post.reactions || {};
+    const entries = Object.entries(r);
+    if (!entries.length) return '';
+    const uid = auth.currentUser?.uid;
+    const counts = {};
+    for (const [, emoji] of entries) counts[emoji] = (counts[emoji] || 0) + 1;
+    const emojis = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).join('');
+    const mine = r[uid] ? ' mine' : '';
+    return `<div class="forum-react-row">
+        <div class="forum-react-pill${mine}">
+            <span class="forum-react-emojis">${emojis}</span>
+            <span class="forum-react-count">${entries.length}</span>
+        </div>
+    </div>`;
+}
+
+function openReactPicker(postId, anchorEl) {
+    closeReactPicker();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    if (meta?.muted?.includes(uid)) { showToast('Du kan inte reagera just nu.'); return; }
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const mine = post.reactions?.[uid];
+
+    const pop = document.createElement('div');
+    pop.className = 'forum-react-popup';
+    pop.innerHTML = `<div class="forum-react-popup-label">Reagera med en emoji</div>
+        <div class="forum-react-popup-row">${REACTION_EMOJIS.map(e =>
+            `<button type="button" class="forum-react-opt${mine === e ? ' active' : ''}" data-emoji="${e}">${e}</button>`).join('')}</div>`;
+    document.body.appendChild(pop);
+    reactPopupEl = pop;
+
+    // Position just below the anchor, clamped to the viewport
+    const rect = anchorEl.getBoundingClientRect();
+    const left = Math.max(8 + window.scrollX,
+        Math.min(rect.left + window.scrollX,
+            window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 10));
+    pop.style.left = `${left}px`;
+    pop.style.top = `${rect.bottom + window.scrollY + 6}px`;
+
+    pop.querySelectorAll('.forum-react-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleReaction(postId, btn.dataset.emoji);
+            closeReactPicker();
+        });
+    });
+
+    // Close if the post list scrolls away under the popup
+    const scroller = document.getElementById('forum-post-list');
+    if (scroller) {
+        reactScrollHandler = () => closeReactPicker();
+        scroller.addEventListener('scroll', reactScrollHandler, { passive: true });
+    }
+}
+
+function closeReactPicker() {
+    if (reactScrollHandler) {
+        document.getElementById('forum-post-list')?.removeEventListener('scroll', reactScrollHandler);
+        reactScrollHandler = null;
+    }
+    if (reactPopupEl) { reactPopupEl.remove(); reactPopupEl = null; }
+}
+
+/* Toggle the current user's reaction on a post. One reaction per user:
+   picking the same emoji clears it, a different emoji replaces it. */
+async function toggleReaction(postId, emoji) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    if (meta?.muted?.includes(uid)) return;
+    if (!navigator.onLine) { showToast('Ingen internetanslutning — reaktionen sparades inte.'); return; }
+
+    const ref = doc(db, "chat", "posts");
+    try {
+        const snap = await getDoc(ref);
+        const arr = snap.exists() ? (snap.data().posts || []) : [];
+        const idx = arr.findIndex(p => p.id === postId);
+        if (idx === -1) return;
+        const reactions = { ...(arr[idx].reactions || {}) };
+        if (reactions[uid] === emoji) delete reactions[uid]; // toggle off
+        else reactions[uid] = emoji;                         // set / replace
+        arr[idx] = { ...arr[idx], reactions };
+        await setDoc(ref, { posts: arr });
+    } catch (err) {
+        console.error('Reaction error:', err);
+        showToast('Reaktionen kunde inte sparas. Försök igen.');
     }
 }
 
