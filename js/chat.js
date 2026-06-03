@@ -21,6 +21,10 @@ const TRIM_THRESHOLD = 4000; // trim posts array when it grows beyond this
 const FEED_LIMIT = 30;       // posts shown in the all-threads feed
 const SEEN_KEY = 'forumSeen';
 
+let seenCache = {};          // { threadId: ts } — mirror of users/{uid}.forumSeen
+let seenLoaded = false;      // false until we've hydrated from Firestore
+let seenUid = null;          // uid that seenCache belongs to
+
 const THREAD_ICONS = ['⚽', '👕', '🥅', '🚩', '👟', '🏆', '🧤', '📣', '🔥', '😂'];
 
 function showToast(msg) {
@@ -62,6 +66,8 @@ export async function initChat() {
     }
     updateMuteState();
 
+    await loadSeen();
+
     // Live listeners
     unsubThreads = onSnapshot(doc(db, "chat", "threads"), (snap) => {
         threads = snap.exists() ? (snap.data().threads || []) : [];
@@ -90,6 +96,9 @@ export function destroyChat() {
     if (unsubPosts) { unsubPosts(); unsubPosts = null; }
     if (unsubMeta) { unsubMeta(); unsubMeta = null; }
     adminMode = false;
+    seenCache = {};
+    seenLoaded = false;
+    seenUid = null;
 }
 
 export function setAdminMode(val) {
@@ -269,23 +278,59 @@ function threadStats(threadId) {
     return { count: tp.length, lastTs: last };
 }
 
-/* ── seen tracking (localStorage) ──────────────────── */
+/* ── seen tracking (Firestore, per account) ─────────── */
+
+async function loadSeen() {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { seenCache = {}; seenLoaded = false; seenUid = null; return; }
+
+    // Read local fallback (legacy + offline cache).
+    let local = {};
+    try { local = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch { /* ignore */ }
+
+    let remote = {};
+    try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (snap.exists()) remote = snap.data().forumSeen || {};
+    } catch { /* keep empty */ }
+
+    // Merge: take max ts per thread.
+    const merged = { ...remote };
+    let needsWrite = false;
+    for (const [tid, ts] of Object.entries(local)) {
+        if (!merged[tid] || ts > merged[tid]) { merged[tid] = ts; needsWrite = true; }
+    }
+
+    seenCache = merged;
+    seenUid = uid;
+    seenLoaded = true;
+
+    if (needsWrite) {
+        try { await updateDoc(doc(db, 'users', uid), { forumSeen: merged }); }
+        catch { /* non-fatal */ }
+    }
+    // Migration done — drop legacy localStorage so we have a single source of truth.
+    try { localStorage.removeItem(SEEN_KEY); } catch { /* ignore */ }
+}
 
 function getSeen() {
-    try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); }
-    catch { return {}; }
+    return seenCache;
 }
 function markSeen(threadId, ts) {
-    const seen = getSeen();
-    if (!seen[threadId] || ts > seen[threadId]) seen[threadId] = ts;
-    try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch { /* ignore */ }
+    const uid = auth.currentUser?.uid;
+    if (!uid || !seenLoaded || uid !== seenUid) return;
+    if (seenCache[threadId] && ts <= seenCache[threadId]) return;
+    seenCache[threadId] = ts;
+    updateDoc(doc(db, 'users', uid), { [`forumSeen.${threadId}`]: ts })
+        .catch(() => { /* non-fatal — next markSeen or reload will retry */ });
 }
 function hasUnseen(threadId, lastTs) {
+    if (!seenLoaded) return false; // avoid flashing badge before hydration
     const uid = auth.currentUser?.uid;
     const tp = threadPosts(threadId);
     const lastPost = tp[tp.length - 1];
     if (!lastPost || lastPost.uid === uid) return false; // own latest post = nothing new
-    const seen = getSeen()[threadId] || 0;
+    const seen = seenCache[threadId] || 0;
     return lastTs > seen;
 }
 
