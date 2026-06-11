@@ -839,9 +839,44 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
         upcomingMatches.forEach(match => {
             const isFinalMatch = match._isKnockout && match._koRoundKey === finalRoundKey;
             const cardStyle = isFinalMatch
-                ? 'padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18);'
-                : 'padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;';
+                ? 'position:relative; overflow:hidden; padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18);'
+                : 'position:relative; overflow:hidden; padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;';
             html += `<div class="stat-card upcoming-card${isFinalMatch ? ' upcoming-card-final' : ''}" style="${cardStyle}">`;
+
+            // 1X2 distribution bar along the top edge of the card.
+            // Counts every user's score tip for this match as a 1/X/2 outcome
+            // and renders a thin segmented bar with hover tooltips. The bar is
+            // absolutely positioned so the card keeps its size.
+            let c1x2 = { home: 0, draw: 0, away: 0 };
+            users.forEach(u => {
+                let hs, as;
+                if (!match._isKnockout) {
+                    const t = u.matchTips?.[match.matchId];
+                    if (!t) return;
+                    hs = t.homeScore; as = t.awayScore;
+                } else {
+                    const tip = u.knockoutScores?.[match._koRoundKey]?.[match._koMatchIdx];
+                    if (!tip) return;
+                    if (match._koLeg === 2) { hs = tip.score1_leg2; as = tip.score2_leg2; }
+                    else { hs = tip.score1; as = tip.score2; }
+                }
+                if (hs == null || as == null || hs === '' || as === '') return;
+                const h = Number(hs), a = Number(as);
+                if (Number.isNaN(h) || Number.isNaN(a)) return;
+                if (h > a) c1x2.home++;
+                else if (h < a) c1x2.away++;
+                else c1x2.draw++;
+            });
+            const tips1x2 = c1x2.home + c1x2.draw + c1x2.away;
+            if (tips1x2 > 0) {
+                const segPct = n => (n / tips1x2) * 100;
+                const segTitle = (sign, n, desc) => `${sign}: ${n} av ${tips1x2} (${Math.round(segPct(n))}%) tippar ${desc}`;
+                html += '<div class="upcoming-1x2-bar" style="position:absolute; top:0; left:0; right:0; height:4px; display:flex;">';
+                if (c1x2.home > 0) html += `<div style="width:${segPct(c1x2.home)}%; background:#4a90e2;" title="${segTitle('1', c1x2.home, 'vinst för ' + match.homeTeam)}"></div>`;
+                if (c1x2.draw > 0) html += `<div style="width:${segPct(c1x2.draw)}%; background:#b8bfc9;" title="${segTitle('X', c1x2.draw, 'oavgjort')}"></div>`;
+                if (c1x2.away > 0) html += `<div style="width:${segPct(c1x2.away)}%; background:#e67e22;" title="${segTitle('2', c1x2.away, 'vinst för ' + match.awayTeam)}"></div>`;
+                html += '</div>';
+            }
 
             // Stage + date — final gets a trophy banner
             if (isFinalMatch) {
