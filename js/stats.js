@@ -824,7 +824,13 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
     }
 
     allUpcoming.sort((a, b) => (a._parsed || Infinity) - (b._parsed || Infinity));
-    const futureUpcoming = allUpcoming.filter(m => m._parsed && m._parsed > now);
+    // Matches without a result count as live (pågående) for 2h30m after
+    // kickoff so they don't vanish from the list before admins enter results.
+    const LIVE_WINDOW_MS = 2.5 * 60 * 60 * 1000;
+    allUpcoming.forEach(m => {
+        m._isLive = !!(m._parsed && m._parsed <= now && (now - m._parsed) < LIVE_WINDOW_MS);
+    });
+    const futureUpcoming = allUpcoming.filter(m => m._parsed && (m._parsed > now || m._isLive));
     const upcomingMatches = futureUpcoming.length > 0 ? futureUpcoming.slice(0, 4) : allUpcoming.slice(0, 4);
 
     // Tournament state detection
@@ -832,15 +838,17 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
     const allGroupsDone = matchDocs.length > 0 && matchDocs.every(m => results[m.id] && results[m.id].homeScore !== undefined);
     const hasKnockoutScheduled = bracket?.rounds && Object.values(bracket.rounds).some(round => round?.some(m => m.team1 && m.team2));
 
-    html += `<h3 class="dashboard-section-title">Kommande matcher</h3>`;
+    const anyLive = upcomingMatches.some(m => m._isLive);
+    html += `<h3 class="dashboard-section-title">${anyLive ? 'Pågående & kommande matcher' : 'Kommande matcher'}</h3>`;
     if (upcomingMatches.length > 0) {
         const koRoundsForUpcoming = getKnockoutRounds();
         const finalRoundKey = koRoundsForUpcoming[koRoundsForUpcoming.length - 1]?.key;
         upcomingMatches.forEach(match => {
             const isFinalMatch = match._isKnockout && match._koRoundKey === finalRoundKey;
+            const liveTint = match._isLive ? ' background:linear-gradient(rgba(231,76,60,0.04), rgba(231,76,60,0.04)), var(--color-card-bg);' : '';
             const cardStyle = isFinalMatch
-                ? 'position:relative; overflow:hidden; padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18);'
-                : 'position:relative; overflow:hidden; padding:14px; margin-bottom:10px; border-left:3px solid #ffc107;';
+                ? `position:relative; overflow:hidden; padding:16px; margin-bottom:10px; border:2px solid #f1c40f; box-shadow:0 0 0 1px rgba(241,196,15,0.25), 0 2px 8px rgba(241,196,15,0.18);${liveTint}`
+                : `position:relative; overflow:hidden; padding:14px; margin-bottom:10px; border-left:3px solid ${match._isLive ? '#e74c3c' : '#ffc107'};${liveTint}`;
             html += `<div class="stat-card upcoming-card${isFinalMatch ? ' upcoming-card-final' : ''}" style="${cardStyle}">`;
 
             // 1X2 distribution bar along the top edge of the card.
@@ -879,10 +887,13 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
             }
 
             // Stage + date — final gets a trophy banner
+            const liveBadge = match._isLive
+                ? ' <span style="color:#e74c3c; font-size:10px; font-weight:700; letter-spacing:1px; white-space:nowrap;"><span class="live-dot"></span> PÅGÅENDE</span>'
+                : '';
             if (isFinalMatch) {
-                html += `<div style="font-size:10px; font-weight:800; letter-spacing:2px; color:#a67c00; text-align:center; margin-bottom:6px;">🏆 ${(match.stage || 'FINAL').toUpperCase()}${match.date ? ' · ' + match.date : ''}</div>`;
+                html += `<div style="font-size:10px; font-weight:800; letter-spacing:2px; color:#a67c00; text-align:center; margin-bottom:6px;">🏆 ${(match.stage || 'FINAL').toUpperCase()}${match.date ? ' · ' + match.date : ''}${liveBadge}</div>`;
             } else {
-                html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage || ''}${match.date ? ' · ' + match.date : ''}</div>`;
+                html += `<div style="font-size:11px; color:#999; margin-bottom:6px; text-align:center;">${match.stage || ''}${match.date ? ' · ' + match.date : ''}${liveBadge}</div>`;
             }
 
             // Teams row — centered with "vs"

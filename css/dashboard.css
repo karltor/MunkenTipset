@@ -1588,3 +1588,11 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     .chat-admin-add-row { flex-wrap: wrap; }
     .chat-admin-add-row select { min-width: 100%; }
 }
+
+/* Live (pågående) match indicator in upcoming matches */
+.live-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: #e74c3c; vertical-align: middle; margin-bottom: 2px;
+    animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
