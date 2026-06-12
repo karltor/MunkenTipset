@@ -110,12 +110,15 @@ export function showAllTips() {
     html += `<h3>Jämför Tipsare (${users.length} st)</h3>`;
 
     html += `<div class="stat-card" style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:20px;">`;
+    const _hasSpecialTab = hasSpecialQuestions();
+    const _specialTabLabel = _hasSpecialTab ? (getSpecialQuestionsConfig()?.label || 'Special') : '';
     html += `<div style="flex:1; min-width:200px;">
         <label style="font-weight:700; font-size:13px; display:block; margin-bottom:8px; color:color-mix(in srgb, var(--color-text) 75%, transparent);">1. Välj vy:</label>
         <div class="tabs" style="border:none; margin:0; padding:0; gap:5px;">
             <button class="tab-btn${_comparisonState.viewMode === 'simple' ? ' active' : ''}" id="btn-view-simple" style="padding:8px 12px; font-size:13px; flex:1;">Grupper</button>
             <button class="tab-btn${_comparisonState.viewMode === 'knockout' ? ' active' : ''}" id="btn-view-knockout" style="padding:8px 12px; font-size:13px; flex:1;">Slutspel</button>
             <button class="tab-btn${_comparisonState.viewMode === 'advanced' ? ' active' : ''}" id="btn-view-advanced" style="padding:8px 12px; font-size:13px; flex:1;">Matcher</button>
+            ${_hasSpecialTab ? `<button class="tab-btn${_comparisonState.viewMode === 'special' ? ' active' : ''}" id="btn-view-special" style="padding:8px 12px; font-size:13px; flex:1;">${_specialTabLabel}</button>` : ''}
         </div>
     </div>`;
 
@@ -145,7 +148,8 @@ export function showAllTips() {
     const simpleBtn = document.getElementById('btn-view-simple');
     const koBtn = document.getElementById('btn-view-knockout');
     const advBtn = document.getElementById('btn-view-advanced');
-    const allViewBtns = [simpleBtn, koBtn, advBtn];
+    const specialBtn = document.getElementById('btn-view-special');
+    const allViewBtns = [simpleBtn, koBtn, advBtn, specialBtn].filter(Boolean);
 
     function setActiveView(mode, activeBtn) {
         _comparisonState.viewMode = mode;
@@ -157,6 +161,7 @@ export function showAllTips() {
     simpleBtn.addEventListener('click', () => setActiveView('simple', simpleBtn));
     koBtn.addEventListener('click', () => setActiveView('knockout', koBtn));
     advBtn.addEventListener('click', () => setActiveView('advanced', advBtn));
+    if (specialBtn) specialBtn.addEventListener('click', () => setActiveView('special', specialBtn));
 
     const checkboxes = document.querySelectorAll('.user-compare-cb');
     checkboxes.forEach(cb => {
@@ -209,6 +214,8 @@ function renderComparisonTable() {
         html += renderSimpleView(users);
     } else if (_comparisonState.viewMode === 'knockout') {
         html += renderKnockoutView(users);
+    } else if (_comparisonState.viewMode === 'special' && hasSpecialQuestions()) {
+        html += renderSpecialView(users);
     } else {
         html += renderAdvancedView(users);
     }
@@ -368,6 +375,48 @@ function renderKnockoutView(users) {
             html += `</tr>`;
         });
     });
+    return html;
+}
+
+function renderSpecialView(users) {
+    let html = '';
+    const config = getSpecialQuestionsConfig();
+    const questions = config?.questions || [];
+
+    if (questions.length === 0) {
+        html += `<tr><td colspan="${users.length + 1}" style="text-align:center; color:color-mix(in srgb, var(--color-text) 55%, transparent); padding:30px;">Inga specialfrågor hittades.</td></tr>`;
+        return html;
+    }
+
+    questions.forEach(q => {
+        const isResolved = q.correctAnswer != null;
+        html += `<tr>`;
+        const answerPart = isResolved
+            ? `<div style="font-size:11px; color:#28a745; font-weight:700; margin-top:2px;">Rätt svar: ${q.correctAnswer}</div>`
+            : '';
+        html += `<td style="font-weight:600; position:sticky; left:0; background:color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg)); z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05); font-size:12px; max-width:220px;">
+            ${q.text}${answerPart}
+        </td>`;
+
+        users.forEach(u => {
+            const pick = u.specialPicks?.[q.id];
+            if (pick == null || pick === '') {
+                html += `<td style="color:color-mix(in srgb, var(--color-text) 35%, transparent); text-align:center; background:var(--color-card-bg);">-</td>`;
+                return;
+            }
+            let bg = 'var(--color-card-bg)', color = '';
+            if (isResolved) {
+                const correct = q.type === 'numeric'
+                    ? Number(pick) === Number(q.correctAnswer)
+                    : String(pick) === String(q.correctAnswer);
+                if (correct) { bg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; color = 'color:#28a745;'; }
+                else { bg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; color = 'color:#dc3545;'; }
+            }
+            html += `<td style="font-weight:700; text-align:center; background:${bg}; ${color} white-space:nowrap;">${pick}</td>`;
+        });
+        html += `</tr>`;
+    });
+
     return html;
 }
 
