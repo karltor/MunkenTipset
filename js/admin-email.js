@@ -19,6 +19,20 @@ export async function initEmailDraft() {
     document.getElementById('email-reset-since').addEventListener('click', () => {
         document.getElementById('email-since-date').value = '';
     });
+
+    // Special-questions option only appears for tournaments that have them,
+    // and uses the configured label (e.g. "Sverigetipset").
+    const specialCfg = getSpecialQuestionsConfig();
+    const specialWrap = document.getElementById('email-opt-special-wrap');
+    if (specialWrap) {
+        if (specialCfg?.questions?.length) {
+            specialWrap.style.display = '';
+            const lbl = document.getElementById('email-opt-special-label');
+            if (lbl) lbl.textContent = specialCfg.label || 'Specialfrågor';
+        } else {
+            specialWrap.style.display = 'none';
+        }
+    }
     document.getElementById('admin-generate-email').addEventListener('click', generateEmailDraft);
     document.getElementById('admin-copy-email').addEventListener('click', copyEmailDraft);
 
@@ -220,6 +234,11 @@ async function loadEmailLists() {
     usersSnap.docs.forEach(d => {
         const data = d.data();
         if (d.id.startsWith('fake_')) return;
+        // Only include users who actually joined the tipset (made at least one
+        // pick) — skip people who only logged in/visited without tipping.
+        const hasTips = data.groupPicks || data.knockout || data.specialPicks
+            || (data.matchTips && Object.keys(data.matchTips).length > 0);
+        if (!hasTips) return;
         const recipient = recipientEmail(data);
         if (!recipient) return;
         const pref = data.emailPref || null;
@@ -437,6 +456,49 @@ function buildChampionSection(users) {
     return html;
 }
 
+function buildSpecialSection(users) {
+    const config = getSpecialQuestionsConfig();
+    const questions = config?.questions || [];
+    if (questions.length === 0) return '';
+
+    let body = '';
+    questions.forEach(q => {
+        // Tally answers across all users for this question
+        const counts = {};
+        let answered = 0;
+        users.forEach(u => {
+            const pick = u.specialPicks?.[q.id];
+            if (pick == null || pick === '') return;
+            const key = String(pick);
+            counts[key] = (counts[key] || 0) + 1;
+            answered++;
+        });
+        if (answered === 0) return;
+
+        const isResolved = q.correctAnswer != null;
+        body += `<h3 style="font-size:14px; margin:14px 0 6px;">${q.text}`;
+        if (isResolved) body += ` <span style="color:#28a745; font-weight:700;">(rätt svar: ${q.correctAnswer})</span>`;
+        body += `</h3>`;
+        body += `<table style="width:100%; max-width:400px; border-collapse:collapse; font-size:14px;">`;
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        sorted.forEach(([answer, count]) => {
+            const pct = Math.round((count / answered) * 100);
+            const correct = isResolved && (q.type === 'numeric'
+                ? Number(answer) === Number(q.correctAnswer)
+                : String(answer) === String(q.correctAnswer));
+            const style = correct ? 'color:#28a745; font-weight:700;' : '';
+            body += `<tr style="border-bottom:1px solid #eee;">`;
+            body += `<td style="padding:6px; ${style}">${correct ? '✓ ' : ''}${answer}</td>`;
+            body += `<td style="padding:6px; text-align:right; color:#888;">${count} st (${pct}%)</td>`;
+            body += `</tr>`;
+        });
+        body += `</table>`;
+    });
+
+    if (!body) return '';
+    return h2(config?.label || 'Specialfrågor') + body;
+}
+
 function buildHighlightsSection(users, allPlayed, bracket, officialGroupStandings) {
     const highlights = [];
 
@@ -625,6 +687,7 @@ async function generateEmailDraft() {
             upcoming: document.getElementById('email-opt-upcoming').checked,
             upcomingCount: parseInt(document.getElementById('email-opt-upcoming-count').value) || 6,
             champion: document.getElementById('email-opt-champion').checked,
+            special: document.getElementById('email-opt-special')?.checked || false,
         };
 
         const sinceInput = document.getElementById('email-since-date').value;
@@ -654,7 +717,8 @@ async function generateEmailDraft() {
                 groupPicks: d.groupPicks || null,
                 knockoutPicks: d.knockout || null,
                 knockoutScores: d.knockoutScores || null,
-                matchTips: d.matchTips || {}
+                matchTips: d.matchTips || {},
+                specialPicks: d.specialPicks || null
             });
         }
 
@@ -682,6 +746,7 @@ async function generateEmailDraft() {
         if (opts.kuriosa) email += buildKuriosaSection(users, results, matchDocs);
         if (opts.upcoming) email += buildUpcomingSection(allUpcoming, opts.upcomingCount);
         if (opts.champion) email += buildChampionSection(users);
+        if (opts.special) email += buildSpecialSection(users);
 
         document.getElementById('admin-email-preview').innerHTML = email;
         document.getElementById('admin-email-output').style.display = 'block';
