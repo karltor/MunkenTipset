@@ -742,7 +742,8 @@ if (me && (me.groupPicks || me.knockoutPicks)) {
                     html += renderRow(tippersLineInner(exactTippers, 'tippade exakt rätt', pointsColor(maxScorePts, maxScorePts)), pointsBadge(maxScorePts, maxScorePts));
                 }
                 if (winnerTippers.length > 0) {
-                    html += renderRow(tippersLineInner(winnerTippers, 'tippade rätt vinnare', pointsColor(winnerOnlyPts, maxScorePts)), pointsBadge(winnerOnlyPts, maxScorePts));
+                    const winnerLabel = h === a2 ? 'tippade lika' : 'tippade rätt vinnare';
+                    html += renderRow(tippersLineInner(winnerTippers, winnerLabel, pointsColor(winnerOnlyPts, maxScorePts)), pointsBadge(winnerOnlyPts, maxScorePts));
                 }
                 if (exactTippers.length === 0 && winnerTippers.length === 0) {
                     html += `<div style="font-size:12px; color:#999; margin-top:4px; text-align:center;">Ingen annan tippade rätt</div>`;
