@@ -561,6 +561,21 @@ function buildHighlightsSection(users, allPlayed, bracket, officialGroupStanding
     return html;
 }
 
+// Join a list of names with commas and a trailing "&" (Swedish style).
+function joinNames(names) {
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} & ${names[1]}`;
+    return names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
+}
+
+// Render "Name med X" / "A & B — alla med X" / "N tipsare med X", collapsing
+// ties so we never single out one person when several share the result.
+function tipsterLine(names, fracText) {
+    if (names.length === 1) return `${names[0]} med ${fracText}`;
+    if (names.length <= 5) return `${joinNames(names)} — alla med ${fracText}`;
+    return `${names.length} tipsare med ${fracText}`;
+}
+
 function buildKuriosaSection(users, allResults, matchDocs) {
     // allResults = full results object (unfiltered), for full-tournament stats
     const items = [];
@@ -589,9 +604,15 @@ function buildKuriosaSection(users, allResults, matchDocs) {
     }).filter(s => s.tipped > 0).sort((a, b) => b.correct - a.correct);
 
     if (winnerStats.length > 0 && winnerStats[0].correct > 0) {
-        const best = winnerStats[0];
-        const pct = Math.round((best.correct / best.tipped) * 100);
-        items.push(`<strong>Bäst på 1X2:</strong> ${best.name} med ${best.correct}/${best.tipped} rätt (${pct}%)`);
+        // Ranked by correct count to match the leaderboard's 1X2 column. List
+        // everyone tied at the top instead of silently picking one.
+        const maxCorrect = winnerStats[0].correct;
+        const leaders = winnerStats.filter(s => s.correct === maxCorrect);
+        const uniform = leaders.every(s => s.tipped === leaders[0].tipped);
+        const frac = uniform
+            ? `${maxCorrect}/${leaders[0].tipped} rätt (${Math.round((maxCorrect / leaders[0].tipped) * 100)}%)`
+            : `${maxCorrect} rätt`;
+        items.push(`<strong>Bäst på 1X2:</strong> ${tipsterLine(leaders.map(s => s.name), frac)}`);
     }
 
     // Best at exact scores
@@ -605,9 +626,9 @@ function buildKuriosaSection(users, allResults, matchDocs) {
     }).sort((a, b) => b.correct - a.correct);
 
     if (exactStats.length > 0 && exactStats[0].correct >= 2) {
-        const top3 = exactStats.filter(s => s.correct > 0).slice(0, 3);
-        const list = top3.map(s => `${s.name} (${s.correct} st)`).join(', ');
-        items.push(`<strong>Flest exakta resultat:</strong> ${list}`);
+        const maxExact = exactStats[0].correct;
+        const leaders = exactStats.filter(s => s.correct === maxExact);
+        items.push(`<strong>Flest exakta resultat:</strong> ${tipsterLine(leaders.map(s => s.name), `${maxExact} st`)}`);
     }
 
     // Country expertise — find users who nailed a specific country's matches
@@ -661,11 +682,15 @@ function buildKuriosaSection(users, allResults, matchDocs) {
     if (playedMatches.length >= 6) {
         const eligible = winnerStats.filter(s => s.tipped >= playedMatches.length / 2);
         if (eligible.length > 1) {
-            const worst = eligible.reduce((min, s) =>
-                (s.correct / s.tipped) < (min.correct / min.tipped) ? s : min);
-            const pct = Math.round((worst.correct / worst.tipped) * 100);
-            if (pct < 35) {
-                items.push(`<strong>Sämst på 1X2:</strong> ${worst.name} med ${worst.correct}/${worst.tipped} rätt (${pct}%) — det kan bara bli bättre!`);
+            const pctOf = s => Math.round((s.correct / s.tipped) * 100);
+            const worstPct = Math.min(...eligible.map(pctOf));
+            if (worstPct < 35) {
+                const losers = eligible.filter(s => pctOf(s) === worstPct);
+                const uniform = losers.every(s => s.correct === losers[0].correct && s.tipped === losers[0].tipped);
+                const frac = uniform
+                    ? `${losers[0].correct}/${losers[0].tipped} rätt (${worstPct}%)`
+                    : `${worstPct}% rätt`;
+                items.push(`<strong>Sämst på 1X2:</strong> ${tipsterLine(losers.map(s => s.name), frac)} — det kan bara bli bättre!`);
             }
         }
     }
