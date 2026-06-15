@@ -574,20 +574,24 @@ function buildKuriosaSection(users, allResults, matchDocs) {
 
     if (playedMatches.length < 3) return '';
 
-    // Best at 1X2
+    // Best at 1X2. Count only the matches each user actually tipped — using
+    // the full played-count as denominator would unfairly punish anyone who
+    // didn't tip every match (or didn't make any per-match tips at all).
     const winnerStats = users.map(u => {
-        let correct = 0;
+        let correct = 0, tipped = 0;
         playedMatches.forEach(r => {
             const tip = u.matchTips[r.matchId];
-            if (tip && sign(tip.homeScore - tip.awayScore) === sign(r.homeScore - r.awayScore)) correct++;
+            if (!tip) return;
+            tipped++;
+            if (sign(tip.homeScore - tip.awayScore) === sign(r.homeScore - r.awayScore)) correct++;
         });
-        return { name: u.name, correct, total: playedMatches.length };
-    }).sort((a, b) => b.correct - a.correct);
+        return { name: u.name, correct, tipped };
+    }).filter(s => s.tipped > 0).sort((a, b) => b.correct - a.correct);
 
     if (winnerStats.length > 0 && winnerStats[0].correct > 0) {
         const best = winnerStats[0];
-        const pct = Math.round((best.correct / best.total) * 100);
-        items.push(`<strong>Bäst på 1X2:</strong> ${best.name} med ${best.correct}/${best.total} rätt (${pct}%)`);
+        const pct = Math.round((best.correct / best.tipped) * 100);
+        items.push(`<strong>Bäst på 1X2:</strong> ${best.name} med ${best.correct}/${best.tipped} rätt (${pct}%)`);
     }
 
     // Best at exact scores
@@ -651,12 +655,18 @@ function buildKuriosaSection(users, allResults, matchDocs) {
         items.push(`<strong>${e.name}</strong> har koll på <strong>${e.team}</strong> — ${detail}`);
     });
 
-    // Worst tipper (fun stat, if enough data)
-    if (playedMatches.length >= 6 && winnerStats.length > 1) {
-        const worst = winnerStats[winnerStats.length - 1];
-        const pct = Math.round((worst.correct / worst.total) * 100);
-        if (pct < 35) {
-            items.push(`<strong>Sämst på 1X2:</strong> ${worst.name} med ${worst.correct}/${worst.total} rätt (${pct}%) — det kan bara bli bättre!`);
+    // Worst tipper (fun stat, if enough data). Only judge users who tipped a
+    // meaningful share of the matches, and rank by hit-rate so we don't flag
+    // someone who simply tipped few games.
+    if (playedMatches.length >= 6) {
+        const eligible = winnerStats.filter(s => s.tipped >= playedMatches.length / 2);
+        if (eligible.length > 1) {
+            const worst = eligible.reduce((min, s) =>
+                (s.correct / s.tipped) < (min.correct / min.tipped) ? s : min);
+            const pct = Math.round((worst.correct / worst.tipped) * 100);
+            if (pct < 35) {
+                items.push(`<strong>Sämst på 1X2:</strong> ${worst.name} med ${worst.correct}/${worst.tipped} rätt (${pct}%) — det kan bara bli bättre!`);
+            }
         }
     }
 
@@ -711,6 +721,13 @@ async function generateEmailDraft() {
         const users = [];
         for (const userDoc of usersSnap.docs) {
             const d = userDoc.data();
+            // Only count real participants: skip test accounts and anyone who
+            // logged in/visited without making a single pick. Otherwise they
+            // pollute the leaderboard and stats (e.g. shown as "worst at 1X2").
+            if (userDoc.id.startsWith('fake_')) continue;
+            const hasTips = d.groupPicks || d.knockout || d.specialPicks
+                || (d.matchTips && Object.keys(d.matchTips).length > 0);
+            if (!hasTips) continue;
             users.push({
                 userId: userDoc.id,
                 name: d.name || userDoc.id,
