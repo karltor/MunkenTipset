@@ -347,16 +347,22 @@ function renderKnockoutView(users) {
                 html += `<tr><td colspan="${users.length + 1}" style="background:#2b2b52; color:#aaa; text-align:center; font-size:11px; padding:4px; font-style:italic;">Skiljer sig</td></tr>`;
             }
 
-            // Color-code the team label only once its match is decided. A team
-            // whose match hasn't been played is pending — neither right nor wrong.
+            // Colour strictly by outcome: green = advanced, red = eliminated,
+            // yellow = match not played yet. An undecided match is never shown
+            // as green or red, even when every tipsare picked the same team.
             const teamCorrect = winners.includes(team);
             const teamWrong = resolved.has(team) && !teamCorrect;
-            let labelBg = isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg))';
-            let labelColor = '';
-            if (teamCorrect) { labelBg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; labelColor = 'color:#28a745;'; }
-            else if (teamWrong) { labelBg = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))'; labelColor = 'color:#dc3545;'; }
+            const GREEN = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))';
+            const RED = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))';
+            const YELLOW = 'color-mix(in srgb, #ffc107 15%, var(--color-card-bg))';
+            let labelBg, labelColor = '';
+            if (teamCorrect) { labelBg = GREEN; labelColor = 'color:#28a745;'; }
+            else if (teamWrong) { labelBg = RED; labelColor = 'color:#dc3545;'; }
+            else { labelBg = YELLOW; }
+            const pickBg = teamCorrect ? GREEN : (teamWrong ? RED : YELLOW);
+            const pickIcon = teamCorrect ? '✅' : (teamWrong ? '❌' : '⚡');
 
-            const rowBg = isShared ? 'color-mix(in srgb, #28a745 10%, var(--color-card-bg))' : 'var(--color-card-bg)';
+            const rowBg = 'var(--color-card-bg)';
             html += `<tr>`;
             html += `<td style="font-weight:600; position:sticky; left:0; background:${labelBg}; ${labelColor} z-index:1; border-right:2px solid var(--color-card-border); box-shadow: 2px 0 5px rgba(0,0,0,0.05); white-space:nowrap; font-size:12px;">${f(team)}${team}</td>`;
 
@@ -367,14 +373,7 @@ function renderKnockoutView(users) {
                     : (u.knockoutPicks[round.key] || []).includes(team);
 
                 if (hasPick) {
-                    if (teamCorrect) {
-                        html += `<td style="background:color-mix(in srgb, #28a745 18%, var(--color-card-bg)); text-align:center; font-size:16px;">✅</td>`;
-                    } else if (teamWrong) {
-                        html += `<td style="background:color-mix(in srgb, #dc3545 18%, var(--color-card-bg)); text-align:center; font-size:16px;">❌</td>`;
-                    } else {
-                        // Match not played yet — show pending, never a cross.
-                        html += `<td style="background:${isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, #ffc107 15%, var(--color-card-bg))'}; text-align:center; font-size:16px;">${isShared ? '✅' : '⚡'}</td>`;
-                    }
+                    html += `<td style="background:${pickBg}; text-align:center; font-size:16px;">${pickIcon}</td>`;
                 } else {
                     html += `<td style="background:${rowBg}; text-align:center; color:color-mix(in srgb, var(--color-text) 25%, transparent);">–</td>`;
                 }
