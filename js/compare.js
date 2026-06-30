@@ -290,20 +290,27 @@ function renderKnockoutView(users) {
         label: r === finalRd ? `🏆 ${getTournamentName()} mästare` : `${r.label} (${r.teams / 2} lag)`
     }));
 
-    // Build official winners per round
+    // Build official winners per round, plus the set of teams whose match in
+    // that round has actually been decided (so we can tell "eliminated" apart
+    // from "not played yet" — a team that hasn't played must not show as wrong).
     const officialWinners = {};
+    const resolvedTeams = {};
     if (_cachedBracket?.rounds) {
         koRoundDefs.forEach(rd => {
             officialWinners[rd.key] = [];
+            resolvedTeams[rd.key] = new Set();
             (_cachedBracket.rounds[rd.bracketKey] || []).forEach(m => {
-                if (m.winner) officialWinners[rd.key].push(m.winner);
+                if (!m.winner) return;
+                officialWinners[rd.key].push(m.winner);
+                if (m.team1) resolvedTeams[rd.key].add(m.team1);
+                if (m.team2) resolvedTeams[rd.key].add(m.team2);
             });
         });
     }
 
     koRoundDefs.forEach(round => {
         const winners = officialWinners[round.key] || [];
-        const hasResults = winners.length > 0;
+        const resolved = resolvedTeams[round.key] || new Set();
 
         html += `<tr><td colspan="${users.length + 1}" style="background:#1f1f3a; color:#ffc107; font-weight:700; text-align:center; padding:8px; font-size:13px; position:sticky; left:0; z-index:1;">${round.label}</td></tr>`;
 
@@ -340,9 +347,10 @@ function renderKnockoutView(users) {
                 html += `<tr><td colspan="${users.length + 1}" style="background:#2b2b52; color:#aaa; text-align:center; font-size:11px; padding:4px; font-style:italic;">Skiljer sig</td></tr>`;
             }
 
-            // Color-code the team label if results exist
-            const teamCorrect = hasResults && winners.includes(team);
-            const teamWrong = hasResults && !winners.includes(team);
+            // Color-code the team label only once its match is decided. A team
+            // whose match hasn't been played is pending — neither right nor wrong.
+            const teamCorrect = winners.includes(team);
+            const teamWrong = resolved.has(team) && !teamCorrect;
             let labelBg = isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, var(--color-text) 5%, var(--color-card-bg))';
             let labelColor = '';
             if (teamCorrect) { labelBg = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))'; labelColor = 'color:#28a745;'; }
@@ -359,13 +367,12 @@ function renderKnockoutView(users) {
                     : (u.knockoutPicks[round.key] || []).includes(team);
 
                 if (hasPick) {
-                    if (hasResults) {
-                        if (teamCorrect) {
-                            html += `<td style="background:color-mix(in srgb, #28a745 18%, var(--color-card-bg)); text-align:center; font-size:16px;">✅</td>`;
-                        } else {
-                            html += `<td style="background:color-mix(in srgb, #dc3545 18%, var(--color-card-bg)); text-align:center; font-size:16px;">❌</td>`;
-                        }
+                    if (teamCorrect) {
+                        html += `<td style="background:color-mix(in srgb, #28a745 18%, var(--color-card-bg)); text-align:center; font-size:16px;">✅</td>`;
+                    } else if (teamWrong) {
+                        html += `<td style="background:color-mix(in srgb, #dc3545 18%, var(--color-card-bg)); text-align:center; font-size:16px;">❌</td>`;
                     } else {
+                        // Match not played yet — show pending, never a cross.
                         html += `<td style="background:${isShared ? 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))' : 'color-mix(in srgb, #ffc107 15%, var(--color-card-bg))'}; text-align:center; font-size:16px;">${isShared ? '✅' : '⚡'}</td>`;
                     }
                 } else {
