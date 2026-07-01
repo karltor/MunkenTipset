@@ -308,6 +308,25 @@ function renderKnockoutView(users) {
         });
     }
 
+    // Teams that are out of the tournament: lost a decided knockout match, or
+    // (once the first knockout round's field is fully known) never qualified
+    // for the knockout at all. A pick of such a team is wrong in every round —
+    // e.g. a round-of-16 pick of a team knocked out in the round of 32.
+    const eliminated = new Set();
+    let knockoutField = null;
+    if (_cachedBracket?.rounds) {
+        koRoundDefs.forEach(rd => {
+            resolvedTeams[rd.key].forEach(t => {
+                if (!officialWinners[rd.key].includes(t)) eliminated.add(t);
+            });
+        });
+        const firstMatches = _cachedBracket.rounds[koRoundDefs[0]?.bracketKey] || [];
+        if (firstMatches.length > 0 && firstMatches.every(m => m.team1 && m.team2)) {
+            knockoutField = new Set();
+            firstMatches.forEach(m => { knockoutField.add(m.team1); knockoutField.add(m.team2); });
+        }
+    }
+
     koRoundDefs.forEach(round => {
         const winners = officialWinners[round.key] || [];
         const resolved = resolvedTeams[round.key] || new Set();
@@ -347,11 +366,15 @@ function renderKnockoutView(users) {
                 html += `<tr><td colspan="${users.length + 1}" style="background:#2b2b52; color:#aaa; text-align:center; font-size:11px; padding:4px; font-style:italic;">Skiljer sig</td></tr>`;
             }
 
-            // Colour strictly by outcome: green = advanced, red = eliminated,
-            // yellow = match not played yet. An undecided match is never shown
-            // as green or red, even when every tipsare picked the same team.
+            // Colour strictly by outcome: green = advanced, red = out,
+            // yellow = still undecided. An undecided pick is never shown as
+            // green or red, even when every tipsare picked the same team.
+            // "Out" covers: lost this round's decided match, knocked out in an
+            // earlier round, or missing from the known knockout field entirely.
             const teamCorrect = winners.includes(team);
-            const teamWrong = resolved.has(team) && !teamCorrect;
+            const teamWrong = !teamCorrect && (resolved.has(team)
+                || eliminated.has(team)
+                || (knockoutField !== null && !knockoutField.has(team)));
             const GREEN = 'color-mix(in srgb, #28a745 18%, var(--color-card-bg))';
             const RED = 'color-mix(in srgb, #dc3545 18%, var(--color-card-bg))';
             const YELLOW = 'color-mix(in srgb, #ffc107 15%, var(--color-card-bg))';
